@@ -7,18 +7,31 @@ class ToolRegistry:
 
 
 
-    def register(self, tool):
+    def register(
+        self,
+        name,
+        tool
+    ):
 
-        self.tools[tool.name] = tool
-
-
-
-    def get(self, name):
-
-        return self.tools.get(name)
+        self.tools[name] = tool
 
 
 
-    def list_tools(self):
+    def get(
+        self,
+        name
+    ):
 
-        return list(self.tools.keys())
+        return self.tools.get(
+            name
+        )
+
+
+
+    def list_tools(
+        self
+    ):
+
+        return list(
+            self.tools.keys()
+        )

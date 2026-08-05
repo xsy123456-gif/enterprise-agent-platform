@@ -1,5 +1,8 @@
-class AgentExecutor:
+from app.runtime.action import AgentAction
 
+
+
+class AgentExecutor:
 
 
     def __init__(
@@ -9,13 +12,11 @@ class AgentExecutor:
         max_steps=10
     ):
 
-
         self.agent = agent
 
         self.tool_runner = tool_runner
 
         self.max_steps = max_steps
-
 
 
 
@@ -28,13 +29,16 @@ class AgentExecutor:
         step = 0
 
 
-
         while step < self.max_steps:
 
 
             step += 1
 
 
+
+            # ======================
+            # Think
+            # ======================
 
             action = self.agent.think(
 
@@ -43,10 +47,9 @@ class AgentExecutor:
             )
 
 
-
             print(
 
-                "\nACTION:",
+                "ACTION:",
 
                 action
 
@@ -54,42 +57,31 @@ class AgentExecutor:
 
 
 
-            # =====================
+            # ======================
             # Finish
-            # =====================
+            # ======================
 
-            if action.type == "finish":
+            if action.type == AgentAction.FINISH:
 
 
                 return action.output
 
 
 
-            # =====================
+            # ======================
             # Tool
-            # =====================
+            # ======================
 
-            if action.type == "tool":
+            if action.type == AgentAction.TOOL:
 
 
-                result = self.tool_runner.run(
+                self.tool_runner.run(
 
                     action,
 
                     state
 
                 )
-
-
-
-                state.add_tool_result(
-
-                    state.last_tool_call_id,
-
-                    result
-
-                )
-
 
 
                 continue
@@ -100,6 +92,6 @@ class AgentExecutor:
 
             "error":
 
-                "Agent exceeded max steps"
+            "Agent exceeded max steps"
 
         }

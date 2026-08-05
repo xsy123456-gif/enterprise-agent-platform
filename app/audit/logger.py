@@ -1,7 +1,6 @@
 from datetime import datetime
 
 
-
 class AuditLogger:
 
 
@@ -20,28 +19,22 @@ class AuditLogger:
         detail
     ):
 
-
-        log = {
+        item = {
 
             "time":
                 datetime.now().isoformat(),
 
-
             "user":
                 user,
-
 
             "agent":
                 agent,
 
-
             "tool":
                 tool,
 
-
             "action":
                 action,
-
 
             "detail":
                 detail
@@ -49,16 +42,13 @@ class AuditLogger:
         }
 
 
-        self.logs.append(log)
+        self.logs.append(item)
 
 
         print(
-            "\nAUDIT:",
-            log
+            "AUDIT:",
+            item
         )
 
 
-
-    def get_logs(self):
-
-        return self.logs
+        return item

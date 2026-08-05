@@ -13,7 +13,6 @@ class ToolRunner:
         event_bus
     ):
 
-
         self.registry = registry
 
         self.permission = permission
@@ -37,9 +36,9 @@ class ToolRunner:
 
 
 
-        # =========================
-        # Tool Call ID
-        # =========================
+        # =================================
+        # Generate Tool Call Message
+        # =================================
 
         tool_call_id = state.add_tool_call(
 
@@ -51,9 +50,9 @@ class ToolRunner:
 
 
 
-        # =========================
+        # =================================
         # Get Tool
-        # =========================
+        # =================================
 
         tool = self.registry.get(
 
@@ -65,16 +64,14 @@ class ToolRunner:
         if not tool:
 
             raise Exception(
-
                 f"Tool not found: {tool_name}"
-
             )
 
 
 
-        # =========================
-        # Permission
-        # =========================
+        # =================================
+        # Permission Check
+        # =================================
 
         allowed = self.permission.check(
 
@@ -86,20 +83,23 @@ class ToolRunner:
 
 
 
-        # =========================
+        # =================================
         # Audit
-        # =========================
+        # =================================
 
         self.audit.record(
 
             user=state.user_id,
 
-            agent="sales_agent",
+            agent=state.agent_name,
 
             tool=tool_name,
 
             action=
-            "allow" if allowed else "deny",
+                "allow"
+                if allowed
+                else
+                "deny",
 
             detail=tool_input
 
@@ -110,16 +110,14 @@ class ToolRunner:
         if not allowed:
 
             raise Exception(
-
                 "Permission denied"
-
             )
 
 
 
-        # =========================
+        # =================================
         # Execute Tool
-        # =========================
+        # =================================
 
         result = tool.execute(
 
@@ -129,9 +127,23 @@ class ToolRunner:
 
 
 
-        # =========================
-        # Event
-        # =========================
+        # =================================
+        # Add Tool Result To Context
+        # =================================
+
+        state.add_tool_result(
+
+            tool_call_id,
+
+            result
+
+        )
+
+
+
+        # =================================
+        # Publish Event
+        # =================================
 
         event = Event(
 
@@ -139,35 +151,28 @@ class ToolRunner:
 
             payload={
 
-
                 "user":
-
                     state.user_id,
 
 
                 "agent":
-
-                    "sales_agent",
+                    state.agent_name,
 
 
                 "tool":
-
                     tool_name,
 
 
                 "input":
-
                     tool_input,
 
 
                 "result":
-
                     result
 
             }
 
         )
-
 
 
         self.event_bus.publish(

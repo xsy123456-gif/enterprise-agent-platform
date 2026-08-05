@@ -1,114 +1,109 @@
-from app.runtime.executor import AgentExecutor
-from app.runtime.tool_runner import ToolRunner
+import os
 
-from app.runtime.context import AgentContext
 
 from app.agents.sales import SalesAgent
 
-from app.llm.factory import create_llm
 
-from app.tools.crm import CRMTool
-from app.tools.registry import ToolRegistry
-
-from app.permission.rbac import RBAC
 from app.audit.logger import AuditLogger
 
-from app.events.bus import EventBus
-from app.events.subscriber import EventSubscriber
-from app.memory.worker import MemoryWorker
 
-from app.memory.storage import MemoryStorage
+from app.events.bus import EventBus
+
+
+from app.llm.factory import create_llm
+
+
 from app.memory.service import MemoryService
 
 
+from app.permission.rbac import PermissionManager
 
-def main():
 
-    # =========================
-    # LLM Layer
-    # =========================
+from app.runtime.context import AgentContext
+
+
+from app.runtime.engine import RuntimeEngine
+
+
+from app.runtime.executor import AgentExecutor
+
+
+from app.runtime.tool_runner import ToolRunner
+
+
+from app.tools.crm import CRMTool
+
+
+from app.tools.registry import ToolRegistry
+
+
+
+# =====================================
+# Build Runtime
+# =====================================
+
+def build_runtime():
+
+
+    # -----------------------------
+    # LLM
+    # -----------------------------
 
     llm = create_llm()
 
 
-    # =========================
-    # Agent Layer
-    # =========================
+
+    # -----------------------------
+    # Agent
+    # -----------------------------
 
     agent = SalesAgent(
         llm
     )
 
 
-    # =========================
-    # Tool Layer
-    # =========================
+
+    # -----------------------------
+    # Tool Registry
+    # -----------------------------
 
     registry = ToolRegistry()
 
-    crm_tool = CRMTool()
 
     registry.register(
-        crm_tool
+        "crm_query",
+        CRMTool()
     )
 
 
-    # =========================
+
+    # -----------------------------
     # Permission
-    # =========================
+    # -----------------------------
 
-    permission = RBAC()
+    permission = PermissionManager()
 
 
 
-    # =========================
+    # -----------------------------
     # Audit
-    # =========================
+    # -----------------------------
 
     audit = AuditLogger()
 
 
 
-    # =========================
-    # Memory
-    # =========================
-
-    memory_storage = MemoryStorage()
-
-    memory = MemoryService(
-        memory_storage
-    )
-
-
-
-    # =========================
-    # Event System
-    # =========================
+    # -----------------------------
+    # Event
+    # -----------------------------
 
     event_bus = EventBus()
 
-    subscriber = EventSubscriber()
-
-    memory_worker = MemoryWorker(
-        memory
-    )
 
 
-    subscriber.subscribe(
-        "tool_completed",
-        memory_worker.process
-    )
-
-
-    event_bus.subscribe(
-        subscriber
-    )
-
-
-
-    # =========================
-    # Runtime Tool Runner
-    # =========================
+    # -----------------------------
+    # Tool Runner
+    # -----------------------------
 
     tool_runner = ToolRunner(
 
@@ -124,66 +119,108 @@ def main():
 
 
 
-    # =========================
+    # -----------------------------
     # Executor
-    # =========================
+    # -----------------------------
 
     executor = AgentExecutor(
 
-        agent,
+        agent=agent,
 
-        tool_runner
+        tool_runner=tool_runner,
+
+        max_steps=10
 
     )
 
 
 
-    # =========================
-    # Agent State
-    # =========================
+    # -----------------------------
+    # Runtime Engine
+    # -----------------------------
 
-    context = AgentContext(
+    runtime = RuntimeEngine(
+
+        executor
+
+    )
+
+
+    return (
+        runtime,
+        audit,
+        event_bus
+    )
+
+
+
+
+
+# =====================================
+# Main
+# =====================================
+
+def main():
+
+
+    runtime, audit, event_bus = build_runtime()
+
+
+
+    state = AgentContext(
 
         task="准备客户A拜访资料",
 
         user_id="sales_001",
 
-        role="sales_rep",
+        role="sales",
 
-	agent_name="sales_agent"
+        agent_name="sales_agent"
 
     )
 
 
 
-    # =========================
-    # Run
-    # =========================
+    result = runtime.run(
 
-    result = executor.run(
-        context
+        state
+
     )
 
 
-
-    print("\n最终结果:")
-    print(result)
-
-
-
-    print("\n审计记录:")
 
     print(
-        audit.get_logs()
+        "\n最终结果:"
     )
 
-
-
-    print("\n事件记录:")
 
     print(
-        event_bus.get_events()
+        result
     )
+
+
+
+    print(
+        "\n审计记录:"
+    )
+
+
+    print(
+        audit.logs
+    )
+
+
+
+    print(
+        "\n事件记录:"
+    )
+
+
+    print(
+        event_bus.events
+    )
+
+
 
 
 

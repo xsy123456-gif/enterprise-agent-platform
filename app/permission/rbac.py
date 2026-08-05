@@ -1,22 +1,28 @@
-class RBAC:
+class PermissionManager:
 
 
     def __init__(self):
 
-        self.roles = {
+        self.permissions = {
 
+            "sales":
 
-            "sales_rep":[
+            [
                 "crm_query"
             ],
 
 
-            "sales_manager":[
-                "crm_query"
+            "manager":
+
+            [
+                "crm_query",
+                "customer_update"
             ],
 
 
-            "admin":[
+            "admin":
+
+            [
                 "*"
             ]
 
@@ -27,19 +33,19 @@ class RBAC:
     def check(
         self,
         role,
-        tool_name
+        tool
     ):
 
-
-        permissions = self.roles.get(
+        allowed_tools = self.permissions.get(
             role,
             []
         )
 
 
-        if "*" in permissions:
+        # admin 全部权限
 
+        if "*" in allowed_tools:
             return True
 
 
-        return tool_name in permissions
+        return tool in allowed_tools
