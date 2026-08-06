@@ -4,7 +4,7 @@ from app.llm.factory import create_llm
 from app.orchestration.planner import Planner
 
 
-PLANNER_SYSTEM_PROMPT = """
+PLANNER_PROMPT = """
 你是企业 Agent 平台的任务规划器。
 
 将用户任务拆解为可执行的业务能力步骤，只能输出 JSON：
@@ -48,7 +48,7 @@ class LLMPlanner(Planner):
 
         catalog_context = self.catalog.format_catalog_context()
         system_prompt = (
-            PLANNER_SYSTEM_PROMPT
+            PLANNER_PROMPT
             + "\n你只能从以下 Capability Catalog 中选择 capability_id，禁止创造新能力：\n"
             + catalog_context
         )

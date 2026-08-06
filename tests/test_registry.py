@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from app.main import build_runtime
 from app.sources.base import AgentSource
-from app.agents.sales import SalesAgent
+from app.agents.manifest import ManifestAgent
 from app.sources.builtin import BuiltinAgentSource
 from app.registry.models import Agent, AgentStatus, Capability, Policy, ToolBinding
 from app.registry.service import AgentRegistry
@@ -142,14 +142,13 @@ class AgentRegistryTest(unittest.TestCase):
         )
         self.assertEqual("sales_agent", registered.instance.agent_id)
         self.assertEqual("0.2", registered.instance.version)
+        self.assertIsInstance(registered.instance, ManifestAgent)
+        self.assertIs(registered.definition, registered.instance.definition)
         prompts = {agent.agent_id: agent.definition.system_prompt for agent in definitions}
         self.assertIn("销售运营分析专家", prompts["sales_agent"])
         self.assertIn("财务分析专家", prompts["finance_agent"])
         self.assertIn("市场分析专家", prompts["market_agent"])
         self.assertEqual(4, len(set(prompts.values())))
-
-    def test_legacy_sales_class_has_no_business_definition(self):
-        self.assertFalse(hasattr(SalesAgent(StubLLM()), "definition"))
 
     def test_builtin_source_implements_source_contract(self):
         self.assertIsInstance(BuiltinAgentSource(StubLLM()), AgentSource)
