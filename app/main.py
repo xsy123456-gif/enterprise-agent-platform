@@ -84,6 +84,17 @@ def build_runtime(llm=None, capability_catalog=None):
 
 
     # -----------------------------
+    # Tool Registry
+    # -----------------------------
+
+    tool_registry = ToolRegistry()
+
+    tool_registry.register(
+        "crm_query",
+        CRMTool()
+    )
+
+    # -----------------------------
     # Agent Registry
     # -----------------------------
 
@@ -92,27 +103,13 @@ def build_runtime(llm=None, capability_catalog=None):
         capability_catalog=capability_catalog
     )
 
-
     source = BuiltinAgentSource(
         llm=llm,
         catalog=capability_catalog,
+        tool_registry=tool_registry,
     )
 
     source.load(agent_registry)
-
-
-
-    # -----------------------------
-    # Tool Registry
-    # -----------------------------
-
-    tool_registry = ToolRegistry()
-
-
-    tool_registry.register(
-        "crm_query",
-        CRMTool()
-    )
 
 
 

@@ -128,7 +128,7 @@ class AgentRegistryTest(unittest.TestCase):
     def test_builtin_sales_agent_registration(self):
         definitions = BuiltinAgentSource(StubLLM()).load(self.registry)
 
-        registered = self.registry.get("sales_agent", "0.1")
+        registered = self.registry.get("sales_agent", "0.2")
         self.assertEqual([registered], definitions)
         self.assertEqual("销售运营助手", registered.name)
         self.assertEqual(
@@ -136,7 +136,7 @@ class AgentRegistryTest(unittest.TestCase):
             registered.capabilities,
         )
         self.assertEqual("sales_agent", registered.instance.agent_id)
-        self.assertEqual("0.1", registered.instance.version)
+        self.assertEqual("0.2", registered.instance.version)
 
     def test_builtin_source_implements_source_contract(self):
         self.assertIsInstance(BuiltinAgentSource(StubLLM()), AgentSource)

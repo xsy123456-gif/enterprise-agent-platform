@@ -1,19 +1,47 @@
-from app.agents.sales import SalesAgent
+from pathlib import Path
+
 from app.capabilities.catalog import CapabilityCatalog
 from app.capabilities.models import CapabilityDefinition
 from app.capabilities.repository import InMemoryCapabilityRepository
-from app.registry.models import Agent, AgentStatus, Policy, ToolBinding
+from app.manifest.loader import ManifestLoader
+from app.manifest.parser import ManifestParser
+from app.manifest.validator import ManifestValidator
+from app.registry.models import Policy, ToolBinding
 from app.sources.base import AgentSource
+from app.tools.crm import CRMTool
+from app.tools.registry import ToolRegistry
 
 
 class BuiltinAgentSource(AgentSource):
-    """Provides the Agents bundled with this application."""
+    """Loads bundled Agent manifests through the standard manifest pipeline."""
 
-    def __init__(self, llm, catalog=None):
+    def __init__(self, llm, catalog=None, tool_registry=None):
         self.llm = llm
         self.catalog = catalog or CapabilityCatalog(InMemoryCapabilityRepository())
+        self.tool_registry = tool_registry or self._default_tool_registry()
 
     def load(self, registry):
+        self._register_platform_definitions(registry)
+        validator = ManifestValidator(
+            capability_catalog=self.catalog,
+            tool_registry=self.tool_registry,
+            policy_registry=registry,
+        )
+        loader = ManifestLoader(
+            parser=ManifestParser(),
+            validator=validator,
+            registry=registry,
+            llm=self.llm,
+        )
+        manifest_path = (
+            Path(__file__).resolve().parents[1]
+            / "agents"
+            / "sales_agent"
+            / "agent.yaml"
+        )
+        return [loader.load(manifest_path)]
+
+    def _register_platform_definitions(self, registry):
         self.catalog.register(
             CapabilityDefinition(
                 capability_id="customer_analysis",
@@ -34,7 +62,6 @@ class BuiltinAgentSource(AgentSource):
                 risk_level="low",
             )
         )
-
         policy = Policy(
             policy_id="sales_agent_policy",
             permission_rules=["crm.customer.read"],
@@ -42,7 +69,6 @@ class BuiltinAgentSource(AgentSource):
             audit_level="full",
         )
         registry.register_policy(policy)
-
         registry.bind_tool(
             ToolBinding(
                 capability_id="customer_analysis",
@@ -52,22 +78,8 @@ class BuiltinAgentSource(AgentSource):
             )
         )
 
-        sales_agent = SalesAgent(
-            llm=self.llm,
-            agent_id="sales_agent",
-            version="0.1",
-        )
-        definition = Agent(
-            agent_id="sales_agent",
-            name="销售运营助手",
-            version="0.1",
-            description="分析客户信息并准备客户拜访材料",
-            owner="sales_operations",
-            status=AgentStatus.ACTIVE,
-            capabilities=["customer_analysis", "visit_prepare"],
-            policy_id=policy.policy_id,
-            instance=sales_agent,
-            definition=sales_agent.definition,
-        )
-        registry.register(definition)
-        return [definition]
+    @staticmethod
+    def _default_tool_registry():
+        registry = ToolRegistry()
+        registry.register("crm_query", CRMTool())
+        return registry

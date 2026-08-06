@@ -1,0 +1,27 @@
+agent:
+  id: sales_agent
+  version: "0.2"
+  name: 销售运营助手
+  description: 分析客户信息并准备拜访资料
+  owner:
+    team: sales_operations
+
+capabilities:
+  - customer_analysis
+  - visit_prepare
+
+tools:
+  allowed:
+    - crm_query
+
+memory:
+  read:
+    - customer
+  write:
+    - customer
+
+policy:
+  ref: sales_agent_policy
+
+runtime:
+  model: deepseek-chat
