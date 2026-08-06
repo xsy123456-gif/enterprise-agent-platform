@@ -4,8 +4,9 @@ from app.registry.models import AgentStatus
 
 
 class AgentRegistry:
-    def __init__(self, repository):
+    def __init__(self, repository, capability_catalog=None):
         self.repository = repository
+        self.capability_catalog = capability_catalog
 
     def register(self, agent):
         self._validate_agent(agent)
@@ -43,6 +44,24 @@ class AgentRegistry:
         agents.sort(key=lambda agent: self._version_key(agent.version))
         return [agent.version for agent in agents]
 
+    def resolve_by_capability(self, capability_id):
+        candidates = self.list_agents(
+            capability_id=capability_id,
+            status=AgentStatus.ACTIVE,
+        )
+        if not candidates:
+            raise KeyError(
+                f"No active Agent provides capability: {capability_id}"
+            )
+
+        # Registration order is the initial cross-Agent priority policy.
+        # Within that Agent identity, always select its latest active version.
+        selected_agent_id = candidates[0].agent_id
+        versions = [
+            agent for agent in candidates if agent.agent_id == selected_agent_id
+        ]
+        return max(versions, key=lambda agent: self._version_key(agent.version))
+
     def set_status(self, agent_id, version, status):
         if status not in AgentStatus.ALL:
             raise ValueError(f"Unsupported agent status: {status}")
@@ -75,6 +94,23 @@ class AgentRegistry:
         return policy
 
     def bind_tool(self, binding):
+        if self.capability_catalog is not None:
+            capability = self.capability_catalog.get(binding.capability_id)
+            if (
+                capability.allowed_tools
+                and binding.tool_name not in capability.allowed_tools
+            ):
+                raise ValueError(
+                    f"Tool is not allowed for capability: {binding.tool_name}"
+                )
+            if (
+                binding.required_permission
+                not in capability.required_permissions
+            ):
+                raise ValueError(
+                    "Tool binding permission is not declared by capability: "
+                    f"{binding.required_permission}"
+                )
         self.repository.add_tool_binding(binding)
         return binding
 
@@ -101,8 +137,7 @@ class AgentRegistry:
             for part in re.findall(r"\d+|[A-Za-z]+", version)
         )
 
-    @staticmethod
-    def _validate_agent(agent):
+    def _validate_agent(self, agent):
         if not agent.agent_id or not agent.version:
             raise ValueError("agent_id and version are required")
         if agent.status not in AgentStatus.ALL:
@@ -111,3 +146,11 @@ class AgentRegistry:
             raise ValueError("Agent instance is required")
         if len(agent.capabilities) != len(set(agent.capabilities)):
             raise ValueError("Agent capabilities must be unique")
+        if self.capability_catalog is not None:
+            for capability_id in agent.capabilities:
+                try:
+                    self.capability_catalog.get(capability_id)
+                except KeyError as error:
+                    raise ValueError(
+                        f"Agent references unknown capability: {capability_id}"
+                    ) from error

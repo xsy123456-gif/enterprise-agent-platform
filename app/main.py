@@ -1,13 +1,34 @@
 from app.audit.logger import AuditLogger
 
 
-from app.bootstrap.agents import register_builtin_agents
+from app.capabilities.catalog import CapabilityCatalog
+
+
+from app.capabilities.repository import InMemoryCapabilityRepository
+
+
+from app.sources.builtin import BuiltinAgentSource
 
 
 from app.events.bus import EventBus
 
 
 from app.llm.factory import create_llm
+
+
+from app.orchestration.llm_planner import LLMPlanner
+
+
+from app.orchestration.planner import BasicPlanner
+
+
+from app.orchestration.supervisor import Supervisor
+
+
+from app.orchestration.task import Task
+
+
+from app.orchestration.validator import PlanValidator
 
 
 from app.permission.rbac import PermissionManager
@@ -17,9 +38,6 @@ from app.registry.service import AgentRegistry
 
 
 from app.registry.storage import InMemoryAgentRepository
-
-
-from app.runtime.context import AgentContext
 
 
 from app.runtime.engine import RuntimeEngine
@@ -39,14 +57,20 @@ from app.tools.registry import ToolRegistry
 # Build Runtime
 # =====================================
 
-def build_runtime():
+def build_runtime(llm=None, capability_catalog=None):
 
 
     # -----------------------------
     # LLM
     # -----------------------------
 
-    llm = create_llm()
+    if llm is None:
+        llm = create_llm()
+
+    if capability_catalog is None:
+        capability_catalog = CapabilityCatalog(
+            InMemoryCapabilityRepository()
+        )
 
 
 
@@ -55,14 +79,17 @@ def build_runtime():
     # -----------------------------
 
     agent_registry = AgentRegistry(
-        InMemoryAgentRepository()
+        InMemoryAgentRepository(),
+        capability_catalog=capability_catalog
     )
 
 
-    register_builtin_agents(
-        agent_registry,
-        llm
+    source = BuiltinAgentSource(
+        llm=llm,
+        catalog=capability_catalog,
     )
+
+    source.load(agent_registry)
 
 
 
@@ -142,6 +169,41 @@ def build_runtime():
 
 
 
+def build_orchestration(llm=None):
+
+    if llm is None:
+        llm = create_llm()
+
+    capability_catalog = CapabilityCatalog(
+        InMemoryCapabilityRepository()
+    )
+
+    runtime, audit, event_bus = build_runtime(
+        llm=llm,
+        capability_catalog=capability_catalog,
+    )
+
+    planner = LLMPlanner(
+        llm=llm,
+        catalog=capability_catalog,
+        validator=PlanValidator(capability_catalog),
+        fallback=BasicPlanner(),
+    )
+
+    supervisor = Supervisor(
+        registry=runtime.agent_registry,
+        runtime=runtime
+    )
+
+    return (
+        planner,
+        supervisor,
+        audit,
+        event_bus
+    )
+
+
+
 
 
 # =====================================
@@ -150,29 +212,18 @@ def build_runtime():
 
 def main():
 
+    planner, supervisor, audit, event_bus = build_orchestration()
 
-    runtime, audit, event_bus = build_runtime()
-
-
-
-    state = AgentContext(
-
-        task="准备客户A拜访资料",
-
-        user_id="sales_001",
-
-        role="sales",
-
-        agent_name="sales_agent"
-
+    task = Task(
+        user_query="准备客户A拜访资料"
     )
 
+    plan = planner.plan(task)
 
-
-    result = runtime.run(
-
-        state
-
+    result = supervisor.execute(
+        plan=plan,
+        user_id="sales_001",
+        role="sales"
     )
 
 
@@ -183,7 +234,7 @@ def main():
 
 
     print(
-        result
+        result.output
     )
 
 

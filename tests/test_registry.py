@@ -3,8 +3,9 @@ from contextlib import redirect_stdout
 from io import StringIO
 from unittest.mock import patch
 
-from app.bootstrap.agents import register_builtin_agents
 from app.main import build_runtime
+from app.sources.base import AgentSource
+from app.sources.builtin import BuiltinAgentSource
 from app.registry.models import Agent, AgentStatus, Capability, Policy, ToolBinding
 from app.registry.service import AgentRegistry
 from app.registry.storage import InMemoryAgentRepository
@@ -125,9 +126,10 @@ class AgentRegistryTest(unittest.TestCase):
         self.assertEqual("1.0", runtime.run(state))
 
     def test_builtin_sales_agent_registration(self):
-        register_builtin_agents(self.registry, StubLLM())
+        definitions = BuiltinAgentSource(StubLLM()).load(self.registry)
 
         registered = self.registry.get("sales_agent", "0.1")
+        self.assertEqual([registered], definitions)
         self.assertEqual("销售运营助手", registered.name)
         self.assertEqual(
             ["customer_analysis", "visit_prepare"],
@@ -135,6 +137,9 @@ class AgentRegistryTest(unittest.TestCase):
         )
         self.assertEqual("sales_agent", registered.instance.agent_id)
         self.assertEqual("0.1", registered.instance.version)
+
+    def test_builtin_source_implements_source_contract(self):
+        self.assertIsInstance(BuiltinAgentSource(StubLLM()), AgentSource)
 
     def test_application_flow_keeps_existing_platform_services(self):
         llm = ToolCallingStubLLM()
