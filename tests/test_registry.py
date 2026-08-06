@@ -158,8 +158,18 @@ class AgentRegistryTest(unittest.TestCase):
         self.assertEqual("visit prepared", result)
         self.assertEqual("crm_query", audit.logs[0]["tool"])
         self.assertEqual("allow", audit.logs[0]["action"])
-        self.assertEqual("tool_completed", event_bus.events[0].event_type)
+        self.assertIn(
+            "tool_completed",
+            [event.event_type for event in event_bus.events],
+        )
         self.assertEqual("Tesla", state.tool_results[0]["name"])
+        self.assertEqual("completed", state.loop_status)
+        self.assertEqual("sales_agent", state.runtime_trace.agent_id)
+        self.assertGreaterEqual(state.runtime_trace.llm_calls, 2)
+        self.assertEqual(
+            "Tesla",
+            runtime.memory_service.recall("customer", "Tesla")[0]["key"],
+        )
 
 
 if __name__ == "__main__":

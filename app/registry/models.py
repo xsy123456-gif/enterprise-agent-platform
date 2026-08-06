@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from app.agents.definition import AgentDefinition
+
 
 class AgentStatus:
     ACTIVE = "active"
@@ -43,6 +45,7 @@ class Agent:
     capabilities: list[str]
     instance: Any
     policy_id: Optional[str] = None
+    definition: Optional[AgentDefinition] = None
 
     @property
     def registry_key(self):

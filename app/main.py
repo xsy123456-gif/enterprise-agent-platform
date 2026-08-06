@@ -16,6 +16,15 @@ from app.events.bus import EventBus
 from app.llm.factory import create_llm
 
 
+from app.memory.policy import MemoryGuard
+
+
+from app.memory.service import MemoryService
+
+
+from app.memory.storage import MemoryStorage
+
+
 from app.orchestration.llm_planner import LLMPlanner
 
 
@@ -147,6 +156,10 @@ def build_runtime(llm=None, capability_catalog=None):
 
     )
 
+    memory_service = MemoryService(MemoryStorage())
+
+    memory_guard = MemoryGuard(memory_service=memory_service)
+
 
 
     # -----------------------------
@@ -156,9 +169,12 @@ def build_runtime(llm=None, capability_catalog=None):
     runtime = RuntimeEngine(
         agent_registry=agent_registry,
         tool_runner=tool_runner,
-        max_steps=10
+        max_steps=10,
+        memory_guard=memory_guard,
 
     )
+
+    runtime.memory_service = memory_service
 
 
     return (

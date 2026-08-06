@@ -1,4 +1,4 @@
-from app.runtime.executor import AgentExecutor
+from app.runtime.loop import AgentExecutionLoop
 
 
 class RuntimeEngine:
@@ -8,7 +8,8 @@ class RuntimeEngine:
         self,
         agent_registry,
         tool_runner,
-        max_steps=10
+        max_steps=10,
+        memory_guard=None,
     ):
 
         self.agent_registry = agent_registry
@@ -16,6 +17,8 @@ class RuntimeEngine:
         self.tool_runner = tool_runner
 
         self.max_steps = max_steps
+
+        self.memory_guard = memory_guard
 
 
 
@@ -28,17 +31,15 @@ class RuntimeEngine:
 
         selected_agent_id = agent_id or state.agent_name
 
-        agent = self.agent_registry.get_agent(
+        agent_record = self.agent_registry.get(
             selected_agent_id,
-            version
+            version,
         )
-
-        executor = AgentExecutor(
-            agent=agent,
+        loop = AgentExecutionLoop(
+            agent_record=agent_record,
             tool_runner=self.tool_runner,
-            max_steps=self.max_steps
+            memory_guard=self.memory_guard,
+            agent_registry=self.agent_registry,
+            max_steps=self.max_steps,
         )
-
-        return executor.run(
-            state
-        )
+        return loop.run(state)

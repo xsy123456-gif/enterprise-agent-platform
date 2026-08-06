@@ -67,6 +67,7 @@ class BuiltinAgentSource(AgentSource):
             capabilities=["customer_analysis", "visit_prepare"],
             policy_id=policy.policy_id,
             instance=sales_agent,
+            definition=sales_agent.definition,
         )
         registry.register(definition)
         return [definition]

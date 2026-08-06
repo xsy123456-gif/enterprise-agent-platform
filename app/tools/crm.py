@@ -1,33 +1,24 @@
 class CRMTool:
-
-
     name = "crm_query"
-
-
     description = "查询客户信息"
 
+    def validate_input(self, customer_id):
+        if isinstance(customer_id, dict):
+            customer_id = customer_id.get("customer")
+        return isinstance(customer_id, str) and bool(customer_id.strip())
 
     def execute(self, customer_id):
+        if isinstance(customer_id, dict):
+            customer_id = customer_id.get("customer")
 
         customers = {
-
             "customer_A": {
-
                 "name": "Tesla",
-
                 "industry": "新能源汽车",
-
                 "history": [
                     "去年购买产品A",
-                    "近期关注产品B"
-                ]
-
+                    "近期关注产品B",
+                ],
             }
-
         }
-
-
-        return customers.get(
-            customer_id,
-            "客户不存在"
-        )
+        return customers.get(customer_id, "客户不存在")

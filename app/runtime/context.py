@@ -11,7 +11,14 @@ class AgentContext:
         task,
         user_id,
         role,
-        agent_name
+        agent_name,
+        task_id=None,
+        step_id=None,
+        capability=None,
+        goal=None,
+        memory_context=None,
+        available_tools=None,
+        agent_definition=None,
     ):
 
 
@@ -20,6 +27,20 @@ class AgentContext:
         self.role = role
 
         self.agent_name = agent_name
+
+        self.task_id = task_id
+
+        self.step_id = step_id
+
+        self.capability = capability
+
+        self.goal = goal or task
+
+        self.memory_context = memory_context or []
+
+        self.available_tools = available_tools or []
+
+        self.agent_definition = agent_definition
 
 
         self.task = task

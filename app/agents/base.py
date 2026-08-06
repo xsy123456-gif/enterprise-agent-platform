@@ -24,10 +24,6 @@ class BaseAgent(ABC):
 
 
 
-    @abstractmethod
-    def think(
-        self,
-        context
-    ):
-
-        pass
+    def reason(self, messages):
+        """Compatibility hook; the execution loop normally calls ``llm``."""
+        return self.llm.chat(messages)

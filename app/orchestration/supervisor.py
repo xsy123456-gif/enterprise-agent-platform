@@ -74,6 +74,23 @@ class Supervisor:
             user_id=user_id,
             role=role,
             agent_name=agent.agent_id,
+            task_id=plan.task_id,
+            step_id=step.step_id,
+            capability=step.capability,
+            goal=plan.goal,
+            memory_context=[
+                item.result
+                for item in state.steps
+                if item.status == StepStatus.COMPLETED
+            ],
+            available_tools=(
+                getattr(agent.instance, "definition", None).allowed_tools
+                if getattr(agent.instance, "definition", None)
+                else []
+            ),
+            agent_definition=agent.definition or getattr(
+                agent.instance, "definition", None
+            ),
         )
 
         try:

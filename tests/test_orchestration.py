@@ -318,7 +318,10 @@ class OrchestrationTest(unittest.TestCase):
         self.assertEqual(ExecutionStatus.COMPLETED, result.status)
         self.assertEqual("visit prepared", result.output)
         self.assertEqual("crm_query", audit.logs[0]["tool"])
-        self.assertEqual("tool_completed", event_bus.events[0].event_type)
+        self.assertIn(
+            "tool_completed",
+            [event.event_type for event in event_bus.events],
+        )
 
     def test_main_uses_orchestration_without_external_agent_selection(self):
         output = StringIO()

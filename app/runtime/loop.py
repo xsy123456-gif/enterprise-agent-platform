@@ -1,0 +1,169 @@
+import json
+
+from app.events.models import Event
+from app.runtime.action import AgentAction
+from app.runtime.context_builder import AgentContextBuilder
+from app.runtime.trace import RuntimeTrace
+from app.runtime.tool_validation import ToolRequestValidator
+
+
+class AgentLoopError(RuntimeError):
+    pass
+
+
+class LoopStatus:
+    CREATED = "created"
+    CONTEXT_BUILDING = "context_building"
+    THINKING = "thinking"
+    WAITING_TOOL = "waiting_tool"
+    TOOL_RUNNING = "tool_running"
+    OBSERVING = "observing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class AgentExecutionLoop:
+    def __init__(
+        self,
+        agent_record,
+        tool_runner,
+        memory_guard=None,
+        agent_registry=None,
+        context_builder=None,
+        max_steps=10,
+    ):
+        self.agent_record = agent_record
+        self.agent = agent_record.instance
+        self.tool_runner = tool_runner
+        self.memory_guard = memory_guard
+        self.max_steps = max_steps
+        self.tool_validator = ToolRequestValidator(tool_runner, agent_registry)
+        self.context_builder = context_builder or AgentContextBuilder()
+
+    def run(self, state):
+        definition = self.agent_record.definition or getattr(
+            self.agent, "definition", None
+        )
+        state.agent_definition = definition
+        trace = RuntimeTrace(
+            trace_id=state.trace_id,
+            task_id=getattr(state, "task_id", None),
+            step_id=getattr(state, "step_id", None),
+            agent_id=self.agent_record.agent_id,
+            capability=getattr(state, "capability", None),
+        )
+        state.runtime_trace = trace
+        self._transition(state, trace, LoopStatus.CREATED, "loop_started")
+        self._publish(state, "agent_step_started", {})
+        self._transition(
+            state, trace, LoopStatus.CONTEXT_BUILDING, "context_built"
+        )
+
+        for step in range(1, self.max_steps + 1):
+            self._transition(state, trace, LoopStatus.THINKING, "llm_call")
+            trace.record(step, "llm_call", "started")
+            try:
+                response = self._reason(state, definition)
+                trace.record(step, "llm_call", "completed")
+                action = (
+                    response
+                    if isinstance(response, AgentAction)
+                    else self._parse_action(response)
+                )
+            except Exception as error:
+                self._transition(
+                    state, trace, LoopStatus.FAILED, "agent_failed", str(error)
+                )
+                self._publish(state, "agent_failed", {"error": str(error)})
+                raise AgentLoopError(str(error)) from error
+
+            if action.type == AgentAction.FINISH:
+                state.add_message("assistant", action.output)
+                if self.memory_guard:
+                    self.memory_guard.update(
+                        state.tool_results[-1] if state.tool_results else None,
+                        state,
+                        getattr(definition, "memory_policy", None),
+                    )
+                self._transition(
+                    state, trace, LoopStatus.COMPLETED, "step_completed"
+                )
+                self._publish(state, "agent_step_completed", {"output": action.output})
+                return action.output
+
+            self._transition(state, trace, LoopStatus.WAITING_TOOL, "tool_requested")
+            try:
+                self.tool_validator.validate(action, state)
+            except Exception as error:
+                self._transition(
+                    state, trace, LoopStatus.FAILED, "agent_failed", str(error)
+                )
+                self._publish(state, "agent_failed", {"error": str(error)})
+                raise AgentLoopError(str(error)) from error
+            self._transition(state, trace, LoopStatus.TOOL_RUNNING, "tool_call")
+            self._publish(state, "tool_called", {"tool": action.tool})
+            trace.record(step, "tool_call", "started", {"tool": action.tool})
+            try:
+                result = self.tool_runner.run(action, state)
+            except Exception as error:
+                self._transition(
+                    state, trace, LoopStatus.FAILED, "agent_failed", str(error)
+                )
+                self._publish(state, "agent_failed", {"error": str(error)})
+                raise AgentLoopError(str(error)) from error
+            trace.record(step, "tool_call", "completed", {"tool": action.tool})
+            self._transition(state, trace, LoopStatus.OBSERVING, "observation")
+            self._publish(state, "agent_observation", {"result": result})
+            state.add_message("user", f"Tool observation: {result}")
+
+        error = "Agent exceeded max steps"
+        self._transition(state, trace, LoopStatus.FAILED, "agent_failed", error)
+        self._publish(state, "agent_failed", {"error": error})
+        return {"error": error}
+
+    def _messages(self, state, definition):
+        return self.context_builder.build_messages(state, definition)
+
+    def _reason(self, state, definition):
+        if hasattr(self.agent, "reason"):
+            return self.agent.reason(self._messages(state, definition))
+        # Compatibility for pre-v0.4.3 custom Agents; new Agents should only
+        # provide a definition and an LLM, leaving execution to this Loop.
+        if hasattr(self.agent, "think"):
+            return self.agent.think(state)
+        raise AgentLoopError("Agent does not provide an LLM reasoning interface")
+
+    @staticmethod
+    def _parse_action(response):
+        data = json.loads(response) if isinstance(response, str) else response
+        if not isinstance(data, dict):
+            raise ValueError("Agent response must be a JSON object")
+        if data.get("type") == "tool" or data.get("action") == "tool_call":
+            tool = data.get("tool")
+            tool_input = data.get("input", data.get("arguments"))
+            return AgentAction.tool_action(tool, tool_input)
+        if data.get("type") == "finish" or data.get("action") == "finish":
+            return AgentAction.finish_action(data.get("output"))
+        raise ValueError("Invalid Agent action")
+
+    @staticmethod
+    def _transition(state, trace, status, action, detail=None):
+        state.loop_status = status
+        trace.record(getattr(state, "step_id", None), action, status, detail)
+
+    def _publish(self, state, event_type, payload):
+        event_bus = getattr(self.tool_runner, "event_bus", None)
+        if event_bus is None:
+            return
+        event_bus.publish(
+            Event(
+                event_type,
+                {
+                    "trace_id": state.trace_id,
+                    "task_id": getattr(state, "task_id", None),
+                    "step_id": getattr(state, "step_id", None),
+                    "agent": state.agent_name,
+                    **payload,
+                },
+            )
+        )
