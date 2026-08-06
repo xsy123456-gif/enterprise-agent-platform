@@ -146,6 +146,11 @@ class AgentRegistryTest(unittest.TestCase):
         with patch("app.main.create_llm", return_value=llm):
             runtime, audit, event_bus = build_runtime()
 
+        lifecycle = runtime.lifecycle_service
+        lifecycle.request_review("sales_agent", "0.2")
+        lifecycle.approve("sales_agent", "0.2")
+        lifecycle.activate("sales_agent", "0.2")
+
         state = AgentContext(
             task="prepare customer visit",
             user_id="sales_001",

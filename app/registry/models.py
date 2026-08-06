@@ -5,11 +5,27 @@ from app.agents.definition import AgentDefinition
 
 
 class AgentStatus:
+    DRAFT = "draft"
+    VALIDATING = "validating"
+    REVIEWING = "reviewing"
+    APPROVED = "approved"
     ACTIVE = "active"
-    INACTIVE = "inactive"
+    SUSPENDED = "suspended"
     DEPRECATED = "deprecated"
+    ARCHIVED = "archived"
+    INACTIVE = "inactive"
 
-    ALL = {ACTIVE, INACTIVE, DEPRECATED}
+    ALL = {
+        DRAFT,
+        VALIDATING,
+        REVIEWING,
+        APPROVED,
+        ACTIVE,
+        SUSPENDED,
+        DEPRECATED,
+        ARCHIVED,
+        INACTIVE,
+    }
 
 
 @dataclass

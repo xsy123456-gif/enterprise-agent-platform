@@ -13,6 +13,15 @@ from app.sources.factory import AgentSourceFactory
 from app.events.bus import EventBus
 
 
+from app.governance.events import EventBusPublisher
+
+
+from app.governance.repository import InMemoryLifecycleRepository
+
+
+from app.governance.service import AgentLifecycleService
+
+
 from app.llm.factory import create_llm
 
 
@@ -81,6 +90,13 @@ def build_runtime(llm=None, capability_catalog=None):
             InMemoryCapabilityRepository()
         )
 
+    event_bus = EventBus()
+
+    lifecycle_service = AgentLifecycleService(
+        repository=InMemoryLifecycleRepository(),
+        event_publisher=EventBusPublisher(event_bus),
+    )
+
 
 
     # -----------------------------
@@ -102,6 +118,7 @@ def build_runtime(llm=None, capability_catalog=None):
         InMemoryAgentRepository(),
         capability_catalog=capability_catalog
     )
+    agent_registry.attach_lifecycle_service(lifecycle_service)
 
     source_factory = AgentSourceFactory(
         llm=llm,
@@ -129,14 +146,6 @@ def build_runtime(llm=None, capability_catalog=None):
     # -----------------------------
 
     audit = AuditLogger()
-
-
-
-    # -----------------------------
-    # Event
-    # -----------------------------
-
-    event_bus = EventBus()
 
 
 
@@ -175,6 +184,7 @@ def build_runtime(llm=None, capability_catalog=None):
     )
 
     runtime.memory_service = memory_service
+    runtime.lifecycle_service = lifecycle_service
 
 
     return (
@@ -185,7 +195,7 @@ def build_runtime(llm=None, capability_catalog=None):
 
 
 
-def build_orchestration(llm=None):
+def build_orchestration(llm=None, activate_builtin=False):
 
     if llm is None:
         llm = create_llm()
@@ -198,6 +208,17 @@ def build_orchestration(llm=None):
         llm=llm,
         capability_catalog=capability_catalog,
     )
+
+    if activate_builtin:
+        lifecycle = runtime.lifecycle_service
+        lifecycle.request_review(
+            "sales_agent",
+            "0.2",
+            requester="bootstrap",
+            approval_channel="manual",
+        )
+        lifecycle.approve("sales_agent", "0.2", reviewer="bootstrap")
+        lifecycle.activate("sales_agent", "0.2", operator="bootstrap")
 
     planner = LLMPlanner(
         llm=llm,
@@ -228,7 +249,9 @@ def build_orchestration(llm=None):
 
 def main():
 
-    planner, supervisor, audit, event_bus = build_orchestration()
+    planner, supervisor, audit, event_bus = build_orchestration(
+        activate_builtin=True
+    )
 
     task = Task(
         user_query="准备客户A拜访资料"

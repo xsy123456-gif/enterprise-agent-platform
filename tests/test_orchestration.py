@@ -309,7 +309,9 @@ class OrchestrationTest(unittest.TestCase):
     def test_application_orchestration_preserves_runtime_services(self):
         llm = PlannerAndAgentStubLLM()
         with patch("app.main.create_llm", return_value=llm):
-            planner, supervisor, audit, event_bus = build_orchestration()
+            planner, supervisor, audit, event_bus = build_orchestration(
+                activate_builtin=True
+            )
 
         plan = planner.plan(Task(user_query="准备客户A拜访资料"))
         with redirect_stdout(StringIO()):
