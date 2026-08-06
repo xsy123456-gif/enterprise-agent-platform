@@ -1,4 +1,5 @@
 from app.audit.logger import AuditLogger
+from app.audit.governance import GovernanceAuditSubscriber
 
 
 from app.capabilities.catalog import CapabilityCatalog
@@ -20,6 +21,14 @@ from app.governance.repository import InMemoryLifecycleRepository
 
 
 from app.governance.service import AgentLifecycleService
+from app.governance.approval.repository import InMemoryApprovalRepository
+from app.governance.approval.service import ApprovalService
+from app.governance.policy import (
+    GovernancePolicy,
+    InMemoryPolicyRepository,
+    PolicyDecisionEngine,
+    PolicyRule,
+)
 
 
 from app.llm.factory import create_llm
@@ -92,9 +101,28 @@ def build_runtime(llm=None, capability_catalog=None):
 
     event_bus = EventBus()
 
+    governance_policy = GovernancePolicy(
+        policy_id="default_governance",
+        name="Default platform governance",
+        rules=[
+            PolicyRule("system", "create_agent", "*", "allow"),
+            PolicyRule("developer", "submit_review", "*", "allow"),
+            PolicyRule("admin", "approve_agent", "*", "allow"),
+            PolicyRule("admin", "reject_agent", "*", "allow"),
+            PolicyRule("admin", "activate_agent", "*", "allow"),
+            PolicyRule("admin", "suspend_agent", "*", "allow"),
+            PolicyRule("admin", "deprecate_agent", "*", "allow"),
+        ],
+    )
+    governance_engine = PolicyDecisionEngine(InMemoryPolicyRepository())
+    governance_engine.register(governance_policy)
+    governance_audit = GovernanceAuditSubscriber()
+    event_bus.subscribe(governance_audit)
+
     lifecycle_service = AgentLifecycleService(
         repository=InMemoryLifecycleRepository(),
         event_publisher=EventBusPublisher(event_bus),
+        governance_engine=governance_engine,
     )
 
 
@@ -185,6 +213,12 @@ def build_runtime(llm=None, capability_catalog=None):
 
     runtime.memory_service = memory_service
     runtime.lifecycle_service = lifecycle_service
+    runtime.governance_policy_engine = governance_engine
+    runtime.governance_audit = governance_audit
+    runtime.approval_service = ApprovalService(
+        InMemoryApprovalRepository(), lifecycle_service,
+        event_publisher=EventBusPublisher(event_bus),
+    )
 
 
     return (

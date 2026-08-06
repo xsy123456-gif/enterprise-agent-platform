@@ -4,8 +4,14 @@ from io import StringIO
 
 from app.events.bus import EventBus
 from app.governance.events import EventBusPublisher
+from app.governance.events import LifecycleEvent
 from app.governance.lifecycle import LifecycleStatus
 from app.governance.policy import LifecycleTransitionError
+from app.governance.policy import (
+    GovernancePolicy, InMemoryPolicyRepository, PolicyDecisionEngine, PolicyRule,
+)
+from app.governance.approval import ApprovalService, InMemoryApprovalRepository
+from app.audit.governance import GovernanceAuditSubscriber
 from app.governance.repository import InMemoryLifecycleRepository
 from app.governance.service import AgentLifecycleService
 from app.registry.models import Agent
@@ -105,6 +111,38 @@ class GovernanceTest(unittest.TestCase):
         self.lifecycle.approve("sales_agent", "0.2")
         self.lifecycle.activate("sales_agent", "0.2")
         self.assertEqual([agent], registry.get_active_agents())
+
+    def test_policy_denies_developer_activation(self):
+        engine = PolicyDecisionEngine(InMemoryPolicyRepository())
+        engine.register(GovernancePolicy(
+            "p", "governance", [
+                PolicyRule("system", "create_agent", "*", "allow"),
+                PolicyRule("developer", "submit_review", "*", "allow"),
+                PolicyRule("admin", "approve_agent", "*", "allow"),
+                PolicyRule("admin", "activate_agent", "*", "allow"),
+            ]
+        ))
+        lifecycle = AgentLifecycleService(InMemoryLifecycleRepository(), governance_engine=engine)
+        lifecycle.create("sales_agent", "0.2")
+        lifecycle.request_review("sales_agent", "0.2", requester="dev", role="developer")
+        lifecycle.approve("sales_agent", "0.2", reviewer="admin")
+        with self.assertRaisesRegex(PermissionError, "activate_agent"):
+            lifecycle.activate("sales_agent", "0.2", operator="dev", role="developer")
+
+    def test_approval_rejection_is_recorded_and_not_activatable(self):
+        lifecycle = AgentLifecycleService(InMemoryLifecycleRepository())
+        lifecycle.create("sales_agent", "0.2")
+        approvals = ApprovalService(InMemoryApprovalRepository(), lifecycle)
+        request = approvals.create_request("sales_agent", "0.2", "dev")
+        approvals.reject(request.approval_id, "admin", "needs changes")
+        self.assertEqual("rejected", approvals.get(request.approval_id).status)
+        with self.assertRaises(LifecycleTransitionError):
+            lifecycle.activate("sales_agent", "0.2")
+
+    def test_governance_audit_subscriber_queries_events(self):
+        subscriber = GovernanceAuditSubscriber()
+        subscriber.handle(LifecycleEvent("agent.activated", "sales_agent", "0.2", "admin"))
+        self.assertEqual(1, len(subscriber.query("sales_agent", event_type="agent.activated")))
 
 
 if __name__ == "__main__":
