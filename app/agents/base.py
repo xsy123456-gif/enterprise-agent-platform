@@ -11,10 +11,16 @@ class BaseAgent(ABC):
 
     def __init__(
         self,
-        llm
+        llm,
+        agent_id=None,
+        version=None
     ):
 
         self.llm = llm
+
+        self.agent_id = agent_id
+
+        self.version = version
 
 
 

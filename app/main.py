@@ -1,10 +1,7 @@
-import os
-
-
-from app.agents.sales import SalesAgent
-
-
 from app.audit.logger import AuditLogger
+
+
+from app.bootstrap.agents import register_builtin_agents
 
 
 from app.events.bus import EventBus
@@ -13,19 +10,19 @@ from app.events.bus import EventBus
 from app.llm.factory import create_llm
 
 
-from app.memory.service import MemoryService
-
-
 from app.permission.rbac import PermissionManager
+
+
+from app.registry.service import AgentRegistry
+
+
+from app.registry.storage import InMemoryAgentRepository
 
 
 from app.runtime.context import AgentContext
 
 
 from app.runtime.engine import RuntimeEngine
-
-
-from app.runtime.executor import AgentExecutor
 
 
 from app.runtime.tool_runner import ToolRunner
@@ -54,10 +51,16 @@ def build_runtime():
 
 
     # -----------------------------
-    # Agent
+    # Agent Registry
     # -----------------------------
 
-    agent = SalesAgent(
+    agent_registry = AgentRegistry(
+        InMemoryAgentRepository()
+    )
+
+
+    register_builtin_agents(
+        agent_registry,
         llm
     )
 
@@ -67,10 +70,10 @@ def build_runtime():
     # Tool Registry
     # -----------------------------
 
-    registry = ToolRegistry()
+    tool_registry = ToolRegistry()
 
 
-    registry.register(
+    tool_registry.register(
         "crm_query",
         CRMTool()
     )
@@ -107,7 +110,7 @@ def build_runtime():
 
     tool_runner = ToolRunner(
 
-        registry,
+        tool_registry,
 
         permission,
 
@@ -120,28 +123,13 @@ def build_runtime():
 
 
     # -----------------------------
-    # Executor
-    # -----------------------------
-
-    executor = AgentExecutor(
-
-        agent=agent,
-
-        tool_runner=tool_runner,
-
-        max_steps=10
-
-    )
-
-
-
-    # -----------------------------
     # Runtime Engine
     # -----------------------------
 
     runtime = RuntimeEngine(
-
-        executor
+        agent_registry=agent_registry,
+        tool_runner=tool_runner,
+        max_steps=10
 
     )
 

@@ -18,10 +18,16 @@ class SalesAgent(BaseAgent):
 
     def __init__(
         self,
-        llm
+        llm,
+        agent_id="sales_agent",
+        version=None
     ):
 
-        self.llm = llm
+        super().__init__(
+            llm=llm,
+            agent_id=agent_id,
+            version=version
+        )
 
 
 
