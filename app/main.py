@@ -7,7 +7,7 @@ from app.capabilities.catalog import CapabilityCatalog
 from app.capabilities.repository import InMemoryCapabilityRepository
 
 
-from app.sources.builtin import BuiltinAgentSource
+from app.sources.factory import AgentSourceFactory
 
 
 from app.events.bus import EventBus
@@ -103,11 +103,14 @@ def build_runtime(llm=None, capability_catalog=None):
         capability_catalog=capability_catalog
     )
 
-    source = BuiltinAgentSource(
+    source_factory = AgentSourceFactory(
         llm=llm,
         catalog=capability_catalog,
         tool_registry=tool_registry,
+        agent_registry=agent_registry,
     )
+
+    source = source_factory.create({"type": "builtin"})
 
     source.load(agent_registry)
 

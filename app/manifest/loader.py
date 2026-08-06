@@ -14,8 +14,9 @@ class ManifestLoader:
         manifest = self.parser.parse(path)
         return self.load_manifest(manifest)
 
-    def load_manifest(self, manifest):
-        self.validator.validate(manifest)
+    def load_manifest(self, manifest, validate=True):
+        if validate:
+            self.validator.validate(manifest)
         definition = self._to_definition(manifest)
         instance = ManifestAgent(self.llm, definition)
         registered = Agent(
