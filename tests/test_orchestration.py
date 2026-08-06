@@ -20,6 +20,9 @@ from app.registry.service import AgentRegistry
 from app.registry.storage import InMemoryAgentRepository
 from app.runtime.action import AgentAction
 from app.runtime.loop import AgentExecutionLoop
+from app.runtime.context import AgentContext
+from app.runtime.context_builder import AgentContextBuilder
+from app.agents.definition import AgentDefinition
 
 
 class StubAgent:
@@ -146,6 +149,20 @@ class OrchestrationTest(unittest.TestCase):
         action = AgentExecutionLoop._parse_action("自然语言最终分析")
         self.assertEqual(AgentAction.FINISH, action.type)
         self.assertEqual("自然语言最终分析", action.output)
+        tool_action = AgentExecutionLoop._parse_action(
+            '先查询数据。\n{"action":"tool_call","tool":"crm_query",'
+            '"arguments":{"customer":"customer_A"}}'
+        )
+        self.assertEqual(AgentAction.TOOL, tool_action.type)
+        self.assertEqual("crm_query", tool_action.tool)
+
+    def test_context_builder_injects_agent_prompt_and_runtime_control(self):
+        context = AgentContext("analyze", "user", "sales", "market_agent")
+        definition = AgentDefinition("market_agent", "0.1", "MARKET ROLE PROMPT")
+        messages = AgentContextBuilder().build_messages(context, definition)
+        self.assertIn("MARKET ROLE PROMPT", messages[0]["content"])
+        self.assertIn("RUNTIME CONTROL", messages[1]["content"])
+        self.assertIn("EXECUTION CONTEXT", messages[2]["content"])
 
     def test_llm_planner_validates_capability_plan(self):
         catalog = CapabilityCatalog(InMemoryCapabilityRepository())

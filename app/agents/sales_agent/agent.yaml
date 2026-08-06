@@ -6,6 +6,9 @@ agent:
   owner:
     team: sales_operations
 
+prompt:
+  system: prompts/system.md
+
 capabilities:
   - customer_analysis
   - visit_prepare

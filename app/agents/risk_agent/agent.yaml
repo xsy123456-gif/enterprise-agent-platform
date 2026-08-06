@@ -5,6 +5,8 @@ agent:
   description: 基于前序分析结果通过LLM完成综合风险评估
   owner:
     team: risk_management
+prompt:
+  system: prompts/system.md
 capabilities:
   - risk_assessment
 tools:

@@ -19,9 +19,9 @@ class ManifestParser:
                 data = yaml.safe_load(stream)
         except (OSError, yaml.YAMLError) as error:
             raise ManifestParseError(f"Unable to parse manifest: {path}") from error
-        return self.parse_data(data)
+        return self.parse_data(data, source_path=str(manifest_path))
 
-    def parse_data(self, data):
+    def parse_data(self, data, source_path=None):
         if not isinstance(data, dict):
             raise ManifestParseError("Manifest root must be a mapping")
 
@@ -39,16 +39,19 @@ class ManifestParser:
         memory = data.get("memory") or {}
         policy = data.get("policy") or {}
         runtime = data.get("runtime") or {}
+        prompt = data.get("prompt") or {}
         return AgentManifest(
             agent_id=agent.get("id"),
             version=str(agent["version"]) if agent.get("version") is not None else None,
             name=agent.get("name"),
             description=agent.get("description"),
             owner=owner,
+            system_prompt_ref=(prompt.get("system") if isinstance(prompt, dict) else None),
             capabilities=data.get("capabilities") or [],
             tools=tools,
             memory_policy=memory,
             policy_ref=policy.get("ref") if isinstance(policy, dict) else None,
             runtime=runtime,
             raw=data,
+            source_path=source_path,
         )

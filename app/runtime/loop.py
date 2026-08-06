@@ -156,9 +156,11 @@ class AgentExecutionLoop:
             try:
                 data = json.loads(text)
             except json.JSONDecodeError:
-                if text:
-                    return AgentAction.finish_action(response)
-                raise ValueError("Agent response must not be empty")
+                data = AgentExecutionLoop._extract_embedded_action(text)
+                if data is None:
+                    if text:
+                        return AgentAction.finish_action(response)
+                    raise ValueError("Agent response must not be empty")
         else:
             data = response
         if not isinstance(data, dict):
@@ -170,6 +172,23 @@ class AgentExecutionLoop:
         if data.get("type") == "finish" or data.get("action") == "finish":
             return AgentAction.finish_action(data.get("output"))
         raise ValueError("Invalid Agent action")
+
+    @staticmethod
+    def _extract_embedded_action(text):
+        decoder = json.JSONDecoder()
+        for position, character in enumerate(text):
+            if character != "{":
+                continue
+            try:
+                data, _ = decoder.raw_decode(text[position:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(data, dict) and (
+                data.get("action") in {"tool_call", "finish"}
+                or data.get("type") in {"tool", "finish"}
+            ):
+                return data
+        return None
 
     @staticmethod
     def _transition(state, trace, status, action, detail=None):

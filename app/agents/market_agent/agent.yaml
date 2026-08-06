@@ -5,6 +5,8 @@ agent:
   description: 使用市场数据分析行业趋势与竞争环境
   owner:
     team: market_operations
+prompt:
+  system: prompts/system.md
 capabilities:
   - market_analysis
 tools:

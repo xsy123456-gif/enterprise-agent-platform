@@ -11,3 +11,6 @@ class ManifestAgent(BaseAgent):
             version=definition.version,
         )
         self.definition = definition
+
+    def reason(self, messages):
+        return self.llm.chat(messages)

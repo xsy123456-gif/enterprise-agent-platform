@@ -5,6 +5,8 @@ agent:
   description: 使用财务数据分析客户经营状况
   owner:
     team: finance_operations
+prompt:
+  system: prompts/system.md
 capabilities:
   - financial_analysis
 tools:

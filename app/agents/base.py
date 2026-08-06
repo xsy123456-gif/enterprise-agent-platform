@@ -21,9 +21,3 @@ class BaseAgent(ABC):
         self.agent_id = agent_id
 
         self.version = version
-
-
-
-    def reason(self, messages):
-        """Compatibility hook; the execution loop normally calls ``llm``."""
-        return self.llm.chat(messages)

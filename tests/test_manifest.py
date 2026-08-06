@@ -13,6 +13,7 @@ from app.registry.service import AgentRegistry
 from app.registry.storage import InMemoryAgentRepository
 from app.tools.crm import CRMTool
 from app.tools.registry import ToolRegistry
+from app.prompts.loader import PromptLoadError, PromptLoader
 
 
 VALID_MANIFEST = """
@@ -23,6 +24,8 @@ agent:
   description: Analyze customers
   owner:
     team: sales_operations
+prompt:
+  system: prompts/system.md
 capabilities:
   - customer_analysis
 tools:
@@ -70,10 +73,14 @@ class ManifestTest(unittest.TestCase):
         )
 
     def parse(self, content):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "agent.yaml"
-            path.write_text(content, encoding="utf-8")
-            return ManifestParser().parse(path)
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        path = Path(directory.name) / "agent.yaml"
+        path.write_text(content, encoding="utf-8")
+        prompt = Path(directory.name) / "prompts" / "system.md"
+        prompt.parent.mkdir()
+        prompt.write_text("You are a sales analyst.", encoding="utf-8")
+        return ManifestParser().parse(path)
 
     def test_parser_converts_yaml_to_manifest(self):
         manifest = self.parse(VALID_MANIFEST)
@@ -82,6 +89,7 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(["customer_analysis"], manifest.capabilities)
         self.assertEqual(["crm_query"], manifest.tools)
         self.assertEqual("sales_operations", manifest.owner)
+        self.assertEqual("prompts/system.md", manifest.system_prompt_ref)
 
     def test_loader_registers_manifest_agent(self):
         manifest = self.parse(VALID_MANIFEST)
@@ -97,6 +105,14 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual("sales_agent", registered.definition.agent_id)
         self.assertEqual(["crm_query"], registered.definition.allowed_tools)
         self.assertEqual("deepseek-chat", registered.definition.runtime["model"])
+        self.assertEqual("You are a sales analyst.", registered.definition.system_prompt)
+
+    def test_prompt_must_stay_inside_agent_directory(self):
+        manifest = self.parse(
+            VALID_MANIFEST.replace("prompts/system.md", "../system.md")
+        )
+        with self.assertRaisesRegex(PromptLoadError, "inside"):
+            PromptLoader().load(manifest)
 
     def test_unknown_capability_is_rejected(self):
         manifest = self.parse(

@@ -27,6 +27,8 @@ agent:
   description: Test Agent
   owner:
     team: test_team
+prompt:
+  system: prompts/system.md
 capabilities:
   - {capability}
 tools:
@@ -85,6 +87,9 @@ class GitAgentSourceTest(unittest.TestCase):
             manifest_text(agent_id, capability),
             encoding="utf-8",
         )
+        prompt = path.parent / "prompts" / "system.md"
+        prompt.parent.mkdir()
+        prompt.write_text(f"You are {agent_id}.", encoding="utf-8")
         return path
 
     def source(self, path):
@@ -105,6 +110,7 @@ class GitAgentSourceTest(unittest.TestCase):
             loaded[0],
             self.registry.get("sales_agent", "0.2"),
         )
+        self.assertEqual("You are sales_agent.", loaded[0].definition.system_prompt)
 
     def test_loads_multiple_agents(self):
         with tempfile.TemporaryDirectory() as repository:

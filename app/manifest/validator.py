@@ -1,6 +1,7 @@
 from app.manifest.schema import (
     ALLOWED_AGENT_FIELDS,
     ALLOWED_MEMORY_FIELDS,
+    ALLOWED_PROMPT_FIELDS,
     ALLOWED_TOP_LEVEL_FIELDS,
     PROHIBITED_FIELDS,
     REQUIRED_AGENT_FIELDS,
@@ -84,6 +85,11 @@ class ManifestValidator:
             raise ManifestSchemaError("capabilities must contain strings")
         if len(manifest.capabilities) != len(set(manifest.capabilities)):
             raise ManifestSchemaError("capabilities must be unique")
+        raw_prompt = raw.get("prompt")
+        if not isinstance(raw_prompt, dict) or set(raw_prompt) != ALLOWED_PROMPT_FIELDS:
+            raise ManifestSchemaError("prompt must contain only system")
+        if not isinstance(manifest.system_prompt_ref, str) or not manifest.system_prompt_ref.strip():
+            raise ManifestSchemaError("prompt.system must be a non-empty string")
         raw_tools = raw.get("tools")
         if not isinstance(raw_tools, dict) or set(raw_tools) != {"allowed"}:
             raise ManifestSchemaError("tools must contain only allowed")

@@ -1,14 +1,16 @@
 from app.agents.definition import AgentDefinition
 from app.agents.manifest import ManifestAgent
 from app.registry.models import Agent, AgentStatus
+from app.prompts.loader import PromptLoader
 
 
 class ManifestLoader:
-    def __init__(self, parser, validator, registry, llm):
+    def __init__(self, parser, validator, registry, llm, prompt_loader=None):
         self.parser = parser
         self.validator = validator
         self.registry = registry
         self.llm = llm
+        self.prompt_loader = prompt_loader or PromptLoader()
 
     def load(self, path):
         manifest = self.parser.parse(path)
@@ -17,7 +19,9 @@ class ManifestLoader:
     def load_manifest(self, manifest, validate=True):
         if validate:
             self.validator.validate(manifest)
-        definition = self._to_definition(manifest)
+        definition = self._to_definition(
+            manifest, self.prompt_loader.load(manifest)
+        )
         instance = ManifestAgent(self.llm, definition)
         registered = Agent(
             agent_id=manifest.agent_id,
@@ -35,13 +39,13 @@ class ManifestLoader:
         return registered
 
     @staticmethod
-    def _to_definition(manifest):
+    def _to_definition(manifest, system_prompt):
         memory_read = list(manifest.memory_policy.get("read") or [])
         memory_write = list(manifest.memory_policy.get("write") or [])
         return AgentDefinition(
             agent_id=manifest.agent_id,
             version=manifest.version,
-            system_prompt=ManifestLoader._build_system_prompt(manifest),
+            system_prompt=system_prompt,
             capabilities=list(manifest.capabilities),
             allowed_tools=list(manifest.tools),
             memory_policy=(
@@ -52,23 +56,3 @@ class ManifestLoader:
             policy_ref=manifest.policy_ref,
             runtime=dict(manifest.runtime),
         )
-
-    @staticmethod
-    def _build_system_prompt(manifest):
-        capabilities = ", ".join(manifest.capabilities)
-        tools = ", ".join(manifest.tools) or "none"
-        return f"""
-你是{manifest.name}。
-
-职责：{manifest.description}
-业务能力：{capabilities}
-允许工具：{tools}
-
-需要工具时只能输出：
-{{"action":"tool_call","tool":"工具名称","arguments":{{}}}}
-
-完成当前任务步骤时只能输出：
-{{"action":"finish","output":"结果"}}
-
-不得直接执行工具、修改权限或改变运行状态，只能输出上述JSON。
-"""
