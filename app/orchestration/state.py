@@ -14,6 +14,7 @@ class ExecutionStepState:
     agent_id: Optional[str] = None
     agent_version: Optional[str] = None
     result: Any = None
+    result_ref: Optional[str] = None
     error: Optional[str] = None
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
@@ -25,6 +26,7 @@ class ExecutionStepState:
             "agent_id": self.agent_id,
             "agent_version": self.agent_version,
             "result": self.result,
+            "result_ref": self.result_ref,
             "error": self.error,
             "started_at": self.started_at,
             "completed_at": self.completed_at,
@@ -38,6 +40,7 @@ class ExecutionState:
     execution_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     status: str = ExecutionStatus.PENDING
     current_step: Optional[str] = None
+    running_steps: list[str] = field(default_factory=list)
     created_at: str = field(default_factory=utc_now)
     updated_at: str = field(default_factory=utc_now)
 
@@ -65,7 +68,8 @@ class ExecutionState:
         step.agent_id = agent_id
         step.agent_version = agent_version
         step.started_at = utc_now()
-        self.current_step = step_id
+        self.running_steps.append(step_id)
+        self.current_step = self.running_steps[0]
         self.updated_at = step.started_at
 
     def complete_step(self, step_id, result):
@@ -73,8 +77,9 @@ class ExecutionState:
         self._require_status(step, StepStatus.RUNNING)
         step.status = StepStatus.COMPLETED
         step.result = result
+        step.result_ref = f"{self.execution_id}:{step_id}"
         step.completed_at = utc_now()
-        self.current_step = None
+        self._finish_running_step(step_id)
         self.updated_at = step.completed_at
 
     def fail_step(self, step_id, error):
@@ -83,7 +88,7 @@ class ExecutionState:
         step.status = StepStatus.FAILED
         step.error = str(error)
         step.completed_at = utc_now()
-        self.current_step = None
+        self._finish_running_step(step_id)
         self.status = ExecutionStatus.FAILED
         self.updated_at = step.completed_at
 
@@ -100,6 +105,7 @@ class ExecutionState:
     def complete(self):
         self.status = ExecutionStatus.COMPLETED
         self.current_step = None
+        self.running_steps = []
         self.updated_at = utc_now()
 
     def to_dict(self):
@@ -107,6 +113,7 @@ class ExecutionState:
             "execution_id": self.execution_id,
             "task_id": self.task_id,
             "current_step": self.current_step,
+            "running_steps": list(self.running_steps),
             "status": self.status,
             "steps": [step.to_dict() for step in self.steps],
             "created_at": self.created_at,
@@ -119,6 +126,11 @@ class ExecutionState:
             raise RuntimeError(
                 f"Step {step.step_id} must be {expected}, got {step.status}"
             )
+
+    def _finish_running_step(self, step_id):
+        if step_id in self.running_steps:
+            self.running_steps.remove(step_id)
+        self.current_step = self.running_steps[0] if self.running_steps else None
 
 
 class ExecutionStateStore(ABC):

@@ -6,6 +6,7 @@ class StepStatus:
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
+    SUCCESS = COMPLETED
     FAILED = "failed"
     BLOCKED = "blocked"
 
@@ -15,6 +16,7 @@ class StepStatus:
 
 class ExecutionStatus:
     PENDING = "pending"
+    CREATED = PENDING
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -31,6 +33,7 @@ class StepResult:
     agent_id: Optional[str] = None
     agent_version: Optional[str] = None
     output: Any = None
+    result_ref: Optional[str] = None
     error: Optional[str] = None
 
     def to_dict(self):
@@ -41,6 +44,7 @@ class StepResult:
             "agent_id": self.agent_id,
             "agent_version": self.agent_version,
             "output": self.output,
+            "result_ref": self.result_ref,
             "error": self.error,
         }
 
@@ -53,6 +57,7 @@ class SupervisionResult:
     output: Any = None
     steps: list[StepResult] = field(default_factory=list)
     replan_required: bool = False
+    execution_context: dict = field(default_factory=dict)
 
     def to_dict(self):
         return {
@@ -62,4 +67,5 @@ class SupervisionResult:
             "output": self.output,
             "steps": [step.to_dict() for step in self.steps],
             "replan_required": self.replan_required,
+            "execution_context": self.execution_context,
         }

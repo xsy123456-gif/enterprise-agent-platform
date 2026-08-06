@@ -1,0 +1,18 @@
+agent:
+  id: risk_agent
+  version: "0.1"
+  name: 风险评估助手
+  description: 基于前序分析结果通过LLM完成综合风险评估
+  owner:
+    team: risk_management
+capabilities:
+  - risk_assessment
+tools:
+  allowed: []
+memory:
+  read: []
+  write: []
+policy:
+  ref: risk_agent_policy
+runtime:
+  model: deepseek-chat

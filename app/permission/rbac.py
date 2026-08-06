@@ -8,7 +8,9 @@ class PermissionManager:
             "sales":
 
             [
-                "crm_query"
+                "crm_query",
+                "financial_query",
+                "market_query",
             ],
 
 

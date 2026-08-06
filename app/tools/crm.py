@@ -1,6 +1,11 @@
 class CRMTool:
     name = "crm_query"
     description = "查询客户信息"
+    input_schema = {
+        "type": "object",
+        "properties": {"customer": {"type": "string", "description": "客户标识，例如 customer_A"}},
+        "required": ["customer"],
+    }
 
     def validate_input(self, customer_id):
         if isinstance(customer_id, dict):
@@ -21,4 +26,5 @@ class CRMTool:
                 ],
             }
         }
-        return customers.get(customer_id, "客户不存在")
+        aliases = {"A": "customer_A", "客户A": "customer_A"}
+        return customers.get(aliases.get(customer_id, customer_id), "客户不存在")

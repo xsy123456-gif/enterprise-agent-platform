@@ -45,6 +45,7 @@ class AgentExecutionLoop:
             self.agent, "definition", None
         )
         state.agent_definition = definition
+        state.available_tools = self._available_tool_definitions(definition)
         trace = RuntimeTrace(
             trace_id=state.trace_id,
             task_id=getattr(state, "task_id", None),
@@ -133,9 +134,33 @@ class AgentExecutionLoop:
             return self.agent.think(state)
         raise AgentLoopError("Agent does not provide an LLM reasoning interface")
 
+    def _available_tool_definitions(self, definition):
+        definitions = []
+        for name in getattr(definition, "allowed_tools", []):
+            tool = self.tool_runner.registry.get(name)
+            if tool is not None:
+                definitions.append({
+                    "name": name,
+                    "description": getattr(tool, "description", ""),
+                    "input_schema": getattr(tool, "input_schema", {}),
+                })
+        return definitions
+
     @staticmethod
     def _parse_action(response):
-        data = json.loads(response) if isinstance(response, str) else response
+        if isinstance(response, str):
+            text = response.strip()
+            if text.startswith("```"):
+                lines = text.splitlines()
+                text = "\n".join(lines[1:-1]).strip()
+            try:
+                data = json.loads(text)
+            except json.JSONDecodeError:
+                if text:
+                    return AgentAction.finish_action(response)
+                raise ValueError("Agent response must not be empty")
+        else:
+            data = response
         if not isinstance(data, dict):
             raise ValueError("Agent response must be a JSON object")
         if data.get("type") == "tool" or data.get("action") == "tool_call":

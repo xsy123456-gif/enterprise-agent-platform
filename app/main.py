@@ -74,6 +74,8 @@ from app.runtime.tool_runner import ToolRunner
 
 
 from app.tools.crm import CRMTool
+from app.tools.finance import FinancialTool
+from app.tools.market import MarketTool
 
 
 from app.tools.registry import ToolRegistry
@@ -137,6 +139,8 @@ def build_runtime(llm=None, capability_catalog=None):
         "crm_query",
         CRMTool()
     )
+    tool_registry.register("financial_query", FinancialTool())
+    tool_registry.register("market_query", MarketTool())
 
     # -----------------------------
     # Agent Registry
@@ -245,14 +249,13 @@ def build_orchestration(llm=None, activate_builtin=False):
 
     if activate_builtin:
         lifecycle = runtime.lifecycle_service
-        lifecycle.request_review(
-            "sales_agent",
-            "0.2",
-            requester="bootstrap",
-            approval_channel="manual",
-        )
-        lifecycle.approve("sales_agent", "0.2", reviewer="bootstrap")
-        lifecycle.activate("sales_agent", "0.2", operator="bootstrap")
+        for agent in runtime.agent_registry.list_agents():
+            lifecycle.request_review(
+                agent.agent_id, agent.version,
+                requester="bootstrap", approval_channel="manual",
+            )
+            lifecycle.approve(agent.agent_id, agent.version, reviewer="bootstrap")
+            lifecycle.activate(agent.agent_id, agent.version, operator="bootstrap")
 
     planner = LLMPlanner(
         llm=llm,

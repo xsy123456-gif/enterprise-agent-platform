@@ -1,0 +1,19 @@
+agent:
+  id: finance_agent
+  version: "0.1"
+  name: 财务分析助手
+  description: 使用财务数据分析客户经营状况
+  owner:
+    team: finance_operations
+capabilities:
+  - financial_analysis
+tools:
+  allowed:
+    - financial_query
+memory:
+  read: []
+  write: []
+policy:
+  ref: finance_agent_policy
+runtime:
+  model: deepseek-chat

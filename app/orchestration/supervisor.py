@@ -5,6 +5,8 @@ from app.orchestration.models import (
     SupervisionResult,
 )
 from app.orchestration.state import ExecutionState, InMemoryExecutionStateStore
+from app.orchestration.scheduler import ParallelTaskScheduler
+from app.orchestration.aggregation import ResultAggregator
 from app.runtime.context import AgentContext
 
 
@@ -15,10 +17,19 @@ class AgentResolutionError(Exception):
 class Supervisor:
     """Schedules capability tasks through Registry and Agent Runtime."""
 
-    def __init__(self, registry, runtime, state_store=None):
+    def __init__(
+        self,
+        registry,
+        runtime,
+        state_store=None,
+        scheduler=None,
+        aggregator=None,
+    ):
         self.registry = registry
         self.runtime = runtime
         self.state_store = state_store or InMemoryExecutionStateStore()
+        self.scheduler = scheduler or ParallelTaskScheduler()
+        self.aggregator = aggregator or ResultAggregator()
 
     def execute(self, plan, user_id, role):
         if any(step.status != StepStatus.PENDING for step in plan.steps):
@@ -38,8 +49,44 @@ class Supervisor:
                 )
                 break
 
-            step = ready_steps[0]
-            if not self._execute_step(plan, step, state, user_id, role):
+            jobs = []
+            steps_by_id = {step.step_id: step for step in ready_steps}
+            job_calls = {}
+            executable_steps = []
+            for step in ready_steps:
+                try:
+                    agent = self._resolve_agent(step.capability)
+                except AgentResolutionError as error:
+                    state.block_step(step.step_id, error)
+                    step.status = StepStatus.BLOCKED
+                    continue
+                state.start_step(step.step_id, agent.agent_id, agent.version)
+                step.status = StepStatus.RUNNING
+                context = self._build_context(plan, step, state, user_id, role, agent)
+                executable_steps.append(step)
+                job_calls[step.step_id] = (
+                    lambda context=context, agent=agent: self.runtime.run(
+                        context, agent_id=agent.agent_id, version=agent.version,
+                    )
+                )
+            jobs = self.scheduler.create_jobs(
+                executable_steps, lambda step: job_calls[step.step_id]
+            )
+            self.state_store.save(state)
+
+            batch_failed = len(jobs) != len(ready_steps)
+            for outcome in self.scheduler.execute(jobs):
+                step = steps_by_id[outcome.step_id]
+                if outcome.error is not None:
+                    state.fail_step(step.step_id, outcome.error)
+                    step.status = StepStatus.FAILED
+                    batch_failed = True
+                else:
+                    state.complete_step(step.step_id, outcome.output)
+                    step.status = StepStatus.COMPLETED
+            self.state_store.save(state)
+
+            if batch_failed:
                 self._block_pending_steps(
                     plan,
                     state,
@@ -56,20 +103,8 @@ class Supervisor:
     def get_execution(self, execution_id):
         return self.state_store.get(execution_id)
 
-    def _execute_step(self, plan, step, state, user_id, role):
-        try:
-            agent = self._resolve_agent(step.capability)
-        except AgentResolutionError as error:
-            state.block_step(step.step_id, error)
-            step.status = StepStatus.BLOCKED
-            self.state_store.save(state)
-            return False
-
-        state.start_step(step.step_id, agent.agent_id, agent.version)
-        step.status = StepStatus.RUNNING
-        self.state_store.save(state)
-
-        agent_context = AgentContext(
+    def _build_context(self, plan, step, state, user_id, role, agent):
+        return AgentContext(
             task=self._step_task(plan, step, state),
             user_id=user_id,
             role=role,
@@ -78,11 +113,7 @@ class Supervisor:
             step_id=step.step_id,
             capability=step.capability,
             goal=plan.goal,
-            memory_context=[
-                item.result
-                for item in state.steps
-                if item.status == StepStatus.COMPLETED
-            ],
+            memory_context=self.aggregator.dependency_context(step, plan, state),
             available_tools=(
                 getattr(agent.instance, "definition", None).allowed_tools
                 if getattr(agent.instance, "definition", None)
@@ -92,23 +123,6 @@ class Supervisor:
                 agent.instance, "definition", None
             ),
         )
-
-        try:
-            result = self.runtime.run(
-                agent_context,
-                agent_id=agent.agent_id,
-                version=agent.version,
-            )
-        except Exception as error:
-            state.fail_step(step.step_id, error)
-            step.status = StepStatus.FAILED
-            self.state_store.save(state)
-            return False
-
-        state.complete_step(step.step_id, result)
-        step.status = StepStatus.COMPLETED
-        self.state_store.save(state)
-        return True
 
     def _resolve_agent(self, capability):
         try:
@@ -141,13 +155,8 @@ class Supervisor:
             step.status = StepStatus.BLOCKED
         self.state_store.save(state)
 
-    @staticmethod
-    def _step_task(plan, step, state):
-        completed_results = {
-            item.step_id: item.result
-            for item in state.steps
-            if item.status == StepStatus.COMPLETED
-        }
+    def _step_task(self, plan, step, state):
+        completed_results = self.aggregator.dependency_context(step, plan, state)
         return (
             f"Goal: {plan.goal}\n"
             f"Capability task: {step.capability}\n"
@@ -156,8 +165,7 @@ class Supervisor:
             f"Step context: {step.context}"
         )
 
-    @staticmethod
-    def _assemble_result(plan, state):
+    def _assemble_result(self, plan, state):
         plan_steps = {step.step_id: step for step in plan.steps}
         steps = [
             StepResult(
@@ -167,19 +175,23 @@ class Supervisor:
                 agent_id=item.agent_id,
                 agent_version=item.agent_version,
                 output=item.result,
+                result_ref=item.result_ref,
                 error=item.error,
             )
             for item in state.steps
         ]
-        completed_outputs = [
-            step.output for step in steps if step.status == StepStatus.COMPLETED
-        ]
+        execution_context = self.aggregator.execution_context(plan, state)
         return SupervisionResult(
             execution_id=state.execution_id,
             task_id=state.task_id,
             status=state.status,
-            output=completed_outputs[-1] if completed_outputs else None,
+            output=(
+                self.aggregator.final_output(plan, state)
+                if execution_context
+                else None
+            ),
             steps=steps,
             replan_required=state.status
             in {ExecutionStatus.FAILED, ExecutionStatus.BLOCKED},
+            execution_context=execution_context,
         )

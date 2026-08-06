@@ -1,0 +1,19 @@
+agent:
+  id: market_agent
+  version: "0.1"
+  name: 市场分析助手
+  description: 使用市场数据分析行业趋势与竞争环境
+  owner:
+    team: market_operations
+capabilities:
+  - market_analysis
+tools:
+  allowed:
+    - market_query
+memory:
+  read: []
+  write: []
+policy:
+  ref: market_agent_policy
+runtime:
+  model: deepseek-chat

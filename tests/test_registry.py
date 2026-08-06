@@ -129,7 +129,11 @@ class AgentRegistryTest(unittest.TestCase):
         definitions = BuiltinAgentSource(StubLLM()).load(self.registry)
 
         registered = self.registry.get("sales_agent", "0.2")
-        self.assertEqual([registered], definitions)
+        self.assertIn(registered, definitions)
+        self.assertEqual(
+            {"sales_agent", "finance_agent", "market_agent", "risk_agent"},
+            {agent.agent_id for agent in definitions},
+        )
         self.assertEqual("销售运营助手", registered.name)
         self.assertEqual(
             ["customer_analysis", "visit_prepare"],

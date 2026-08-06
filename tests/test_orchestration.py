@@ -1,4 +1,5 @@
 import unittest
+import threading
 from contextlib import redirect_stdout
 from io import StringIO
 from unittest.mock import patch
@@ -17,6 +18,8 @@ from app.orchestration.validator import PlanValidationError, PlanValidator
 from app.registry.models import Agent, AgentStatus
 from app.registry.service import AgentRegistry
 from app.registry.storage import InMemoryAgentRepository
+from app.runtime.action import AgentAction
+from app.runtime.loop import AgentExecutionLoop
 
 
 class StubAgent:
@@ -40,6 +43,29 @@ class RecordingRuntime:
         if self.fail:
             raise RuntimeError("runtime failed")
         return f"completed by {agent_id}:{version}"
+
+
+class ConcurrentRecordingRuntime:
+    def __init__(self, parallel_count):
+        self.parallel_count = parallel_count
+        self.active = 0
+        self.max_active = 0
+        self.calls = []
+        self.lock = threading.Lock()
+        self.ready = threading.Event()
+
+    def run(self, state, agent_id=None, version=None):
+        with self.lock:
+            self.active += 1
+            self.max_active = max(self.max_active, self.active)
+            self.calls.append((state.step_id, agent_id, state.memory_context))
+            if self.active >= self.parallel_count:
+                self.ready.set()
+        if state.step_id != "risk" and not self.ready.wait(timeout=2):
+            raise RuntimeError("ready steps were not scheduled concurrently")
+        with self.lock:
+            self.active -= 1
+        return f"result:{state.step_id}"
 
 
 class ToolCallingStubLLM:
@@ -115,6 +141,11 @@ class OrchestrationTest(unittest.TestCase):
         self.assertTrue(
             all("agent" not in step for step in plan.to_dict()["steps"])
         )
+
+    def test_agent_loop_accepts_natural_language_final_response(self):
+        action = AgentExecutionLoop._parse_action("自然语言最终分析")
+        self.assertEqual(AgentAction.FINISH, action.type)
+        self.assertEqual("自然语言最终分析", action.output)
 
     def test_llm_planner_validates_capability_plan(self):
         catalog = CapabilityCatalog(InMemoryCapabilityRepository())
@@ -269,6 +300,34 @@ class OrchestrationTest(unittest.TestCase):
         self.assertEqual(2, len(runtime.calls))
         self.assertIn("Previous results: {}", runtime.calls[0]["state"].task)
         self.assertIn("completed by worker:1.0", runtime.calls[1]["state"].task)
+
+    def test_ready_steps_run_in_parallel_and_feed_dependent_agent(self):
+        self.register_agent("sales", "1.0", ["customer_analysis"])
+        self.register_agent("finance", "1.0", ["financial_analysis"])
+        self.register_agent("market", "1.0", ["market_analysis"])
+        self.register_agent("risk", "1.0", ["risk_assessment"])
+        runtime = ConcurrentRecordingRuntime(parallel_count=3)
+        supervisor = Supervisor(self.registry, runtime)
+        plan = TaskPlan(
+            task_id="multi-agent",
+            goal="assess partnership risk",
+            steps=[
+                TaskStep("customer", "customer_analysis"),
+                TaskStep("finance", "financial_analysis"),
+                TaskStep("market", "market_analysis"),
+                TaskStep("risk", "risk_assessment", ["customer", "finance", "market"]),
+            ],
+        )
+
+        result = supervisor.execute(plan, user_id="user-1", role="sales")
+
+        self.assertEqual(ExecutionStatus.COMPLETED, result.status)
+        self.assertEqual(3, runtime.max_active)
+        risk_call = next(call for call in runtime.calls if call[0] == "risk")
+        self.assertEqual({"customer", "finance", "market"}, set(risk_call[2]))
+        self.assertEqual("result:risk", result.output)
+        self.assertEqual(4, len(result.execution_context))
+        self.assertTrue(all(step.result_ref for step in result.steps))
 
     def test_missing_capability_requests_replan_without_runtime_call(self):
         runtime = RecordingRuntime()
