@@ -8,6 +8,9 @@ class MemoryUpdater:
 
     def persist(self, event, candidate, evaluation, importance, resolution, existing):
         if resolution == Resolution.UPDATE:
+            self.repository.create_relation(
+                existing.id, event.event_id, "MERGED_FROM"
+            )
             return existing, False
         version = existing.version + 1 if existing else 1
         status = MemoryItemStatus.CONFLICT if resolution == Resolution.CONFLICT else MemoryItemStatus.ACTIVE
@@ -18,7 +21,10 @@ class MemoryUpdater:
             user_id=event.user_id, agent_id=event.agent_id, version=version,
             status=status, replaces_id=(existing.id if resolution == Resolution.REPLACE else None),
         )
-        self.repository.create_item(item)
+        relations = [(event.event_id, "DERIVED_FROM")]
         if resolution == Resolution.REPLACE:
-            self.repository.link_replacement(existing.id, item.id)
+            relations.append((existing.id, "REPLACES"))
+        elif resolution == Resolution.CONFLICT:
+            relations.append((existing.id, "CONFLICT_WITH"))
+        self.repository.create_item(item, relations=relations)
         return item, True

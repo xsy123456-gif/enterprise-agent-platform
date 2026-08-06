@@ -1,4 +1,4 @@
-def create_postgres_repository(dsn, initialize=False):
+def create_postgres_repository(dsn, embedding_dimension, initialize=False):
     """Create the production repository without coupling the domain layer to psycopg."""
     try:
         import psycopg
@@ -10,16 +10,22 @@ def create_postgres_repository(dsn, initialize=False):
 
     from app.memory.repository.postgres import PostgresMemoryRepository
 
-    if initialize:
-        with psycopg.connect(dsn) as connection, connection.cursor() as cursor:
-            cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
-
-    def connection_factory():
+    def connection_factory(register_types=True):
         connection = psycopg.connect(dsn)
-        register_vector(connection)
+        if register_types:
+            try:
+                register_vector(connection)
+            except psycopg.ProgrammingError as error:
+                connection.close()
+                raise RuntimeError(
+                    "pgvector is not initialized; set MEMORY_DATABASE_INITIALIZE=true"
+                ) from error
         return connection
 
-    repository = PostgresMemoryRepository(connection_factory)
+    repository = PostgresMemoryRepository(connection_factory, embedding_dimension)
+    repository.healthcheck()
     if initialize:
         repository.initialize()
+    else:
+        repository.validate_schema()
     return repository

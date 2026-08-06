@@ -23,6 +23,7 @@ from app.runtime.loop import AgentExecutionLoop
 from app.runtime.context import AgentContext
 from app.runtime.context_builder import AgentContextBuilder
 from app.agents.definition import AgentDefinition
+from tests.memory_repository import TestMemoryRepository
 
 
 class StubAgent:
@@ -386,7 +387,8 @@ class OrchestrationTest(unittest.TestCase):
         llm = PlannerAndAgentStubLLM()
         with patch("app.main.create_llm", return_value=llm):
             planner, supervisor, audit, event_bus = build_orchestration(
-                activate_builtin=True
+                activate_builtin=True,
+                memory_repository=TestMemoryRepository(),
             )
 
         plan = planner.plan(Task(user_query="准备客户A拜访资料"))
@@ -404,7 +406,10 @@ class OrchestrationTest(unittest.TestCase):
     def test_main_uses_orchestration_without_external_agent_selection(self):
         output = StringIO()
         with patch("app.main.create_llm", return_value=PlannerAndAgentStubLLM()):
-            with redirect_stdout(output):
+            with patch(
+                "app.memory.factory._repository_from_environment",
+                return_value=TestMemoryRepository(),
+            ), redirect_stdout(output):
                 application_main()
 
         self.assertIn("visit prepared", output.getvalue())

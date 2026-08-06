@@ -80,7 +80,7 @@ from app.tools.registry import ToolRegistry
 # Build Runtime
 # =====================================
 
-def build_runtime(llm=None, capability_catalog=None):
+def build_runtime(llm=None, capability_catalog=None, memory_repository=None):
 
 
     # -----------------------------
@@ -192,7 +192,7 @@ def build_runtime(llm=None, capability_catalog=None):
     )
 
     memory_service, memory_consumer, memory_adapter, memory_audit = (
-        build_memory_system(llm, event_bus)
+        build_memory_system(llm, event_bus, repository=memory_repository)
     )
 
 
@@ -229,7 +229,7 @@ def build_runtime(llm=None, capability_catalog=None):
 
 
 
-def build_orchestration(llm=None, activate_builtin=False):
+def build_orchestration(llm=None, activate_builtin=False, memory_repository=None):
 
     if llm is None:
         llm = create_llm()
@@ -241,6 +241,7 @@ def build_orchestration(llm=None, activate_builtin=False):
     runtime, audit, event_bus = build_runtime(
         llm=llm,
         capability_catalog=capability_catalog,
+        memory_repository=memory_repository,
     )
 
     if activate_builtin:
@@ -297,6 +298,10 @@ def main():
         user_id="sales_001",
         role="sales"
     )
+
+    # The response path remains asynchronous. A finite CLI process must drain
+    # accepted Memory events before shutdown so its daemon consumer is not cut off.
+    supervisor.runtime.memory_consumer.drain()
 
 
 

@@ -12,6 +12,7 @@ class MemoryItemStatus:
     ACTIVE = "active"
     REPLACED = "replaced"
     CONFLICT = "conflict"
+    ARCHIVED = "archived"
 
 
 @dataclass

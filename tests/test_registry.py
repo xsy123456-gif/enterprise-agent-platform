@@ -13,6 +13,7 @@ from app.registry.storage import InMemoryAgentRepository
 from app.runtime.action import AgentAction
 from app.runtime.context import AgentContext
 from app.runtime.engine import RuntimeEngine
+from tests.memory_repository import TestMemoryRepository
 
 
 class StubAgent:
@@ -163,7 +164,9 @@ class AgentRegistryTest(unittest.TestCase):
     def test_application_flow_keeps_existing_platform_services(self):
         llm = ToolCallingStubLLM()
         with patch("app.main.create_llm", return_value=llm):
-            runtime, audit, event_bus = build_runtime()
+            runtime, audit, event_bus = build_runtime(
+                memory_repository=TestMemoryRepository()
+            )
 
         lifecycle = runtime.lifecycle_service
         lifecycle.request_review("sales_agent", "0.2")

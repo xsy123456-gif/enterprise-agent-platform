@@ -12,7 +12,7 @@ class MemoryRepository(ABC):
     def update_event(self, event): pass
 
     @abstractmethod
-    def create_item(self, item): pass
+    def create_item(self, item, relations=None): pass
 
     @abstractmethod
     def get_item(self, memory_id): pass
@@ -25,6 +25,12 @@ class MemoryRepository(ABC):
 
     @abstractmethod
     def link_replacement(self, old_id, new_id): pass
+
+    @abstractmethod
+    def create_relation(self, source_id, target_id, relation_type): pass
+
+    @abstractmethod
+    def list_relations(self, source_id=None, target_id=None, relation_type=None): pass
 
     @abstractmethod
     def record_access(self, memory_id, request): pass

@@ -1,9 +1,8 @@
-import os
-
 from app.audit.memory import MemoryAuditSubscriber
 from app.memory.adapter.runtime import RuntimeMemoryAdapter
 from app.memory.api.service import MemoryService
 from app.memory.consumer.event_consumer import MemoryEventConsumer
+from app.memory.config import MemoryDatabaseConfig
 from app.memory.events import MemoryEventPublisher
 from app.memory.governance.policy import MemoryGovernancePolicy
 from app.memory.pipeline.read.builder import ReadPipeline
@@ -23,7 +22,6 @@ from app.memory.pipeline.write.pre_dedup import MemoryPreDeduplicator
 from app.memory.pipeline.write.ranker import MemoryRanker
 from app.memory.pipeline.write.resolver import MemoryResolver
 from app.memory.pipeline.write.updater import MemoryUpdater
-from app.memory.repository.in_memory import InMemoryMemoryRepository
 from app.memory.storage.postgres import create_postgres_repository
 
 
@@ -54,10 +52,9 @@ def build_memory_system(llm, event_bus, repository=None, extractor=None, async_m
 
 
 def _repository_from_environment():
-    dsn = os.getenv("MEMORY_DATABASE_URL")
-    if not dsn:
-        return InMemoryMemoryRepository()
-    initialize = os.getenv("MEMORY_DATABASE_INITIALIZE", "").lower() in {
-        "1", "true", "yes",
-    }
-    return create_postgres_repository(dsn, initialize=initialize)
+    config = MemoryDatabaseConfig.from_environment()
+    return create_postgres_repository(
+        config.url,
+        embedding_dimension=config.embedding_dimension,
+        initialize=config.initialize,
+    )

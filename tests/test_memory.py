@@ -11,6 +11,7 @@ from app.memory.governance.policy import MemoryAccessDenied, MemoryGovernancePol
 from app.memory.models.event import MemoryEventStatus
 from app.memory.models.item import MemoryItemStatus
 from app.memory.pipeline.write.extractor import LLMMemoryExtractor, StructuredMemoryExtractor
+from tests.memory_repository import TestMemoryRepository
 
 
 class StubLLM:
@@ -44,6 +45,7 @@ class MemorySystemTest(unittest.TestCase):
         service, consumer, adapter, audit = build_memory_system(
             StubLLM(), bus, extractor=StructuredMemoryExtractor(),
             async_mode=False, governance=governance,
+            repository=TestMemoryRepository(),
         )
         return service, consumer, adapter, audit, bus
 
