@@ -19,6 +19,8 @@ class AgentContext:
         memory_context=None,
         available_tools=None,
         agent_definition=None,
+        tenant_id="default",
+        department_id=None,
     ):
 
 
@@ -41,6 +43,8 @@ class AgentContext:
         self.available_tools = available_tools or []
 
         self.agent_definition = agent_definition
+        self.tenant_id = tenant_id
+        self.department_id = department_id
 
 
         self.task = task

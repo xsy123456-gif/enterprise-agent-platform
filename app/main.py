@@ -34,13 +34,7 @@ from app.governance.policy import (
 from app.llm.factory import create_llm
 
 
-from app.memory.policy import MemoryGuard
-
-
-from app.memory.service import MemoryService
-
-
-from app.memory.storage import MemoryStorage
+from app.memory.factory import build_memory_system
 
 
 from app.orchestration.llm_planner import LLMPlanner
@@ -197,9 +191,9 @@ def build_runtime(llm=None, capability_catalog=None):
 
     )
 
-    memory_service = MemoryService(MemoryStorage())
-
-    memory_guard = MemoryGuard(memory_service=memory_service)
+    memory_service, memory_consumer, memory_adapter, memory_audit = (
+        build_memory_system(llm, event_bus)
+    )
 
 
 
@@ -211,11 +205,13 @@ def build_runtime(llm=None, capability_catalog=None):
         agent_registry=agent_registry,
         tool_runner=tool_runner,
         max_steps=10,
-        memory_guard=memory_guard,
+        memory_adapter=memory_adapter,
 
     )
 
     runtime.memory_service = memory_service
+    runtime.memory_consumer = memory_consumer
+    runtime.memory_audit = memory_audit
     runtime.lifecycle_service = lifecycle_service
     runtime.governance_policy_engine = governance_engine
     runtime.governance_audit = governance_audit

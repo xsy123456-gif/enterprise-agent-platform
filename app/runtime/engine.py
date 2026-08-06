@@ -1,4 +1,5 @@
 from app.runtime.loop import AgentExecutionLoop
+from app.runtime.context_builder import AgentContextBuilder
 
 
 class RuntimeEngine:
@@ -9,7 +10,7 @@ class RuntimeEngine:
         agent_registry,
         tool_runner,
         max_steps=10,
-        memory_guard=None,
+        memory_adapter=None,
     ):
 
         self.agent_registry = agent_registry
@@ -18,7 +19,7 @@ class RuntimeEngine:
 
         self.max_steps = max_steps
 
-        self.memory_guard = memory_guard
+        self.memory_adapter = memory_adapter
 
 
 
@@ -38,8 +39,8 @@ class RuntimeEngine:
         loop = AgentExecutionLoop(
             agent_record=agent_record,
             tool_runner=self.tool_runner,
-            memory_guard=self.memory_guard,
             agent_registry=self.agent_registry,
+            context_builder=AgentContextBuilder(self.memory_adapter),
             max_steps=self.max_steps,
         )
         return loop.run(state)

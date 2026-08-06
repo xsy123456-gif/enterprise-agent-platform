@@ -33,6 +33,13 @@ class ToolCallingStubLLM:
         self.calls = 0
 
     def chat(self, messages, **kwargs):
+        if messages[0]["content"].startswith("You are a memory fact extractor"):
+            return (
+                '[{"type":"customer","entity_id":"customer_A",'
+                '"attribute":"industry","content":"新能源",'
+                '"confidence":0.9,"business_value":0.8,"stability":0.8,'
+                '"explicitness":0.9,"future_usefulness":0.8}]'
+            )
         self.calls += 1
         if self.calls == 1:
             return (
@@ -171,6 +178,7 @@ class AgentRegistryTest(unittest.TestCase):
         )
         with redirect_stdout(StringIO()):
             result = runtime.run(state)
+            runtime.memory_consumer.drain()
 
         self.assertEqual("visit prepared", result)
         self.assertEqual("crm_query", audit.logs[0]["tool"])
@@ -183,10 +191,9 @@ class AgentRegistryTest(unittest.TestCase):
         self.assertEqual("completed", state.loop_status)
         self.assertEqual("sales_agent", state.runtime_trace.agent_id)
         self.assertGreaterEqual(state.runtime_trace.llm_calls, 2)
-        self.assertEqual(
-            "Tesla",
-            runtime.memory_service.recall("customer", "Tesla")[0]["key"],
-        )
+        self.assertTrue(callable(runtime.memory_service.retrieve))
+        self.assertTrue(callable(runtime.memory_service.submit))
+        self.assertEqual(1, len(runtime.memory_consumer.repository.items))
 
 
 if __name__ == "__main__":

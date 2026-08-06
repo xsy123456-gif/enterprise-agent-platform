@@ -1,4 +1,5 @@
 from app.runtime.loop import AgentExecutionLoop
+from app.runtime.context_builder import AgentContextBuilder
 
 
 class AgentExecutor:
@@ -10,13 +11,13 @@ class AgentExecutor:
         tool_runner,
         max_steps=10,
         agent_record=None,
-        memory_guard=None,
+        memory_adapter=None,
     ):
         self.agent = agent
         self.tool_runner = tool_runner
         self.max_steps = max_steps
         self.agent_record = agent_record
-        self.memory_guard = memory_guard
+        self.memory_adapter = memory_adapter
 
     def run(self, state):
         record = self.agent_record
@@ -34,6 +35,6 @@ class AgentExecutor:
         return AgentExecutionLoop(
             agent_record=record,
             tool_runner=self.tool_runner,
-            memory_guard=self.memory_guard,
+            context_builder=AgentContextBuilder(self.memory_adapter),
             max_steps=self.max_steps,
         ).run(state)

@@ -27,7 +27,6 @@ class AgentExecutionLoop:
         self,
         agent_record,
         tool_runner,
-        memory_guard=None,
         agent_registry=None,
         context_builder=None,
         max_steps=10,
@@ -35,7 +34,6 @@ class AgentExecutionLoop:
         self.agent_record = agent_record
         self.agent = agent_record.instance
         self.tool_runner = tool_runner
-        self.memory_guard = memory_guard
         self.max_steps = max_steps
         self.tool_validator = ToolRequestValidator(tool_runner, agent_registry)
         self.context_builder = context_builder or AgentContextBuilder()
@@ -80,16 +78,20 @@ class AgentExecutionLoop:
 
             if action.type == AgentAction.FINISH:
                 state.add_message("assistant", action.output)
-                if self.memory_guard:
-                    self.memory_guard.update(
-                        state.tool_results[-1] if state.tool_results else None,
-                        state,
-                        getattr(definition, "memory_policy", None),
-                    )
                 self._transition(
                     state, trace, LoopStatus.COMPLETED, "step_completed"
                 )
                 self._publish(state, "agent_step_completed", {"output": action.output})
+                self._publish(state, "response.completed", {
+                    "agent_id": self.agent_record.agent_id,
+                    "user_id": state.user_id,
+                    "tenant_id": getattr(state, "tenant_id", "default"),
+                    "department_id": getattr(state, "department_id", None),
+                    "input": state.task,
+                    "output": action.output,
+                    "tool_results": list(state.tool_results),
+                    "metadata": {"capability": getattr(state, "capability", None)},
+                })
                 return action.output
 
             self._transition(state, trace, LoopStatus.WAITING_TOOL, "tool_requested")

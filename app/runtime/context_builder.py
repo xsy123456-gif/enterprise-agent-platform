@@ -18,6 +18,9 @@ arguments 必须符合 AVAILABLE TOOLS 中对应的 input_schema。
 class AgentContextBuilder:
     """Builds model-facing context without performing execution."""
 
+    def __init__(self, memory_adapter=None):
+        self.memory_adapter = memory_adapter
+
     def build_messages(self, state, definition):
         messages = []
         system_prompt = getattr(definition, "system_prompt", None)
@@ -31,13 +34,29 @@ class AgentContextBuilder:
             "content": "RUNTIME CONTROL:\n" + RUNTIME_CONTROL_PROMPT,
         })
 
+        long_term_memory = None
+        if self.memory_adapter is not None:
+            long_term_memory = self.memory_adapter.retrieve(state, definition)
         execution_context = {
             "task_id": getattr(state, "task_id", None),
             "step_id": getattr(state, "step_id", None),
             "capability": getattr(state, "capability", None),
             "goal": getattr(state, "goal", state.task),
             "agent_definition": getattr(definition, "to_dict", lambda: None)(),
-            "memory_context": getattr(state, "memory_context", []),
+            "memory_context": {
+                "collaboration": getattr(state, "memory_context", []),
+                "long_term_summary": getattr(long_term_memory, "summary", ""),
+                "references": [
+                    {
+                        "memory_id": reference.memory_id,
+                        "type": reference.type,
+                        "confidence": reference.confidence,
+                        "importance": reference.importance,
+                        "created_at": reference.created_at.isoformat(),
+                    }
+                    for reference in getattr(long_term_memory, "references", [])
+                ],
+            },
             "available_tools": getattr(state, "available_tools", []),
         }
         messages.append(
