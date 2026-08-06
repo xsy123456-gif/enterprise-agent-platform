@@ -18,7 +18,12 @@ class MemoryUpdater:
             memory_key=candidate.memory_key, type=candidate.type, content=candidate.content,
             importance=importance, confidence=evaluation.confidence, source=candidate.source,
             tenant_id=event.tenant_id, department_id=event.department_id,
-            user_id=event.user_id, agent_id=event.agent_id, version=version,
+            user_id=event.user_id, agent_id=event.agent_id,
+            embedding=candidate.embedding,
+            embedding_model=candidate.metadata.get("embedding_model"),
+            embedding_version=candidate.metadata.get("embedding_version"),
+            embedding_dimension=candidate.metadata.get("embedding_dimension"),
+            version=version,
             status=status, replaces_id=(existing.id if resolution == Resolution.REPLACE else None),
         )
         relations = [(event.event_id, "DERIVED_FROM")]

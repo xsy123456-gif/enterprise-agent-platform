@@ -18,6 +18,7 @@ REQUIRED_COLUMNS = {
     },
     "memory_items": {
         "id", "memory_key", "type", "content", "embedding", "importance",
+        "embedding_model", "embedding_version", "embedding_dimension",
         "confidence", "source", "tenant_id", "department_id", "user_id",
         "agent_id", "version", "status", "replaces_id", "replaced_by_id",
         "access_count", "last_accessed_at", "created_at", "updated_at",
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS memory_events (
 CREATE TABLE IF NOT EXISTS memory_items (
   id text PRIMARY KEY, memory_key text NOT NULL, type text NOT NULL,
   content jsonb NOT NULL, embedding {vector_type}, importance double precision NOT NULL,
+  embedding_model text, embedding_version text, embedding_dimension integer,
   confidence double precision NOT NULL, source text NOT NULL, tenant_id text NOT NULL,
   department_id text, user_id text NOT NULL, agent_id text NOT NULL,
   version integer NOT NULL CHECK (version > 0),
@@ -84,6 +86,9 @@ CREATE TABLE IF NOT EXISTS memory_processing_tasks (
   error text, created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_model text;
+ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_version text;
+ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_dimension integer;
 CREATE INDEX IF NOT EXISTS memory_items_scope_active_idx
   ON memory_items (tenant_id, user_id, agent_id, status);
 CREATE INDEX IF NOT EXISTS memory_events_status_idx ON memory_events (status);
@@ -91,8 +96,6 @@ CREATE INDEX IF NOT EXISTS memory_relations_source_idx
   ON memory_relations (source_id, relation_type);
 CREATE INDEX IF NOT EXISTS memory_access_logs_memory_idx
   ON memory_access_logs (memory_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS memory_items_embedding_hnsw_idx
-  ON memory_items USING hnsw (embedding vector_cosine_ops);
 """
 
 
@@ -107,6 +110,36 @@ class PostgresMemoryRepository(MemoryRepository):
         with self.connection_factory(register_types=False) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(build_schema_sql(self.embedding_dimension))
+                cursor.execute(
+                    "SELECT format_type(attribute.atttypid,attribute.atttypmod) "
+                    "FROM pg_attribute attribute "
+                    "JOIN pg_class relation ON relation.oid=attribute.attrelid "
+                    "JOIN pg_namespace namespace ON namespace.oid=relation.relnamespace "
+                    "WHERE namespace.nspname=current_schema() "
+                    "AND relation.relname='memory_items' "
+                    "AND attribute.attname='embedding'"
+                )
+                current_type = cursor.fetchone()[0]
+                expected_type = f"vector({self.embedding_dimension})"
+                if current_type != expected_type:
+                    cursor.execute(
+                        "SELECT count(*) FROM memory_items WHERE embedding IS NOT NULL"
+                    )
+                    if cursor.fetchone()[0]:
+                        raise RuntimeError(
+                            "Cannot change Memory embedding dimension while existing "
+                            "vectors require re-embedding"
+                        )
+                    cursor.execute("DROP INDEX IF EXISTS memory_items_embedding_hnsw_idx")
+                    cursor.execute(
+                        "ALTER TABLE memory_items ALTER COLUMN embedding "
+                        f"TYPE vector({self.embedding_dimension}) "
+                        f"USING embedding::vector({self.embedding_dimension})"
+                    )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS memory_items_embedding_hnsw_idx "
+                    "ON memory_items USING hnsw (embedding vector_cosine_ops)"
+                )
         return self.validate_schema()
 
     def healthcheck(self):
@@ -241,29 +274,51 @@ class PostgresMemoryRepository(MemoryRepository):
         )
 
     def search(self, request, query_embedding=None):
-        vector_search = query_embedding is not None
-        select = "SELECT memory_items.*"
-        values = []
-        if vector_search:
-            self._validate_embedding(query_embedding)
-            select += ", 1 - (embedding <=> %s::vector) AS semantic_similarity"
-            values.append(query_embedding)
-        sql = select + (
+        if query_embedding is not None:
+            return self.search_vector(request, query_embedding)
+        return self.search_sql(request, request.query.split())
+
+    def search_sql(self, request, keywords):
+        sql = (
+            "SELECT memory_items.* FROM memory_items WHERE tenant_id=%s "
+            "AND user_id=%s AND agent_id=%s AND status='active'"
+        )
+        values = [request.tenant_id, request.user_id, request.agent_id]
+        sql, values = self._scope_query(sql, values, request)
+        normalized = [keyword.strip() for keyword in keywords if keyword.strip()]
+        if normalized:
+            clauses = []
+            for keyword in normalized:
+                clauses.append("(memory_key ILIKE %s OR content::text ILIKE %s)")
+                pattern = f"%{keyword}%"
+                values.extend([pattern, pattern])
+            sql += " AND (" + " OR ".join(clauses) + ")"
+        sql += " ORDER BY importance DESC, confidence DESC LIMIT %s"
+        values.append(request.limit * 4)
+        items = [self._hydrate(row, "item") for row in self._fetch_rows(sql, tuple(values))]
+        candidates = []
+        for item in items:
+            text = (
+                f"{item.memory_key} "
+                f"{json.dumps(item.content, ensure_ascii=False)}"
+            ).lower()
+            score = 1.0 if not normalized else sum(
+                keyword.lower() in text for keyword in normalized
+            ) / len(normalized)
+            candidates.append((item, score))
+        return candidates
+
+    def search_vector(self, request, query_embedding):
+        self._validate_embedding(query_embedding)
+        sql = (
+            "SELECT memory_items.*, "
+            "1 - (embedding <=> %s::vector) AS semantic_similarity"
             " FROM memory_items WHERE tenant_id=%s AND user_id=%s "
             "AND agent_id=%s AND status='active'"
         )
-        values.extend([request.tenant_id, request.user_id, request.agent_id])
-        if request.department_id is not None:
-            sql += " AND department_id=%s"
-            values.append(request.department_id)
-        if request.types:
-            sql += " AND type = ANY(%s)"
-            values.append(request.types)
-        if vector_search:
-            sql += " AND embedding IS NOT NULL ORDER BY semantic_similarity DESC"
-        else:
-            sql += " ORDER BY importance DESC, confidence DESC"
-        sql += " LIMIT %s"
+        values = [query_embedding, request.tenant_id, request.user_id, request.agent_id]
+        sql, values = self._scope_query(sql, values, request)
+        sql += " AND embedding IS NOT NULL ORDER BY semantic_similarity DESC LIMIT %s"
         values.append(request.limit * 4)
         rows = self._fetch_rows(sql, tuple(values))
         results = []
@@ -271,6 +326,16 @@ class PostgresMemoryRepository(MemoryRepository):
             similarity = float(row.pop("semantic_similarity", 0.0))
             results.append((self._hydrate(row, "item"), similarity))
         return results
+
+    @staticmethod
+    def _scope_query(sql, values, request):
+        if request.department_id is not None:
+            sql += " AND department_id=%s"
+            values.append(request.department_id)
+        if request.types:
+            sql += " AND type = ANY(%s)"
+            values.append(request.types)
+        return sql, values
 
     def link_replacement(self, old_id, new_id):
         with self.connection_factory() as connection:
@@ -340,13 +405,15 @@ class PostgresMemoryRepository(MemoryRepository):
         cursor.execute(
             """INSERT INTO memory_items
             (id,memory_key,type,content,embedding,importance,confidence,source,tenant_id,
+             embedding_model,embedding_version,embedding_dimension,
              department_id,user_id,agent_id,version,status,replaces_id,replaced_by_id,
              access_count,last_accessed_at,created_at,updated_at)
-            VALUES (%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            VALUES (%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
                 item.id, item.memory_key, item.type, json.dumps(item.content),
                 item.embedding, item.importance, item.confidence, item.source,
-                item.tenant_id, item.department_id, item.user_id, item.agent_id,
+                item.tenant_id, item.embedding_model, item.embedding_version,
+                item.embedding_dimension, item.department_id, item.user_id, item.agent_id,
                 item.version, item.status, item.replaces_id, item.replaced_by_id,
                 item.access_count, item.last_accessed_at, item.created_at, item.updated_at,
             ),
@@ -389,6 +456,9 @@ class PostgresMemoryRepository(MemoryRepository):
             return MemoryEvent(**row)
         from app.memory.models.item import MemoryItem
         embedding = row.get("embedding")
-        if embedding is not None and hasattr(embedding, "tolist"):
-            row["embedding"] = embedding.tolist()
+        if embedding is not None:
+            if hasattr(embedding, "to_list"):
+                row["embedding"] = embedding.to_list()
+            elif hasattr(embedding, "tolist"):
+                row["embedding"] = embedding.tolist()
         return MemoryItem(**row)

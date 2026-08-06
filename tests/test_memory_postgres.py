@@ -14,6 +14,7 @@ from app.memory.models.item import MemoryItem, MemoryItemStatus
 from app.memory.pipeline.write.extractor import StructuredMemoryExtractor
 from app.memory.storage.postgres import create_postgres_repository
 from app.runtime.context import AgentContext
+from tests.memory_repository import TestEmbeddingService
 
 
 class StubLLM:
@@ -46,7 +47,7 @@ class RuntimeMemoryLLM:
     "MEMORY_TEST_DATABASE_URL is not configured",
 )
 class PostgresMemoryIntegrationTest(unittest.TestCase):
-    DIMENSION = 3
+    DIMENSION = int(os.getenv("MEMORY_TEST_EMBEDDING_DIMENSION", "1024"))
 
     @classmethod
     def setUpClass(cls):
@@ -98,6 +99,13 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
             query=query, limit=limit, trace_id=self.suffix,
         )
 
+    def vector(self, primary, secondary=None):
+        vector = [0.0] * self.DIMENSION
+        vector[primary] = 1.0 if secondary is None else secondary[0]
+        if secondary is not None:
+            vector[secondary[1]] = secondary[2]
+        return vector
+
     def test_connection_schema_extension_and_vector_index(self):
         self.assertGreaterEqual(self.repository.healthcheck(), 160000)
         state = self.repository.validate_schema()
@@ -137,15 +145,15 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
 
     def test_item_versions_replace_conflict_and_relations(self):
         key = f"customer:{self.suffix}:budget"
-        first = self.make_item(key, {"amount": 100}, [1.0, 0.0, 0.0])
+        first = self.make_item(key, {"amount": 100}, self.vector(0))
         self.repository.create_item(first, relations=[(self.suffix, "DERIVED_FROM")])
         second = self.make_item(
-            key, {"amount": 120}, [0.9, 0.1, 0.0], version=2,
+            key, {"amount": 120}, self.vector(0, (0.9, 1, 0.1)), version=2,
             replaces_id=first.id,
         )
         self.repository.create_item(second, relations=[(first.id, "REPLACES")])
         conflict = self.make_item(
-            key, {"amount": 80}, [0.8, 0.2, 0.0], version=3,
+            key, {"amount": 80}, self.vector(0, (0.8, 1, 0.2)), version=3,
             status=MemoryItemStatus.CONFLICT,
         )
         self.repository.create_item(
@@ -166,13 +174,14 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
 
     def test_sql_retrieve_writes_access_log_without_realtime_counter(self):
         item = self.make_item(
-            f"customer:{self.suffix}:industry", "新能源", [1.0, 0.0, 0.0]
+            f"customer:{self.suffix}:industry", "新能源", self.vector(0)
         )
         self.repository.create_item(item)
         bus = EventBus()
         service, _, _, _ = build_memory_system(
             StubLLM(), bus, repository=self.repository,
             extractor=StructuredMemoryExtractor(), async_mode=False,
+            embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
         )
         with redirect_stdout(StringIO()):
             context = service.retrieve(self.retrieve_request("industry"))
@@ -185,17 +194,47 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
                 )
                 self.assertEqual("industry", cursor.fetchone()[0])
 
+    def test_write_pipeline_persists_embedding_metadata(self):
+        bus = EventBus()
+        service, _, _, _ = build_memory_system(
+            StubLLM(), bus, repository=self.repository,
+            extractor=StructuredMemoryExtractor(), async_mode=False,
+            embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
+        )
+        request = MemoryEventRequest(
+            trace_id=self.suffix, task_id=self.suffix, agent_id="sales_agent",
+            user_id=self.user_id, tenant_id=self.tenant_id, department_id="test",
+            event_type="response.completed", input={}, output={}, tool_results=[],
+            metadata={"memory_candidates": [{
+                "type": "customer", "entity_id": self.suffix,
+                "attribute": "semantic", "content": "customer semantic fact",
+                "confidence": 0.9, "business_value": 0.9, "stability": 0.9,
+                "explicitness": 0.9, "future_usefulness": 0.9,
+            }]},
+        )
+        with redirect_stdout(StringIO()):
+            service.submit(request)
+        stored = self.repository.find_latest(
+            f"customer:{self.suffix}:semantic", self.tenant_id,
+            self.user_id, "sales_agent",
+        )
+        self.assertEqual(self.vector(0), stored.embedding)
+        self.assertEqual("test-embedding", stored.embedding_model)
+        self.assertEqual("test", stored.embedding_version)
+        self.assertEqual(self.DIMENSION, stored.embedding_dimension)
+
     def test_vector_search_returns_real_similarity_order(self):
         close = self.make_item(
-            f"customer:{self.suffix}:close", "close", [1.0, 0.0, 0.0]
+            f"customer:{self.suffix}:close", "close", self.vector(0)
         )
         far = self.make_item(
-            f"customer:{self.suffix}:far", "far", [0.0, 1.0, 0.0]
+            f"customer:{self.suffix}:far", "far", self.vector(1)
         )
         self.repository.create_item(close)
         self.repository.create_item(far)
         results = self.repository.search(
-            self.retrieve_request(limit=2), query_embedding=[0.99, 0.01, 0.0]
+            self.retrieve_request(limit=2),
+            query_embedding=self.vector(0, (0.99, 1, 0.01)),
         )
         self.assertEqual(close.id, results[0][0].id)
         self.assertGreater(results[0][1], results[1][1])
@@ -203,7 +242,10 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
 
     def test_runtime_event_persists_then_next_request_retrieves(self):
         llm = RuntimeMemoryLLM()
-        runtime, _, _ = build_runtime(llm=llm, memory_repository=self.repository)
+        runtime, _, _ = build_runtime(
+            llm=llm, memory_repository=self.repository,
+            memory_embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
+        )
         lifecycle = runtime.lifecycle_service
         lifecycle.request_review("sales_agent", "0.2")
         lifecycle.approve("sales_agent", "0.2")

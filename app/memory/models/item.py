@@ -28,6 +28,9 @@ class MemoryItem:
     user_id: str
     agent_id: str
     embedding: list[float] | None = None
+    embedding_model: str | None = None
+    embedding_version: str | None = None
+    embedding_dimension: int | None = None
     version: int = 1
     status: str = MemoryItemStatus.ACTIVE
     replaces_id: str | None = None

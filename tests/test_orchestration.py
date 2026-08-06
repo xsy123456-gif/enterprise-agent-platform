@@ -23,7 +23,7 @@ from app.runtime.loop import AgentExecutionLoop
 from app.runtime.context import AgentContext
 from app.runtime.context_builder import AgentContextBuilder
 from app.agents.definition import AgentDefinition
-from tests.memory_repository import TestMemoryRepository
+from tests.memory_repository import TestEmbeddingService, TestMemoryRepository
 
 
 class StubAgent:
@@ -389,6 +389,7 @@ class OrchestrationTest(unittest.TestCase):
             planner, supervisor, audit, event_bus = build_orchestration(
                 activate_builtin=True,
                 memory_repository=TestMemoryRepository(),
+                memory_embedding_service=TestEmbeddingService(),
             )
 
         plan = planner.plan(Task(user_query="准备客户A拜访资料"))
@@ -409,6 +410,9 @@ class OrchestrationTest(unittest.TestCase):
             with patch(
                 "app.memory.factory._repository_from_environment",
                 return_value=TestMemoryRepository(),
+            ), patch(
+                "app.memory.factory.create_embedding_service",
+                return_value=TestEmbeddingService(),
             ), redirect_stdout(output):
                 application_main()
 

@@ -13,7 +13,7 @@ from app.registry.storage import InMemoryAgentRepository
 from app.runtime.action import AgentAction
 from app.runtime.context import AgentContext
 from app.runtime.engine import RuntimeEngine
-from tests.memory_repository import TestMemoryRepository
+from tests.memory_repository import TestEmbeddingService, TestMemoryRepository
 
 
 class StubAgent:
@@ -165,7 +165,8 @@ class AgentRegistryTest(unittest.TestCase):
         llm = ToolCallingStubLLM()
         with patch("app.main.create_llm", return_value=llm):
             runtime, audit, event_bus = build_runtime(
-                memory_repository=TestMemoryRepository()
+                memory_repository=TestMemoryRepository(),
+                memory_embedding_service=TestEmbeddingService(),
             )
 
         lifecycle = runtime.lifecycle_service

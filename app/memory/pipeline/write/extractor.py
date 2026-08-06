@@ -17,6 +17,7 @@ class MemoryCandidate:
     future_usefulness: float = 0.5
     frequency: float = 0.0
     recency: float = 1.0
+    embedding: list[float] | None = None
     metadata: dict = field(default_factory=dict)
 
     @property

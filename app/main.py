@@ -80,7 +80,10 @@ from app.tools.registry import ToolRegistry
 # Build Runtime
 # =====================================
 
-def build_runtime(llm=None, capability_catalog=None, memory_repository=None):
+def build_runtime(
+    llm=None, capability_catalog=None, memory_repository=None,
+    memory_embedding_service=None,
+):
 
 
     # -----------------------------
@@ -192,7 +195,10 @@ def build_runtime(llm=None, capability_catalog=None, memory_repository=None):
     )
 
     memory_service, memory_consumer, memory_adapter, memory_audit = (
-        build_memory_system(llm, event_bus, repository=memory_repository)
+        build_memory_system(
+            llm, event_bus, repository=memory_repository,
+            embedding_service=memory_embedding_service,
+        )
     )
 
 
@@ -229,7 +235,10 @@ def build_runtime(llm=None, capability_catalog=None, memory_repository=None):
 
 
 
-def build_orchestration(llm=None, activate_builtin=False, memory_repository=None):
+def build_orchestration(
+    llm=None, activate_builtin=False, memory_repository=None,
+    memory_embedding_service=None,
+):
 
     if llm is None:
         llm = create_llm()
@@ -242,6 +251,7 @@ def build_orchestration(llm=None, activate_builtin=False, memory_repository=None
         llm=llm,
         capability_catalog=capability_catalog,
         memory_repository=memory_repository,
+        memory_embedding_service=memory_embedding_service,
     )
 
     if activate_builtin:

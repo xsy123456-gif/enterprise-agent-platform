@@ -1,3 +1,5 @@
+import json
+
 from app.memory.pipeline.write.resolver import Resolution
 
 
@@ -7,10 +9,11 @@ class WritePipeline:
         "RESOLVING", "FINE_DEDUP", "RANKING", "PERSISTING",
     )
 
-    def __init__(self, repository, extractor, evaluator, normalizer, pre_dedup,
+    def __init__(self, repository, extractor, embedding_service, evaluator, normalizer, pre_dedup,
                  resolver, fine_dedup, ranker, updater, governance, event_publisher=None):
         self.repository = repository
         self.extractor = extractor
+        self.embedding_service = embedding_service
         self.evaluator = evaluator
         self.normalizer = normalizer
         self.pre_dedup = pre_dedup
@@ -28,6 +31,15 @@ class WritePipeline:
             raw_candidates = self.extractor.extract(event)
             results = []
             for raw_candidate in raw_candidates:
+                embedding = self.embedding_service.embed(
+                    self._embedding_text(raw_candidate.content)
+                )
+                raw_candidate.embedding = embedding.vector
+                raw_candidate.metadata.update({
+                    "embedding_model": embedding.model,
+                    "embedding_version": embedding.version,
+                    "embedding_dimension": embedding.dimension,
+                })
                 stage = "EVALUATING"
                 self._stage(event, stage)
                 evaluation = self.evaluator.evaluate(raw_candidate)
@@ -82,6 +94,15 @@ class WritePipeline:
     def _stage(self, event, stage):
         self.repository.update_processing_task(
             event.event_id, stage, "processing"
+        )
+
+    @staticmethod
+    def _embedding_text(content):
+        if isinstance(content, str):
+            return content
+        return json.dumps(
+            content, ensure_ascii=False, sort_keys=True,
+            separators=(",", ":"), default=str,
         )
 
     def _publish(self, event_type, event, metadata):

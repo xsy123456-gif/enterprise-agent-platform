@@ -24,6 +24,12 @@ class MemoryRepository(ABC):
     def search(self, request, query_embedding=None): pass
 
     @abstractmethod
+    def search_sql(self, request, keywords): pass
+
+    @abstractmethod
+    def search_vector(self, request, query_embedding): pass
+
+    @abstractmethod
     def link_replacement(self, old_id, new_id): pass
 
     @abstractmethod

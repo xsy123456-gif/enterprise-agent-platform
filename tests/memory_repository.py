@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 import json
+from threading import Lock
 
+from app.memory.embedding.models import EmbeddingResult
 from app.memory.models.item import MemoryItemStatus
 from app.memory.repository.base import MemoryRepository
 
@@ -11,6 +13,7 @@ class TestMemoryRepository(MemoryRepository):
     __test__ = False
 
     def __init__(self):
+        self.embedding_dimension = 3
         self.events = {}
         self.items = {}
         self.relations = []
@@ -51,8 +54,12 @@ class TestMemoryRepository(MemoryRepository):
         return max(candidates, key=lambda item: item.version) if candidates else None
 
     def search(self, request, query_embedding=None):
-        query = request.query.lower().strip()
-        candidates = []
+        if query_embedding is not None:
+            return self.search_vector(request, query_embedding)
+        return self.search_sql(request, request.query.lower().split())
+
+    def _scoped_items(self, request):
+        items = []
         for item in self.items.values():
             if item.status != MemoryItemStatus.ACTIVE or item.tenant_id != request.tenant_id:
                 continue
@@ -62,12 +69,33 @@ class TestMemoryRepository(MemoryRepository):
                 continue
             if request.types and item.type not in request.types:
                 continue
+            items.append(item)
+        return items
+
+    def search_sql(self, request, keywords):
+        normalized = [keyword.lower() for keyword in keywords]
+        query = request.query.lower().strip()
+        candidates = []
+        for item in self._scoped_items(request):
             text = f"{item.memory_key} {json.dumps(item.content, ensure_ascii=False)}".lower()
-            score = 1.0 if not query else sum(
-                token in text for token in query.split()
-            ) / max(len(query.split()), 1)
-            candidates.append((item, score))
+            score = 1.0 if not normalized else sum(
+                keyword in text for keyword in normalized
+            ) / len(normalized)
+            if score > 0 or not query:
+                candidates.append((item, score))
         return candidates
+
+    def search_vector(self, request, query_embedding):
+        candidates = []
+        for item in self._scoped_items(request):
+            if not item.embedding or len(item.embedding) != len(query_embedding):
+                continue
+            dot = sum(a * b for a, b in zip(item.embedding, query_embedding))
+            left = sum(value * value for value in item.embedding) ** 0.5
+            right = sum(value * value for value in query_embedding) ** 0.5
+            score = dot / (left * right) if left and right else 0.0
+            candidates.append((item, score))
+        return sorted(candidates, key=lambda value: value[1], reverse=True)
 
     def link_replacement(self, old_id, new_id):
         old = self.items[old_id]
@@ -110,3 +138,28 @@ class TestMemoryRepository(MemoryRepository):
             "event_id": event_id, "stage": stage, "status": status,
             "error": error, "updated_at": datetime.now(timezone.utc),
         }
+
+
+class TestEmbeddingService:
+    __test__ = False
+
+    def __init__(self, mapping=None, dimension=3):
+        self.mapping = dict(mapping or {})
+        self.dimension = dimension
+        self.vectors = {}
+        self.lock = Lock()
+
+    def embed(self, text):
+        with self.lock:
+            vector = self.mapping.get(text)
+            if vector is None:
+                vector = self.vectors.get(text)
+            if vector is None:
+                index = len(self.vectors) % self.dimension
+                vector = [0.0] * self.dimension
+                vector[index] = 1.0
+                self.vectors[text] = vector
+        return EmbeddingResult(
+            vector=list(vector), model="test-embedding",
+            version="test", dimension=len(vector),
+        )

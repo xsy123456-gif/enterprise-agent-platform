@@ -11,7 +11,7 @@ from app.memory.governance.policy import MemoryAccessDenied, MemoryGovernancePol
 from app.memory.models.event import MemoryEventStatus
 from app.memory.models.item import MemoryItemStatus
 from app.memory.pipeline.write.extractor import LLMMemoryExtractor, StructuredMemoryExtractor
-from tests.memory_repository import TestMemoryRepository
+from tests.memory_repository import TestEmbeddingService, TestMemoryRepository
 
 
 class StubLLM:
@@ -46,6 +46,7 @@ class MemorySystemTest(unittest.TestCase):
             StubLLM(), bus, extractor=StructuredMemoryExtractor(),
             async_mode=False, governance=governance,
             repository=TestMemoryRepository(),
+            embedding_service=TestEmbeddingService(),
         )
         return service, consumer, adapter, audit, bus
 
@@ -84,6 +85,11 @@ class MemorySystemTest(unittest.TestCase):
         self.assertEqual(1, len(context.references))
         self.assertFalse(hasattr(context.references[0], "embedding"))
         self.assertEqual(1, len(audit.query("memory.created", "sales_agent")))
+        stored = consumer.repository.get_item(context.references[0].memory_id)
+        self.assertEqual([1.0, 0.0, 0.0], stored.embedding)
+        self.assertEqual("test-embedding", stored.embedding_model)
+        self.assertEqual("test", stored.embedding_version)
+        self.assertEqual(3, stored.embedding_dimension)
 
     def test_exact_duplicate_merges_without_new_version(self):
         service, consumer, _, _, _ = self.build()
