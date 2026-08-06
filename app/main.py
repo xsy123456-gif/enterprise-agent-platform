@@ -291,7 +291,7 @@ def main():
     )
 
     task = Task(
-        user_query="准备客户A拜访资料"
+        user_query="分析客户A的合作风险"
     )
 
     plan = planner.plan(task)
