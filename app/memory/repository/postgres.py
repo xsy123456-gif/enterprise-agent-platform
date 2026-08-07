@@ -20,7 +20,8 @@ REQUIRED_COLUMNS = {
     "memory_items": {
         "id", "memory_key", "type", "entity_id", "attribute", "content",
         "schema_version", "embedding", "importance",
-        "embedding_model", "embedding_version", "embedding_dimension",
+        "embedding_space_id", "embedding_provider", "embedding_model",
+        "embedding_version", "embedding_dimension",
         "confidence", "source", "tenant_id", "department_id", "user_id",
         "agent_id", "version", "status", "replaces_id", "replaced_by_id",
         "observation_count", "last_observed_at", "access_count",
@@ -58,6 +59,8 @@ CREATE TABLE IF NOT EXISTS memory_items (
   id text PRIMARY KEY, memory_key text NOT NULL, type text NOT NULL,
   entity_id text NOT NULL, attribute text NOT NULL, schema_version integer NOT NULL DEFAULT 1,
   content jsonb NOT NULL, embedding {vector_type}, importance double precision NOT NULL,
+  embedding_space_id text NOT NULL DEFAULT 'legacy-unknown',
+  embedding_provider text NOT NULL DEFAULT 'legacy-unknown',
   embedding_model text, embedding_version text, embedding_dimension integer,
   confidence double precision NOT NULL, source text NOT NULL, tenant_id text NOT NULL,
   department_id text, user_id text NOT NULL, agent_id text NOT NULL,
@@ -93,6 +96,10 @@ CREATE TABLE IF NOT EXISTS memory_processing_tasks (
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_model text;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_version text;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_dimension integer;
+ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_space_id text
+  NOT NULL DEFAULT 'legacy-unknown';
+ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_provider text
+  NOT NULL DEFAULT 'legacy-unknown';
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS entity_id text;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS attribute text;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS schema_version integer NOT NULL DEFAULT 1;
@@ -362,9 +369,9 @@ class PostgresMemoryRepository(MemoryRepository):
         )
         return int(rows[0]["latest_version"])
 
-    def search(self, request, query_embedding=None):
+    def search(self, request, query_embedding=None, embedding_space_id=None):
         if query_embedding is not None:
-            return self.search_vector(request, query_embedding)
+            return self.search_vector(request, query_embedding, embedding_space_id)
         return self.search_sql(request, request.query.split())
 
     def search_sql(self, request, keywords):
@@ -397,7 +404,9 @@ class PostgresMemoryRepository(MemoryRepository):
             candidates.append((item, score))
         return candidates
 
-    def search_vector(self, request, query_embedding):
+    def search_vector(self, request, query_embedding, embedding_space_id=None):
+        if not embedding_space_id:
+            return []
         self._validate_embedding(query_embedding)
         sql = (
             "SELECT memory_items.*, "
@@ -407,8 +416,11 @@ class PostgresMemoryRepository(MemoryRepository):
         )
         values = [query_embedding, request.tenant_id, request.user_id, request.agent_id]
         sql, values = self._scope_query(sql, values, request)
-        sql += " AND embedding IS NOT NULL ORDER BY semantic_similarity DESC LIMIT %s"
-        values.append(request.limit * 4)
+        sql += (
+            " AND embedding IS NOT NULL AND embedding_space_id=%s "
+            "ORDER BY semantic_similarity DESC LIMIT %s"
+        )
+        values.extend([embedding_space_id, request.limit * 4])
         rows = self._fetch_rows(sql, tuple(values))
         results = []
         for row in rows:
@@ -499,17 +511,19 @@ class PostgresMemoryRepository(MemoryRepository):
         cursor.execute(
             """INSERT INTO memory_items
             (id,memory_key,type,entity_id,attribute,schema_version,content,
-             embedding,importance,confidence,source,tenant_id,
+             embedding,importance,embedding_space_id,embedding_provider,
+             confidence,source,tenant_id,
              embedding_model,embedding_version,embedding_dimension,
              department_id,user_id,agent_id,version,status,replaces_id,replaced_by_id,
              observation_count,last_observed_at,access_count,last_accessed_at,
              created_at,updated_at)
             VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
                 item.id, item.memory_key, item.type, item.entity_id, item.attribute,
                 item.schema_version, json.dumps(item.content), item.embedding,
-                item.importance, item.confidence, item.source,
+                item.importance, item.embedding_space_id, item.embedding_provider,
+                item.confidence, item.source,
                 item.tenant_id, item.embedding_model, item.embedding_version,
                 item.embedding_dimension, item.department_id, item.user_id, item.agent_id,
                 item.version, item.status, item.replaces_id, item.replaced_by_id,

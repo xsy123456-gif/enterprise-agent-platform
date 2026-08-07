@@ -52,8 +52,20 @@ class MemoryFineDeduplicator:
         right_norm = math.sqrt(sum(value * value for value in right))
         return dot / (left_norm * right_norm) if left_norm and right_norm else 0.0
 
+    @staticmethod
+    def _space_id(value):
+        if hasattr(value, "metadata"):
+            return value.metadata.get("embedding_space_id", "legacy-unknown")
+        return getattr(value, "embedding_space_id", "legacy-unknown")
+
     def is_duplicate(self, candidate, existing):
         if existing is None:
+            return False
+        if (
+            self._space_id(candidate) == "legacy-unknown"
+            or self._space_id(existing) == "legacy-unknown"
+            or self._space_id(candidate) != self._space_id(existing)
+        ):
             return False
         score = self.similarity(candidate.embedding, existing.embedding)
         if score >= self.merge_threshold:

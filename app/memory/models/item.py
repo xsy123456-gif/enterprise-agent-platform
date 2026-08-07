@@ -33,6 +33,8 @@ class MemoryItem:
     user_id: str
     agent_id: str
     embedding: list[float] | None = None
+    embedding_space_id: str = "legacy-unknown"
+    embedding_provider: str = "legacy-unknown"
     embedding_model: str | None = None
     embedding_version: str | None = None
     embedding_dimension: int | None = None
@@ -63,6 +65,8 @@ class MemoryItem:
             raise ValueError("schema_version must be a positive integer")
         if not isinstance(self.observation_count, int) or self.observation_count < 0:
             raise ValueError("observation_count must be a non-negative integer")
+        if not isinstance(self.embedding_space_id, str) or not self.embedding_space_id:
+            raise ValueError("embedding_space_id must be a non-empty string")
         if self.last_observed_at is None:
             self.last_observed_at = self.created_at
 

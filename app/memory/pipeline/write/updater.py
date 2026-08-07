@@ -21,6 +21,12 @@ class MemoryUpdater:
             tenant_id=event.tenant_id, department_id=event.department_id,
             user_id=event.user_id, agent_id=event.agent_id,
             embedding=candidate.embedding,
+            embedding_space_id=candidate.metadata.get(
+                "embedding_space_id", "legacy-unknown"
+            ),
+            embedding_provider=candidate.metadata.get(
+                "embedding_provider", "legacy-unknown"
+            ),
             embedding_model=candidate.metadata.get("embedding_model"),
             embedding_version=candidate.metadata.get("embedding_version"),
             embedding_dimension=candidate.metadata.get("embedding_dimension"),

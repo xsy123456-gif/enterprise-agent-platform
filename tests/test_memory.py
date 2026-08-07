@@ -10,6 +10,7 @@ from app.memory.api.models import MemoryEventRequest, MemoryRetrieveRequest
 from app.memory.factory import build_memory_system
 from app.memory.governance.policy import MemoryAccessDenied, MemoryGovernancePolicy
 from app.memory.models.event import MemoryEventStatus
+from app.memory.embedding.models import EmbeddingSpace
 from app.memory.models.identity import MemoryIdentity
 from app.memory.models.item import MemoryItemStatus
 from app.memory.models.scope import MemoryScope
@@ -93,6 +94,10 @@ class MemorySystemTest(unittest.TestCase):
         self.assertEqual("test-embedding", stored.embedding_model)
         self.assertEqual("test", stored.embedding_version)
         self.assertEqual(3, stored.embedding_dimension)
+        self.assertEqual(
+            EmbeddingSpace("test", "test-embedding", "test", 3).space_id,
+            stored.embedding_space_id,
+        )
 
     def test_exact_duplicate_merges_without_new_version(self):
         service, consumer, _, _, _ = self.build()

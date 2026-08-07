@@ -12,6 +12,6 @@ class MemoryRetriever:
         if analysis.semantic_required:
             query_embedding = self.embedding_service.embed(request.query)
             vector_candidates = self.repository.search_vector(
-                request, query_embedding.vector
+                request, query_embedding.vector, query_embedding.space_id
             )
         return self.candidate_fusion.fuse(sql_candidates, vector_candidates)

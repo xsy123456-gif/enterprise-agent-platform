@@ -1,5 +1,7 @@
 import unittest
 
+from app.memory.api.models import MemoryRetrieveRequest
+from app.memory.embedding.models import EmbeddingSpace
 from app.memory.models.identity import MemoryIdentity
 from app.memory.errors import MemoryInvariantViolation
 from app.memory.models.item import MemoryItem, MemoryItemStatus
@@ -26,6 +28,12 @@ def memory_item(scope, identity, content, version=1):
 
 
 class MemoryScopeIdentityTest(unittest.TestCase):
+    def test_embedding_spaces_are_stable_and_distinct(self):
+        first = EmbeddingSpace("ollama", "bge-m3", "v1", 3)
+        same = EmbeddingSpace("ollama", "bge-m3", "v1", 3)
+        different = EmbeddingSpace("openai", "bge-m3", "v1", 3)
+        self.assertEqual(first.space_id, same.space_id)
+        self.assertNotEqual(first.space_id, different.space_id)
     def test_scope_and_identity_are_trimmed_and_structured(self):
         scope = MemoryScope(" tenant ", " user ", " agent ", " dept ")
         identity = MemoryIdentity(" customer ", " a:b ", " budget ")
@@ -109,6 +117,27 @@ class MemoryScopeIdentityTest(unittest.TestCase):
         repository.create_item(conflict)
         self.assertEqual(active.id, repository.find_active_head(scope, identity).id)
         self.assertEqual(2, repository.get_latest_version(scope, identity))
+
+    def test_vector_search_rejects_a_different_embedding_space(self):
+        repository = TestMemoryRepository()
+        scope = MemoryScope("tenant", "user", "agent", "dept")
+        identity = MemoryIdentity("customer", "a", "budget")
+        space_a = EmbeddingSpace("ollama", "model-a", "v1", 3)
+        space_b = EmbeddingSpace("ollama", "model-b", "v2", 3)
+        item = memory_item(scope, identity, "space-a")
+        item.embedding = [1.0, 0.0, 0.0]
+        item.embedding_space_id = space_a.space_id
+        repository.create_item(item)
+        request = MemoryRetrieveRequest(
+            user_id="user", agent_id="agent", tenant_id="tenant",
+            department_id="dept", query="budget", trace_id="trace",
+        )
+        self.assertEqual([], repository.search_vector(
+            request, [1.0, 0.0, 0.0], space_b.space_id
+        ))
+        self.assertEqual(1, len(repository.search_vector(
+            request, [1.0, 0.0, 0.0], space_a.space_id
+        )))
 
 
 if __name__ == "__main__":

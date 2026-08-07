@@ -12,6 +12,7 @@ from app.events.bus import EventBus
 from app.main import build_runtime
 from app.memory.errors import ConcurrentMemoryWrite
 from app.memory.api.models import MemoryEventRequest, MemoryRetrieveRequest
+from app.memory.embedding.models import EmbeddingSpace
 from app.memory.factory import build_memory_system
 from app.memory.models.event import MemoryEvent, MemoryEventStatus
 from app.memory.models.identity import MemoryIdentity
@@ -54,6 +55,7 @@ class RuntimeMemoryLLM:
 )
 class PostgresMemoryIntegrationTest(unittest.TestCase):
     DIMENSION = int(os.getenv("MEMORY_TEST_EMBEDDING_DIMENSION", "1024"))
+    TEST_SPACE_ID = EmbeddingSpace("test", "test", "1", DIMENSION).space_id
 
     @classmethod
     def setUpClass(cls):
@@ -88,12 +90,15 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
                 cursor.execute("DELETE FROM memory_events WHERE user_id=%s", (self.user_id,))
 
     def make_item(self, key, content, embedding, version=1, status=MemoryItemStatus.ACTIVE,
-                  replaces_id=None, department_id="test"):
+                  replaces_id=None, department_id="test", space_id=None):
         type_id, entity_id, attribute = key.split(":", 2)
         return MemoryItem(
             memory_key=key, type=type_id, entity_id=entity_id,
             attribute=attribute, content=content,
             embedding=embedding, importance=0.9, confidence=0.9,
+            embedding_space_id=space_id or self.TEST_SPACE_ID,
+            embedding_provider="test", embedding_model="test", embedding_version="1",
+            embedding_dimension=self.DIMENSION,
             source="integration-test", tenant_id=self.tenant_id,
             department_id=department_id, user_id=self.user_id,
             agent_id="sales_agent", version=version, status=status,
@@ -322,6 +327,10 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         self.assertEqual("test-embedding", stored.embedding_model)
         self.assertEqual("test", stored.embedding_version)
         self.assertEqual(self.DIMENSION, stored.embedding_dimension)
+        self.assertEqual(
+            TestEmbeddingService(dimension=self.DIMENSION).space.space_id,
+            stored.embedding_space_id,
+        )
 
     def test_vector_search_returns_real_similarity_order(self):
         close = self.make_item(
@@ -335,10 +344,28 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         results = self.repository.search(
             self.retrieve_request(limit=2),
             query_embedding=self.vector(0, (0.99, 1, 0.01)),
+            embedding_space_id=self.TEST_SPACE_ID,
         )
         self.assertEqual(close.id, results[0][0].id)
         self.assertGreater(results[0][1], results[1][1])
         self.assertGreater(results[0][1], 0.99)
+
+    def test_vector_search_does_not_mix_same_dimension_spaces(self):
+        identity = self.identity(attribute="space_isolation")
+        other_space = EmbeddingSpace("openai", "same-dimension", "v2", self.DIMENSION)
+        current = self.make_item(identity.memory_key, "current", self.vector(0))
+        other_identity = self.identity(attribute="other_space_fact")
+        legacy_space = self.make_item(
+            other_identity.memory_key, "other", self.vector(0),
+            space_id=other_space.space_id,
+        )
+        self.repository.create_item(current)
+        self.repository.create_item(legacy_space)
+        results = self.repository.search_vector(
+            self.retrieve_request(query="space", limit=10),
+            self.vector(0), self.TEST_SPACE_ID,
+        )
+        self.assertEqual([current.id], [item.id for item, _ in results])
 
     def test_runtime_event_persists_then_next_request_retrieves(self):
         llm = RuntimeMemoryLLM()

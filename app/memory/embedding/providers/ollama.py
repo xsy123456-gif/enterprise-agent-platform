@@ -3,7 +3,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.memory.embedding.base import BaseEmbedding, EmbeddingProviderError
-from app.memory.embedding.models import EmbeddingResult
+from app.memory.embedding.models import EmbeddingResult, EmbeddingSpace
 
 
 class OllamaEmbeddingProvider(BaseEmbedding):
@@ -33,8 +33,11 @@ class OllamaEmbeddingProvider(BaseEmbedding):
         if not isinstance(vector, list) or not vector:
             raise EmbeddingProviderError("Ollama response does not contain an embedding")
         returned_model = payload.get("model") or self.model
-        version = returned_model.rsplit(":", 1)[1] if ":" in returned_model else self.version
+        if ":" in returned_model:
+            model, version = returned_model.rsplit(":", 1)
+        else:
+            model, version = returned_model, self.version
         return EmbeddingResult(
-            vector=vector, model=returned_model, version=version,
-            dimension=len(vector),
+            vector=vector,
+            space=EmbeddingSpace("ollama", model, version, len(vector)),
         )

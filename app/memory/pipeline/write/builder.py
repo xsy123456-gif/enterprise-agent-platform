@@ -38,9 +38,11 @@ class WritePipeline:
                 )
                 raw_candidate.embedding = embedding.vector
                 raw_candidate.metadata.update({
+                    "embedding_provider": embedding.provider,
                     "embedding_model": embedding.model,
                     "embedding_version": embedding.version,
                     "embedding_dimension": embedding.dimension,
+                    "embedding_space_id": embedding.space_id,
                 })
                 stage = "EVALUATING"
                 self._stage(event, stage)

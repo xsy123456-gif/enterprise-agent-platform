@@ -29,13 +29,13 @@ class MemoryRepository(ABC):
     def get_latest_version(self, scope, identity): pass
 
     @abstractmethod
-    def search(self, request, query_embedding=None): pass
+    def search(self, request, query_embedding=None, embedding_space_id=None): pass
 
     @abstractmethod
     def search_sql(self, request, keywords): pass
 
     @abstractmethod
-    def search_vector(self, request, query_embedding): pass
+    def search_vector(self, request, query_embedding, embedding_space_id=None): pass
 
     @abstractmethod
     def link_replacement(self, old_id, new_id): pass

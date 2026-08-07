@@ -3,7 +3,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.memory.embedding.base import BaseEmbedding, EmbeddingProviderError
-from app.memory.embedding.models import EmbeddingResult
+from app.memory.embedding.models import EmbeddingResult, EmbeddingSpace
 
 
 class OpenAIEmbeddingProvider(BaseEmbedding):
@@ -43,6 +43,8 @@ class OpenAIEmbeddingProvider(BaseEmbedding):
             ) from error
         returned_model = payload.get("model") or self.model
         return EmbeddingResult(
-            vector=vector, model=returned_model, version=self.version,
-            dimension=len(vector),
+            vector=vector,
+            space=EmbeddingSpace(
+                "openai", returned_model, self.version, len(vector)
+            ),
         )

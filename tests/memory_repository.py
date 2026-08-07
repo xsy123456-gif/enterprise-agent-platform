@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import json
 from threading import Lock, RLock
 
-from app.memory.embedding.models import EmbeddingResult
+from app.memory.embedding.models import EmbeddingResult, EmbeddingSpace
 from app.memory.errors import ConcurrentMemoryWrite, MemoryInvariantViolation
 from app.memory.models.item import MemoryItemStatus
 from app.memory.repository.base import MemoryRepository
@@ -88,9 +88,9 @@ class TestMemoryRepository(MemoryRepository):
         versions = self.list_versions(scope, identity)
         return max((item.version for item in versions), default=0)
 
-    def search(self, request, query_embedding=None):
+    def search(self, request, query_embedding=None, embedding_space_id=None):
         if query_embedding is not None:
-            return self.search_vector(request, query_embedding)
+            return self.search_vector(request, query_embedding, embedding_space_id)
         return self.search_sql(request, request.query.lower().split())
 
     def _scoped_items(self, request):
@@ -120,9 +120,13 @@ class TestMemoryRepository(MemoryRepository):
                 candidates.append((item, score))
         return candidates
 
-    def search_vector(self, request, query_embedding):
+    def search_vector(self, request, query_embedding, embedding_space_id=None):
+        if not embedding_space_id:
+            return []
         candidates = []
         for item in self._scoped_items(request):
+            if item.embedding_space_id != embedding_space_id:
+                continue
             if not item.embedding or len(item.embedding) != len(query_embedding):
                 continue
             dot = sum(a * b for a, b in zip(item.embedding, query_embedding))
@@ -177,9 +181,10 @@ class TestMemoryRepository(MemoryRepository):
 class TestEmbeddingService:
     __test__ = False
 
-    def __init__(self, mapping=None, dimension=3):
+    def __init__(self, mapping=None, dimension=3, provider="test", model="test-embedding", version="test"):
         self.mapping = dict(mapping or {})
         self.dimension = dimension
+        self.space = EmbeddingSpace(provider, model, version, dimension)
         self.vectors = {}
         self.lock = Lock()
 
@@ -194,6 +199,5 @@ class TestEmbeddingService:
                 vector[index] = 1.0
                 self.vectors[text] = vector
         return EmbeddingResult(
-            vector=list(vector), model="test-embedding",
-            version="test", dimension=len(vector),
+            vector=list(vector), space=self.space,
         )

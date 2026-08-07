@@ -6,7 +6,7 @@ import unittest
 from app.memory.api.models import MemoryRetrieveRequest
 from app.memory.embedding.config import EmbeddingConfig
 from app.memory.embedding.factory import create_embedding_service
-from app.memory.embedding.models import EmbeddingResult
+from app.memory.embedding.models import EmbeddingResult, EmbeddingSpace
 from app.memory.embedding.providers.ollama import OllamaEmbeddingProvider
 from app.memory.embedding.service import EmbeddingDimensionError, EmbeddingService
 from app.memory.models.item import MemoryItem
@@ -34,11 +34,11 @@ class FakeResponse:
 class StaticProvider:
     def __init__(self, vector):
         self.vector = vector
+        self.space = EmbeddingSpace("static", "static", "1", len(vector))
 
     def embed(self, text):
         return EmbeddingResult(
-            vector=self.vector, model="static", version="1",
-            dimension=len(self.vector),
+            vector=self.vector, space=self.space,
         )
 
 
@@ -46,12 +46,12 @@ class CountingEmbeddingService:
     def __init__(self, vector):
         self.vector = vector
         self.calls = []
+        self.space = EmbeddingSpace("counting", "counting", "1", len(vector))
 
     def embed(self, text):
         self.calls.append(text)
         return EmbeddingResult(
-            vector=self.vector, model="counting", version="1",
-            dimension=len(self.vector),
+            vector=self.vector, space=self.space,
         )
 
 
@@ -63,7 +63,7 @@ class HybridRepository:
     def search_sql(self, request, keywords):
         return self.sql_candidates
 
-    def search_vector(self, request, embedding):
+    def search_vector(self, request, embedding, embedding_space_id=None):
         return self.vector_candidates
 
 
@@ -72,6 +72,9 @@ def item(identifier):
         id=identifier, memory_key=f"customer:{identifier}:fact", type="customer",
         entity_id=identifier, attribute="fact",
         content=identifier, embedding=[1.0, 0.0], importance=0.8,
+        embedding_space_id=EmbeddingSpace("test", "test", "1", 2).space_id,
+        embedding_provider="test", embedding_model="test", embedding_version="1",
+        embedding_dimension=2,
         confidence=0.9, source="test", tenant_id="tenant", department_id=None,
         user_id="user", agent_id="sales_agent",
     )
@@ -101,6 +104,8 @@ class EmbeddingLayerTest(unittest.TestCase):
             captured["body"],
         )
         self.assertEqual(3, result.dimension)
+        self.assertEqual("configured-model", result.model)
+        self.assertEqual("ollama", result.provider)
         self.assertEqual("release-1", result.version)
 
     def test_embedding_service_rejects_dimension_mismatch(self):
@@ -118,14 +123,17 @@ class EmbeddingLayerTest(unittest.TestCase):
         auto_merge = MemoryCandidate(
             "customer", "a", "fact", "same", "test",
             embedding=[0.95, math.sqrt(1 - 0.95 ** 2)],
+            metadata={"embedding_space_id": existing.embedding_space_id},
         )
         judged_merge = MemoryCandidate(
             "customer", "a", "fact", "related", "test",
             embedding=[0.80, 0.60],
+            metadata={"embedding_space_id": existing.embedding_space_id},
         )
         new_memory = MemoryCandidate(
             "customer", "a", "fact", "different", "test",
             embedding=[0.50, math.sqrt(1 - 0.50 ** 2)],
+            metadata={"embedding_space_id": existing.embedding_space_id},
         )
 
         self.assertTrue(deduplicator.is_duplicate(auto_merge, existing))
@@ -134,6 +142,18 @@ class EmbeddingLayerTest(unittest.TestCase):
         self.assertEqual(1, len(judge_calls))
         self.assertFalse(deduplicator.is_duplicate(new_memory, existing))
         self.assertEqual(1, len(judge_calls))
+
+    def test_fine_dedup_does_not_compare_different_spaces(self):
+        existing = item("existing")
+        candidate = MemoryCandidate(
+            "customer", "a", "fact", "same", "test",
+            embedding=[1.0, 0.0],
+            metadata={"embedding_space_id": "different-space"},
+        )
+        deduplicator = MemoryFineDeduplicator(
+            judge=lambda *_: self.fail("cross-space judge must not run")
+        )
+        self.assertFalse(deduplicator.is_duplicate(candidate, existing))
 
     def test_query_analyzer_routes_exact_and_semantic_queries(self):
         analyzer = MemoryQueryAnalyzer()
