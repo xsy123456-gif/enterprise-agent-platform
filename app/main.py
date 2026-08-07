@@ -1,4 +1,5 @@
 from app.audit.logger import AuditLogger
+from app.audit.memory import MemoryAuditSubscriber
 from app.audit.governance import GovernanceAuditSubscriber
 
 
@@ -35,6 +36,10 @@ from app.llm.factory import create_llm
 
 
 from app.memory.factory import build_memory_system
+from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
+from app.integrations.memory import (
+    PlatformMemoryEventBridge, PlatformMemoryEventSink, RuntimeMemoryAdapter,
+)
 
 
 from app.orchestration.llm_planner import LLMPlanner
@@ -194,12 +199,18 @@ def build_runtime(
 
     )
 
-    memory_service, memory_consumer, memory_adapter, memory_audit = (
-        build_memory_system(
-            llm, event_bus, repository=memory_repository,
-            embedding_service=memory_embedding_service,
-        )
+    memory_system = build_memory_system(
+        repository=memory_repository,
+        embedding_service=memory_embedding_service,
+        authorization_provider=AllowAllMemoryAuthorizationProvider(),
+        event_sink=PlatformMemoryEventSink(event_bus),
+        text_model=llm,
     )
+    memory_adapter = RuntimeMemoryAdapter(memory_system)
+    memory_bridge = PlatformMemoryEventBridge(memory_system)
+    event_bus.subscribe(memory_bridge)
+    memory_audit = MemoryAuditSubscriber()
+    event_bus.subscribe(memory_audit)
 
 
 
@@ -215,8 +226,6 @@ def build_runtime(
 
     )
 
-    runtime.memory_service = memory_service
-    runtime.memory_consumer = memory_consumer
     runtime.memory_audit = memory_audit
     runtime.lifecycle_service = lifecycle_service
     runtime.governance_policy_engine = governance_engine
@@ -227,11 +236,9 @@ def build_runtime(
     )
 
 
-    return (
-        runtime,
-        audit,
-        event_bus
-    )
+    # Control remains in the composition root; Runtime only receives the data-plane adapter.
+    event_bus.memory_control = memory_system.control
+    return runtime, audit, event_bus
 
 
 
@@ -280,7 +287,7 @@ def build_orchestration(
         planner,
         supervisor,
         audit,
-        event_bus
+        event_bus,
     )
 
 
@@ -311,7 +318,7 @@ def main():
 
     # The response path remains asynchronous. A finite CLI process must drain
     # accepted Memory events before shutdown so its daemon consumer is not cut off.
-    supervisor.runtime.memory_consumer.drain()
+    event_bus.memory_control.drain()
 
 
 
