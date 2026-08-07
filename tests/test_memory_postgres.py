@@ -5,6 +5,8 @@ from contextlib import redirect_stdout
 from datetime import datetime, timezone
 from io import StringIO
 
+from psycopg.errors import UniqueViolation
+
 from app.events.bus import EventBus
 from app.main import build_runtime
 from app.memory.api.models import MemoryEventRequest, MemoryRetrieveRequest
@@ -124,6 +126,7 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         self.assertEqual(self.DIMENSION, state["embedding_dimension"])
         self.assertTrue(state["pgvector_version"])
         self.assertEqual("memory_items_embedding_hnsw_idx", state["vector_index"])
+        self.assertEqual("memory_items_active_head_uidx", state["active_head_index"])
         self.assertTrue({
             "memory_events", "memory_items", "memory_relations",
             "memory_access_logs", "memory_processing_tasks",
@@ -197,11 +200,23 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         self.repository.create_item(first)
         self.repository.create_item(second)
         self.assertEqual(
-            {"amount": 100}, self.repository.find_latest(department_a, identity).content
+            {"amount": 100},
+            self.repository.find_active_head(department_a, identity).content,
         )
         self.assertEqual(
-            {"amount": 200}, self.repository.find_latest(department_b, identity).content
+            {"amount": 200},
+            self.repository.find_active_head(department_b, identity).content,
         )
+
+    def test_database_rejects_second_active_head(self):
+        identity = self.identity(attribute="active_unique")
+        first = self.make_item(identity.memory_key, 100, self.vector(0))
+        second = self.make_item(
+            identity.memory_key, 120, self.vector(1), version=2
+        )
+        self.repository.create_item(first)
+        with self.assertRaises(UniqueViolation):
+            self.repository.create_item(second)
 
     def test_sql_retrieve_writes_access_log_without_realtime_counter(self):
         item = self.make_item(
@@ -245,7 +260,7 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         )
         with redirect_stdout(StringIO()):
             service.submit(request)
-        stored = self.repository.find_latest(
+        stored = self.repository.find_active_head(
             self.scope(), self.identity(attribute="semantic")
         )
         self.assertEqual(self.vector(0), stored.embedding)

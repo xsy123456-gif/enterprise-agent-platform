@@ -3,6 +3,7 @@ import json
 from threading import Lock
 
 from app.memory.embedding.models import EmbeddingResult
+from app.memory.errors import MemoryInvariantViolation
 from app.memory.models.item import MemoryItemStatus
 from app.memory.repository.base import MemoryRepository
 
@@ -32,6 +33,20 @@ class TestMemoryRepository(MemoryRepository):
         return event
 
     def create_item(self, item, relations=None):
+        replacing_ids = {
+            target_id for target_id, relation_type in relations or []
+            if relation_type == "REPLACES"
+        }
+        active = [
+            current for current in self.items.values()
+            if current.scope == item.scope and current.identity == item.identity
+            and current.status == MemoryItemStatus.ACTIVE
+            and current.id not in replacing_ids
+        ]
+        if item.status == MemoryItemStatus.ACTIVE and active:
+            raise MemoryInvariantViolation(
+                "Memory scope and identity already have an ACTIVE head"
+            )
         self.items[item.id] = item
         for target_id, relation_type in relations or []:
             self.create_relation(item.id, target_id, relation_type)
@@ -45,12 +60,21 @@ class TestMemoryRepository(MemoryRepository):
     def get_item(self, memory_id):
         return self.items.get(memory_id)
 
-    def find_latest(self, scope, identity):
+    def find_active_head(self, scope, identity):
         candidates = [
             item for item in self.items.values()
             if item.scope == scope and item.identity == identity
+            and item.status == MemoryItemStatus.ACTIVE
         ]
-        return max(candidates, key=lambda item: item.version) if candidates else None
+        if len(candidates) > 1:
+            raise MemoryInvariantViolation(
+                "Memory scope and identity have multiple ACTIVE heads"
+            )
+        return candidates[0] if candidates else None
+
+    def get_latest_version(self, scope, identity):
+        versions = self.list_versions(scope, identity)
+        return max((item.version for item in versions), default=0)
 
     def search(self, request, query_embedding=None):
         if query_embedding is not None:

@@ -129,6 +129,44 @@ class MemorySystemTest(unittest.TestCase):
         self.assertEqual(MemoryItemStatus.ACTIVE, versions[0].status)
         self.assertEqual(MemoryItemStatus.CONFLICT, versions[1].status)
 
+    def test_conflict_then_replacement_keeps_one_active_head(self):
+        service, consumer, _, _, _ = self.build()
+        with redirect_stdout(StringIO()):
+            service.submit(self.request({"amount": 100}, confidence=0.9))
+            service.submit(self.request({"amount": 80}, confidence=0.8, conflict=True))
+            service.submit(self.request({"amount": 120}, confidence=0.95))
+        scope = MemoryScope("tenant-1", "user-1", "sales_agent", "sales")
+        identity = MemoryIdentity("customer", "customer_a", "budget")
+        versions = consumer.repository.list_versions(scope, identity)
+        self.assertEqual([1, 2, 3], [item.version for item in versions])
+        self.assertEqual(
+            [MemoryItemStatus.REPLACED, MemoryItemStatus.CONFLICT,
+             MemoryItemStatus.ACTIVE],
+            [item.status for item in versions],
+        )
+        self.assertEqual(versions[2].id, versions[0].replaced_by_id)
+        self.assertEqual(versions[2].id, consumer.repository.find_active_head(
+            scope, identity
+        ).id)
+
+    def test_conflict_then_lower_confidence_fact_still_compares_with_active(self):
+        service, consumer, _, _, _ = self.build()
+        with redirect_stdout(StringIO()):
+            service.submit(self.request({"amount": 100}, confidence=0.9))
+            service.submit(self.request({"amount": 80}, confidence=0.8, conflict=True))
+            service.submit(self.request({"amount": 70}, confidence=0.7))
+        scope = MemoryScope("tenant-1", "user-1", "sales_agent", "sales")
+        identity = MemoryIdentity("customer", "customer_a", "budget")
+        versions = consumer.repository.list_versions(scope, identity)
+        self.assertEqual(
+            [MemoryItemStatus.ACTIVE, MemoryItemStatus.CONFLICT,
+             MemoryItemStatus.CONFLICT],
+            [item.status for item in versions],
+        )
+        self.assertEqual(versions[0].id, consumer.repository.find_active_head(
+            scope, identity
+        ).id)
+
     def test_governance_denies_read_and_write(self):
         deny_read = MemoryGovernancePolicy(read_rule=lambda request: False)
         service, _, _, audit, _ = self.build(deny_read)

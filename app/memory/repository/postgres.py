@@ -1,5 +1,6 @@
 import json
 
+from app.memory.errors import MemoryInvariantViolation
 from app.memory.repository.base import MemoryRepository
 
 
@@ -109,6 +110,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS memory_items_scope_identity_version_uidx
   ON memory_items (
     tenant_id, department_id, user_id, agent_id, type, entity_id, attribute, version
   ) NULLS NOT DISTINCT;
+CREATE UNIQUE INDEX IF NOT EXISTS memory_items_active_head_uidx
+  ON memory_items (
+    tenant_id, department_id, user_id, agent_id, type, entity_id, attribute
+  ) NULLS NOT DISTINCT WHERE status='active';
 CREATE INDEX IF NOT EXISTS memory_items_scope_active_idx
   ON memory_items (tenant_id, department_id, user_id, agent_id, status);
 CREATE INDEX IF NOT EXISTS memory_events_status_idx ON memory_events (status);
@@ -186,6 +191,11 @@ class PostgresMemoryRepository(MemoryRepository):
                 )
                 vector_index = cursor.fetchone()
                 cursor.execute(
+                    "SELECT indexname FROM pg_indexes WHERE schemaname=current_schema() "
+                    "AND indexname='memory_items_active_head_uidx'"
+                )
+                active_head_index = cursor.fetchone()
+                cursor.execute(
                     "SELECT table_name,column_name FROM information_schema.columns "
                     "WHERE table_schema=current_schema() AND table_name = ANY(%s)",
                     (list(TABLES),),
@@ -210,6 +220,8 @@ class PostgresMemoryRepository(MemoryRepository):
             raise RuntimeError(f"Memory schema is missing tables: {sorted(missing)}")
         if not vector_index:
             raise RuntimeError("Memory vector index is missing")
+        if not active_head_index:
+            raise RuntimeError("Memory ACTIVE head unique index is missing")
         missing_columns = {
             table: sorted(required - columns.get(table, set()))
             for table, required in REQUIRED_COLUMNS.items()
@@ -230,6 +242,7 @@ class PostgresMemoryRepository(MemoryRepository):
             "pgvector_version": extension[0],
             "tables": tables,
             "vector_index": vector_index[0],
+            "active_head_index": active_head_index[0],
             "embedding_dimension": self.embedding_dimension,
             "vector_type": actual_vector_type,
         }
@@ -265,6 +278,13 @@ class PostgresMemoryRepository(MemoryRepository):
     def create_item(self, item, relations=None):
         with self.connection_factory() as connection:
             with connection.cursor() as cursor:
+                for target_id, relation_type in relations or []:
+                    if relation_type == "REPLACES":
+                        cursor.execute(
+                            "UPDATE memory_items SET status='replaced',replaced_by_id=%s,"
+                            "updated_at=now() WHERE id=%s AND status='active'",
+                            (item.id, target_id),
+                        )
                 self._insert_item(cursor, item)
                 for target_id, relation_type in relations or []:
                     self._validate_relation_type(relation_type)
@@ -273,12 +293,6 @@ class PostgresMemoryRepository(MemoryRepository):
                         "VALUES(%s,%s,%s)",
                         (item.id, target_id, relation_type),
                     )
-                    if relation_type == "REPLACES":
-                        cursor.execute(
-                            "UPDATE memory_items SET status='replaced',replaced_by_id=%s,"
-                            "updated_at=now() WHERE id=%s",
-                            (item.id, target_id),
-                        )
         return item
 
     def get_item(self, memory_id):
@@ -286,18 +300,36 @@ class PostgresMemoryRepository(MemoryRepository):
             "SELECT * FROM memory_items WHERE id=%s", (memory_id,), "item"
         )
 
-    def find_latest(self, scope, identity):
-        return self._fetch_object(
+    def find_active_head(self, scope, identity):
+        items = self._fetch_objects(
             "SELECT * FROM memory_items WHERE tenant_id=%s "
             "AND department_id IS NOT DISTINCT FROM %s AND user_id=%s "
             "AND agent_id=%s AND type=%s AND entity_id=%s AND attribute=%s "
-            "ORDER BY version DESC LIMIT 1",
+            "AND status='active' ORDER BY version",
             (
                 scope.tenant_id, scope.department_id, scope.user_id, scope.agent_id,
                 identity.type, identity.entity_id, identity.attribute,
             ),
             "item",
         )
+        if len(items) > 1:
+            raise MemoryInvariantViolation(
+                "Memory scope and identity have multiple ACTIVE heads"
+            )
+        return items[0] if items else None
+
+    def get_latest_version(self, scope, identity):
+        rows = self._fetch_rows(
+            "SELECT COALESCE(MAX(version),0) AS latest_version FROM memory_items "
+            "WHERE tenant_id=%s AND department_id IS NOT DISTINCT FROM %s "
+            "AND user_id=%s AND agent_id=%s AND type=%s "
+            "AND entity_id=%s AND attribute=%s",
+            (
+                scope.tenant_id, scope.department_id, scope.user_id, scope.agent_id,
+                identity.type, identity.entity_id, identity.attribute,
+            ),
+        )
+        return int(rows[0]["latest_version"])
 
     def search(self, request, query_embedding=None):
         if query_embedding is not None:

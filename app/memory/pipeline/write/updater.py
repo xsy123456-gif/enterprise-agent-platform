@@ -12,7 +12,9 @@ class MemoryUpdater:
                 existing.id, event.event_id, "MERGED_FROM"
             )
             return existing, False
-        version = existing.version + 1 if existing else 1
+        version = self.repository.get_latest_version(
+            event.scope, candidate.identity
+        ) + 1
         status = MemoryItemStatus.CONFLICT if resolution == Resolution.CONFLICT else MemoryItemStatus.ACTIVE
         item = MemoryItem(
             memory_key=candidate.memory_key, type=candidate.type,

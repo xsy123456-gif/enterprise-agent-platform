@@ -18,7 +18,10 @@ class MemoryRepository(ABC):
     def get_item(self, memory_id): pass
 
     @abstractmethod
-    def find_latest(self, scope, identity): pass
+    def find_active_head(self, scope, identity): pass
+
+    @abstractmethod
+    def get_latest_version(self, scope, identity): pass
 
     @abstractmethod
     def search(self, request, query_embedding=None): pass

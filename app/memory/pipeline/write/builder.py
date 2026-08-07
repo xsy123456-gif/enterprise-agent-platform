@@ -53,7 +53,9 @@ class WritePipeline:
                 if not self.pre_dedup.accept(event, candidate):
                     continue
                 self.governance.check_write(event, candidate)
-                existing = self.repository.find_latest(event.scope, candidate.identity)
+                existing = self.repository.find_active_head(
+                    event.scope, candidate.identity
+                )
                 stage = "RESOLVING"
                 self._stage(event, stage)
                 resolution = self.resolver.resolve(candidate, existing)

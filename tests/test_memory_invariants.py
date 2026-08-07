@@ -1,7 +1,8 @@
 import unittest
 
 from app.memory.models.identity import MemoryIdentity
-from app.memory.models.item import MemoryItem
+from app.memory.errors import MemoryInvariantViolation
+from app.memory.models.item import MemoryItem, MemoryItemStatus
 from app.memory.models.scope import MemoryScope
 from tests.memory_repository import TestMemoryRepository
 
@@ -56,8 +57,8 @@ class MemoryScopeIdentityTest(unittest.TestCase):
         self.assertEqual(first.memory_key, second.memory_key)
         repository.create_item(memory_item(scope, first, "first"))
         repository.create_item(memory_item(scope, second, "second"))
-        self.assertEqual("first", repository.find_latest(scope, first).content)
-        self.assertEqual("second", repository.find_latest(scope, second).content)
+        self.assertEqual("first", repository.find_active_head(scope, first).content)
+        self.assertEqual("second", repository.find_active_head(scope, second).content)
 
     def test_repository_isolates_all_scope_dimensions(self):
         repository = TestMemoryRepository()
@@ -75,11 +76,39 @@ class MemoryScopeIdentityTest(unittest.TestCase):
 
         for index, scope in enumerate(scopes):
             with self.subTest(scope=scope):
-                self.assertEqual(index, repository.find_latest(scope, identity).content)
+                self.assertEqual(
+                    index, repository.find_active_head(scope, identity).content
+                )
                 self.assertEqual(
                     [index],
                     [item.content for item in repository.list_versions(scope, identity)],
                 )
+
+    def test_repository_rejects_or_reports_multiple_active_heads(self):
+        repository = TestMemoryRepository()
+        scope = MemoryScope("tenant", "user", "agent", "dept")
+        identity = MemoryIdentity("customer", "a", "budget")
+        first = memory_item(scope, identity, 100)
+        second = memory_item(scope, identity, 120, version=2)
+        repository.create_item(first)
+        with self.assertRaises(MemoryInvariantViolation):
+            repository.create_item(second)
+
+        repository.items[second.id] = second
+        with self.assertRaises(MemoryInvariantViolation):
+            repository.find_active_head(scope, identity)
+
+    def test_conflict_does_not_replace_active_head(self):
+        repository = TestMemoryRepository()
+        scope = MemoryScope("tenant", "user", "agent", "dept")
+        identity = MemoryIdentity("customer", "a", "budget")
+        active = memory_item(scope, identity, 100)
+        conflict = memory_item(scope, identity, 80, version=2)
+        conflict.status = MemoryItemStatus.CONFLICT
+        repository.create_item(active)
+        repository.create_item(conflict)
+        self.assertEqual(active.id, repository.find_active_head(scope, identity).id)
+        self.assertEqual(2, repository.get_latest_version(scope, identity))
 
 
 if __name__ == "__main__":
