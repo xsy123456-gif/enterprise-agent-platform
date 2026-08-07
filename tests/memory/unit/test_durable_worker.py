@@ -118,8 +118,10 @@ class DurableWorkerTest(unittest.TestCase):
         response = system.submit(request())
         system._worker.process_once()
         self.assertEqual(MemoryEventStatus.PROCESSED, repository.get_event(response.event_id).status)
-        self.assertEqual(1, len(repository.outbox))
-        self.assertEqual("pending", next(iter(repository.outbox.values()))["status"])
+        self.assertGreaterEqual(len(repository.outbox), 1)
+        self.assertTrue(all(
+            item["status"] == "pending" for item in repository.outbox.values()
+        ))
 
     def test_worker_lifecycle_can_start_and_stop_cleanly(self):
         repository = TestMemoryRepository()

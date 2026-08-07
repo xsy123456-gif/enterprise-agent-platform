@@ -4,6 +4,13 @@ from typing import Any
 from app.memory.models.scope import MemoryScope
 
 
+MAX_OBSERVATIONS = 100
+MAX_QUERY_LENGTH = 4096
+MAX_LIMIT = 100
+MIN_LIMIT = 1
+MAX_IDEMPOTENCY_KEY_LENGTH = 256
+
+
 @dataclass(frozen=True)
 class MemoryPrincipal:
     subject_id: str
@@ -25,8 +32,10 @@ class MemorySource:
     source_id: str
 
     def __post_init__(self):
-        if not self.kind or not self.source_id:
-            raise ValueError("Memory source kind and source_id are required")
+        if not isinstance(self.kind, str) or not self.kind.strip():
+            raise ValueError("Memory source kind is required")
+        if not isinstance(self.source_id, str) or not self.source_id.strip():
+            raise ValueError("Memory source source_id is required")
 
 
 @dataclass(frozen=True)
@@ -35,6 +44,12 @@ class MemoryObservation:
     content: Any
     source_ref: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if not isinstance(self.kind, str) or not self.kind.strip():
+            raise ValueError("Memory observation kind is required")
+        if not isinstance(self.metadata, dict):
+            raise ValueError("Memory observation metadata must be a dict")
 
 
 @dataclass(frozen=True)
@@ -50,8 +65,16 @@ class MemorySubmitRequest:
     def __post_init__(self):
         if not self.idempotency_key:
             raise ValueError("idempotency_key is required")
+        if len(self.idempotency_key) > MAX_IDEMPOTENCY_KEY_LENGTH:
+            raise ValueError(
+                f"idempotency_key exceeds max length of {MAX_IDEMPOTENCY_KEY_LENGTH}"
+            )
         if not self.observations:
             raise ValueError("observations are required")
+        if len(self.observations) > MAX_OBSERVATIONS:
+            raise ValueError(
+                f"observations exceeds max of {MAX_OBSERVATIONS}"
+            )
         if (
             self.principal.tenant_id != self.scope.tenant_id
             or self.principal.user_id != self.scope.user_id
@@ -70,21 +93,28 @@ class MemoryRetrieveRequest:
     trace_id: str = ""
 
     def __post_init__(self):
-        if self.limit < 1:
-            raise ValueError("limit must be positive")
+        if len(self.query) > MAX_QUERY_LENGTH:
+            raise ValueError(f"query exceeds max length of {MAX_QUERY_LENGTH}")
+        if self.limit < MIN_LIMIT or self.limit > MAX_LIMIT:
+            raise ValueError(f"limit must be between {MIN_LIMIT} and {MAX_LIMIT}")
         if (
             self.principal.tenant_id != self.scope.tenant_id
             or self.principal.user_id != self.scope.user_id
             or self.principal.agent_id != self.scope.agent_id
         ):
             raise ValueError("principal and scope do not describe the same subject")
+        deduped = list(dict.fromkeys(self.types))
+        if len(deduped) != len(self.types):
+            object.__setattr__(self, "types", deduped)
 
     @property
     def requested_types(self):
         return self.types
+
 
 @dataclass(frozen=True)
 class MemorySubmitResponse:
     accepted: bool
     event_id: str
     status: str
+

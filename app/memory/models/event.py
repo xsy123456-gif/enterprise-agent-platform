@@ -41,6 +41,7 @@ class MemoryEvent:
     locked_by: str | None = None
     lease_until: datetime | None = None
     error_code: str | None = None
+    lock_token: str | None = None
 
     @classmethod
     def from_submit_request(cls, request):

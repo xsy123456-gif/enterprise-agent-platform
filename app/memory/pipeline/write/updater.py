@@ -11,6 +11,7 @@ class MemoryUpdater:
             self.repository.create_relation(
                 existing.id, event.event_id, "MERGED_FROM"
             )
+            self.repository.merge_observation(existing, evaluation)
             return existing, False
         status = MemoryItemStatus.CONFLICT if resolution == Resolution.CONFLICT else MemoryItemStatus.ACTIVE
         item = MemoryItem(

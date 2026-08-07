@@ -30,16 +30,43 @@ from app.memory.storage.postgres import create_postgres_repository
 from app.memory.worker.event_worker import MemoryWorker
 
 
-@dataclass
-class MemorySystem:
-    _service: MemoryService
-    _worker: MemoryWorker
+class MemoryClient:
+    """The only interface Agent/Application sees: read/write.
 
-    def retrieve(self, request):
+    Backward-compat aliases: retrieve() and submit().
+    """
+
+    def __init__(self, service: MemoryService, worker: MemoryWorker):
+        self._service = service
+        self._worker = worker
+
+    def read(self, request):
         return self._service.retrieve(request)
 
-    def submit(self, request):
+    def write(self, request):
         return self._service.submit(request)
+
+    retrieve = read
+    submit = write
+
+
+MemorySystem = MemoryClient  # backward-compat alias
+
+
+class MemoryRuntime:
+    """Composition Root controls lifecycle: start, stop, health."""
+
+    def __init__(self, worker: MemoryWorker):
+        self._worker = worker
+
+    def start(self):
+        self._worker.start()
+
+    def stop(self, timeout=None):
+        return self._worker.stop(timeout)
+
+    def health(self):
+        return self._worker.health()
 
 
 def build_memory_system(
@@ -52,6 +79,9 @@ def build_memory_system(
 
     Platform adapters (Runtime state, EventBus, audit) belong outside this factory.
     A production composition root must explicitly provide authorization_provider.
+
+    Returns MemoryClient with .read() / .write() (and .retrieve() / .submit() aliases).
+    Access ._runtime on the client for MemoryRuntime lifecycle control.
     """
     if authorization_provider is None:
         raise ValueError("authorization_provider is required; choose an explicit policy")
@@ -64,7 +94,11 @@ def build_memory_system(
             raise ValueError("text_model is required when extractor is not provided")
         extractor = LLMMemoryExtractor(text_model)
     compressor = compressor or MemoryCompressor(text_model)
-    duplicate_judge = duplicate_judge or LLMSemanticDuplicateJudge(text_model)
+    if duplicate_judge is None:
+        if text_model is not None:
+            duplicate_judge = LLMSemanticDuplicateJudge(text_model)
+        else:
+            duplicate_judge = None
     read_pipeline = ReadPipeline(
         MemoryScopeFilter(authorization_provider),
         MemoryRetriever(
@@ -83,10 +117,14 @@ def build_memory_system(
         MemoryFineDeduplicator(duplicate_judge), MemoryRanker(),
         MemoryUpdater(repository), authorization_provider, None,
     )
-    worker = MemoryWorker(repository, write_pipeline, event_sink=event_sink)
+    worker = MemoryWorker(
+        repository, write_pipeline, event_sink=event_sink, claim_limit=1,
+    )
+    client = MemoryClient(service, worker)
+    client._runtime = MemoryRuntime(worker)
     if async_mode:
         worker.start()
-    return MemorySystem(service, worker)
+    return client
 
 
 def _repository_from_environment(config=None):

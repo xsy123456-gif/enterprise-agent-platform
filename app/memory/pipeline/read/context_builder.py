@@ -6,7 +6,13 @@ class MemoryContextBuilder:
         return MemoryContext(
             summary=summary,
             references=[MemoryReference(
-                memory_id=item.id, type=item.type, confidence=item.confidence,
-                importance=item.importance, created_at=item.created_at,
-            ) for item, _ in candidates],
+                memory_id=item.id, type=item.type,
+                entity_id=getattr(item, "entity_id", ""),
+                attribute=getattr(item, "attribute", ""),
+                content=getattr(item, "content", None),
+                confidence=item.confidence,
+                importance=item.importance,
+                relevance_score=score,
+                created_at=item.created_at,
+            ) for item, score in candidates],
         )

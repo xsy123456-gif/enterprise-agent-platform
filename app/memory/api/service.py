@@ -36,7 +36,9 @@ class MemoryService:
         )
         event = MemoryEvent.from_submit_request(request)
         event = self._repository.save_event(event)
-        return MemorySubmitResponse(True, event.event_id, MemoryEventStatus.RECEIVED)
+        return MemorySubmitResponse(
+            accepted=True, event_id=event.event_id, status=event.status,
+        )
 
     def _publish(self, event_type, payload):
         self._repository.add_outbox(MemoryDomainEvent(

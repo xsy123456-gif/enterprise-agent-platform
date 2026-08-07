@@ -51,6 +51,7 @@ class TestMemoryRepository(MemoryRepository):
         return event
 
     def claim_events(self, worker_id, limit, lease_seconds):
+        import uuid
         now = datetime.now(timezone.utc)
         claimed = []
         for event in self.events.values():
@@ -63,8 +64,27 @@ class TestMemoryRepository(MemoryRepository):
                 event.locked_by = worker_id
                 event.lease_until = now
                 event.attempt_count += 1
+                event.lock_token = str(uuid.uuid4())
                 claimed.append(event)
         return claimed
+
+    def renew_lease(self, event_id, lock_token, lease_seconds):
+        event = self.events.get(event_id)
+        if event and event.status == "processing" and getattr(event, "lock_token", None) == lock_token:
+            event.lease_until = datetime.now(timezone.utc)
+            return True
+        return False
+
+    def commit_event_result(self, event, domain_events, lock_token):
+        stored = self.events.get(event.event_id)
+        if not stored:
+            raise ConcurrentMemoryWrite("Event result rejected: event not found")
+        if getattr(stored, "lock_token", None) != lock_token:
+            raise ConcurrentMemoryWrite("Event result rejected: lock_token mismatch")
+        event.locked_by = None
+        event.lease_until = None
+        event.lock_token = None
+        return self.finalize_event(event, domain_events)
 
     def add_outbox(self, event):
         self.outbox.setdefault(event.event_id, {
@@ -73,17 +93,24 @@ class TestMemoryRepository(MemoryRepository):
             "status": "pending", "attempt_count": 0,
         })
 
-    def claim_outbox(self, limit):
+    def claim_outbox(self, limit, worker_id=None, lease_seconds=30):
         return [item for item in self.outbox.values() if item["status"] == "pending"][:limit]
 
     def mark_outbox_published(self, outbox_id):
-        self.outbox[outbox_id]["status"] = "published"
+        if outbox_id in self.outbox:
+            self.outbox[outbox_id]["status"] = "published"
 
     def retry_outbox(self, outbox_id, error, next_attempt_at):
-        item = self.outbox[outbox_id]
-        item["attempt_count"] += 1
-        item["last_error"] = error
-        item["available_at"] = next_attempt_at
+        if outbox_id in self.outbox:
+            item = self.outbox[outbox_id]
+            item["attempt_count"] += 1
+            item["last_error"] = error
+            item["available_at"] = next_attempt_at
+
+    def dead_letter_outbox(self, outbox_id, error):
+        if outbox_id in self.outbox:
+            self.outbox[outbox_id]["status"] = "dead_letter"
+            self.outbox[outbox_id]["last_error"] = error
 
     def finalize_event(self, event, domain_events):
         self.update_event(event)
@@ -125,6 +152,17 @@ class TestMemoryRepository(MemoryRepository):
                 )
             item.version = self.get_latest_version(item.scope, item.identity) + 1
             return self.create_item(item, relations=relations)
+
+    def merge_observation(self, item, evaluation):
+        stored = self.items.get(item.id)
+        if not stored or stored.status != MemoryItemStatus.ACTIVE:
+            raise ConcurrentMemoryWrite("Could not merge observation: item is no longer ACTIVE")
+        stored.observation_count += 1
+        stored.last_observed_at = datetime.now(timezone.utc)
+        stored.updated_at = datetime.now(timezone.utc)
+        stored.confidence = max(stored.confidence, evaluation.confidence)
+        stored.importance = max(stored.importance, evaluation.importance)
+        return stored
 
     def get_item(self, memory_id):
         return self.items.get(memory_id)

@@ -3,10 +3,14 @@ import json
 
 
 class MemoryPreDeduplicator:
-    def __init__(self):
-        self._seen = set()
+    """Pre-deduplication within a single event batch via SHA-256 exact-match.
 
-    def accept(self, event, candidate):
+    The dedup set is NOT stored on the instance; it is passed by the caller per event
+    to avoid unbounded memory growth.
+    """
+
+    @staticmethod
+    def accept(event, candidate, seen):
         content = json.dumps(
             candidate.content, ensure_ascii=False, sort_keys=True,
             separators=(",", ":"), default=str,
@@ -16,7 +20,7 @@ class MemoryPreDeduplicator:
         )
         digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
         key = (event.event_id, digest)
-        if key in self._seen:
+        if key in seen:
             return False
-        self._seen.add(key)
+        seen.add(key)
         return True
