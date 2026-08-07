@@ -1,6 +1,6 @@
 import unittest
 
-from app.memory.api.models import MemoryRetrieveRequest
+from app.memory.api.models import MemoryPrincipal, MemoryRetrieveRequest
 from app.memory.embedding.models import EmbeddingSpace
 from app.memory.models.identity import MemoryIdentity
 from app.memory.errors import MemoryInvariantViolation
@@ -129,8 +129,8 @@ class MemoryScopeIdentityTest(unittest.TestCase):
         item.embedding_space_id = space_a.space_id
         repository.create_item(item)
         request = MemoryRetrieveRequest(
-            user_id="user", agent_id="agent", tenant_id="tenant",
-            department_id="dept", query="budget", trace_id="trace",
+            principal=MemoryPrincipal("user", "tenant", "user", "agent"),
+            scope=scope, query="budget", trace_id="trace",
         )
         self.assertEqual([], repository.search_vector(
             request, [1.0, 0.0, 0.0], space_b.space_id

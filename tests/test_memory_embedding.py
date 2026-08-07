@@ -3,13 +3,14 @@ import math
 import os
 import unittest
 
-from app.memory.api.models import MemoryRetrieveRequest
+from app.memory.api.models import MemoryPrincipal, MemoryRetrieveRequest
 from app.memory.embedding.config import EmbeddingConfig
 from app.memory.embedding.factory import create_embedding_service
 from app.memory.embedding.models import EmbeddingResult, EmbeddingSpace
 from app.memory.embedding.providers.ollama import OllamaEmbeddingProvider
 from app.memory.embedding.service import EmbeddingDimensionError, EmbeddingService
 from app.memory.models.item import MemoryItem
+from app.memory.models.scope import MemoryScope
 from app.memory.pipeline.read.fusion import MemoryCandidateFusion
 from app.memory.pipeline.read.query_analyzer import MemoryQueryAnalyzer
 from app.memory.pipeline.read.retriever import MemoryRetriever
@@ -174,7 +175,8 @@ class EmbeddingLayerTest(unittest.TestCase):
             MemoryQueryAnalyzer(), embedding, MemoryCandidateFusion(),
         )
         request = MemoryRetrieveRequest(
-            user_id="user", agent_id="sales_agent", tenant_id="tenant",
+            principal=MemoryPrincipal("user", "tenant", "user", "sales_agent"),
+            scope=MemoryScope("tenant", "user", "sales_agent"),
             query="客户A为什么选择产品B", trace_id="trace",
         )
         candidates = retriever.retrieve(request)
@@ -190,7 +192,8 @@ class EmbeddingLayerTest(unittest.TestCase):
             MemoryQueryAnalyzer(), embedding, MemoryCandidateFusion(),
         )
         request = MemoryRetrieveRequest(
-            user_id="user", agent_id="sales_agent", tenant_id="tenant",
+            principal=MemoryPrincipal("user", "tenant", "user", "sales_agent"),
+            scope=MemoryScope("tenant", "user", "sales_agent"),
             query="合同编号10086", trace_id="trace",
         )
         self.assertEqual([exact_item.id], [item.id for item, _ in retriever.retrieve(request)])

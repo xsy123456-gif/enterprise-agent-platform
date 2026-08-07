@@ -11,7 +11,7 @@ class ReadPipeline:
         self.repository = repository
 
     def execute(self, request):
-        self.scope_filter.authorize(request)
+        request = self.scope_filter.authorize(request)
         candidates = self.retriever.retrieve(request)
         candidates = self.pre_ranker.rank(candidates)
         candidates = self.fine_ranker.rank(candidates)

@@ -31,37 +31,16 @@ from app.memory.worker.event_worker import MemoryWorker
 
 
 @dataclass
-class MemoryControl:
-    _worker: MemoryWorker
-    _repository: object
-
-    def start(self):
-        return None
-
-    def stop(self):
-        return None
-
-    def drain(self):
-        self._worker.drain()
-
-    def health(self):
-        return self._repository.healthcheck()
-
-    def enqueue(self, event_id):
-        self._worker.enqueue(event_id)
-
-
-@dataclass
 class MemorySystem:
-    client: MemoryService
-    control: MemoryControl
+    _service: MemoryService
+    _worker: MemoryWorker
 
     def retrieve(self, request):
-        return self.client.retrieve(request)
+        return self._service.retrieve(request)
 
     def submit(self, request):
-        response = self.client.submit(request)
-        self.control.enqueue(response.event_id)
+        response = self._service.submit(request)
+        self._worker.enqueue(response.event_id)
         return response
 
 
@@ -109,7 +88,7 @@ def build_memory_system(
     worker = MemoryWorker(
         repository, write_pipeline, event_sink=event_sink, async_mode=async_mode
     )
-    return MemorySystem(service, MemoryControl(worker, repository))
+    return MemorySystem(service, worker)
 
 
 def _repository_from_environment(config=None):

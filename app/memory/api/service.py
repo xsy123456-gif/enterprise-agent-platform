@@ -18,14 +18,14 @@ class MemoryService:
             context = self.read_pipeline.execute(request)
         except PermissionError as error:
             self._publish("memory.read.denied", {
-                "trace_id": request.trace_id, "user_id": request.user_id,
-                "agent_id": request.agent_id, "tenant_id": request.tenant_id,
+                "trace_id": request.trace_id, "user_id": request.scope.user_id,
+                "agent_id": request.scope.agent_id, "tenant_id": request.scope.tenant_id,
                 "reason": str(error),
             })
             raise
         self._publish("memory.read.completed", {
-            "trace_id": request.trace_id, "user_id": request.user_id,
-            "agent_id": request.agent_id, "tenant_id": request.tenant_id,
+            "trace_id": request.trace_id, "user_id": request.scope.user_id,
+            "agent_id": request.scope.agent_id, "tenant_id": request.scope.tenant_id,
             "reference_count": len(context.references),
         })
         return context

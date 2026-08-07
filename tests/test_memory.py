@@ -1,41 +1,21 @@
-import json
 import unittest
-from contextlib import redirect_stdout
-from io import StringIO
-from threading import Barrier, Thread, local
 
-from app.events.bus import EventBus
-from app.events.models import Event
-from app.memory.api.models import MemoryEventRequest, MemoryRetrieveRequest
+from app.memory.api.models import (
+    MemoryObservation, MemoryPrincipal, MemoryRetrieveRequest, MemorySource,
+    MemorySubmitRequest,
+)
 from app.memory.factory import build_memory_system
-from app.memory.governance.policy import MemoryAccessDenied, MemoryGovernancePolicy
-from app.memory.models.event import MemoryEventStatus
-from app.memory.embedding.models import EmbeddingSpace
 from app.memory.models.identity import MemoryIdentity
 from app.memory.models.item import MemoryItemStatus
 from app.memory.models.scope import MemoryScope
-from app.memory.pipeline.write.extractor import LLMMemoryExtractor, StructuredMemoryExtractor
+from app.memory.pipeline.write.extractor import StructuredMemoryExtractor
+from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
 from tests.memory_repository import TestEmbeddingService, TestMemoryRepository
 
 
-class StubLLM:
-    def chat(self, messages, **kwargs):
-        return "compressed memory context"
-
-
-class ExtractionLLM:
-    def chat(self, messages, **kwargs):
-        return json.dumps([{
-            "type": "customer", "entity_id": "Customer A", "attribute": "budget",
-            "content": {"amount": 1000000}, "confidence": 0.9,
-            "business_value": 0.9, "stability": 0.8,
-            "explicitness": 1.0, "future_usefulness": 0.9,
-        }])
-
-
-def candidate(content, confidence=0.9, **metadata):
+def candidate(content, confidence=0.9, type_id="customer", **metadata):
     return {
-        "type": "customer", "entity_id": "Customer A", "attribute": "budget",
+        "type": type_id, "entity_id": "Customer A", "attribute": "budget",
         "content": content, "confidence": confidence,
         "business_value": 0.9, "stability": 0.8,
         "explicitness": 1.0, "future_usefulness": 0.9,
@@ -43,229 +23,106 @@ def candidate(content, confidence=0.9, **metadata):
     }
 
 
+class StubLLM:
+    def chat(self, messages, **kwargs):
+        return "compressed memory context"
+
+
 class MemorySystemTest(unittest.TestCase):
-    def build(self, governance=None):
-        bus = EventBus()
-        service, consumer, adapter, audit = build_memory_system(
-            StubLLM(), bus, extractor=StructuredMemoryExtractor(),
-            async_mode=False, governance=governance,
-            repository=TestMemoryRepository(),
-            embedding_service=TestEmbeddingService(),
-        )
-        return service, consumer, adapter, audit, bus
-
-    def request(self, value, confidence=0.9, **metadata):
-        return MemoryEventRequest(
-            trace_id="trace-1", task_id="task-1", agent_id="sales_agent",
-            user_id="user-1", tenant_id="tenant-1", department_id="sales",
-            event_type="response.completed", input={"query": "customer budget"},
-            output={"answer": "done"}, tool_results=[],
-            metadata={"memory_candidates": [candidate(value, confidence, **metadata)]},
+    def setUp(self):
+        self.repository = TestMemoryRepository()
+        self.scope = MemoryScope("tenant-1", "user-1", "sales_agent", "sales")
+        self.principal = MemoryPrincipal("user-1", "tenant-1", "user-1", "sales_agent")
+        self.system = build_memory_system(
+            repository=self.repository, embedding_service=TestEmbeddingService(),
+            extractor=StructuredMemoryExtractor(), text_model=StubLLM(),
+            authorization_provider=AllowAllMemoryAuthorizationProvider(),
+            async_mode=False,
         )
 
-    def retrieve_request(self, **overrides):
-        values = {
-            "user_id": "user-1", "agent_id": "sales_agent",
-            "tenant_id": "tenant-1", "department_id": "sales",
-            "query": "customer budget", "types": ["customer"],
-            "limit": 10, "trace_id": "read-1",
-        }
-        values.update(overrides)
-        return MemoryRetrieveRequest(**values)
-
-    def test_submit_processes_event_and_retrieve_returns_public_context(self):
-        service, consumer, _, audit, _ = self.build()
-        with redirect_stdout(StringIO()):
-            response = service.submit(self.request({"amount": 1000000}))
-            context = service.retrieve(self.retrieve_request())
-
-        self.assertTrue(response.accepted)
-        self.assertEqual(MemoryEventStatus.PROCESSED, consumer.repository.get_event(response.event_id).status)
-        self.assertEqual(
-            "completed",
-            consumer.repository.processing_tasks[response.event_id]["status"],
+    def submit_request(self, value, confidence=0.9, observations=None):
+        return MemorySubmitRequest(
+            principal=self.principal, scope=self.scope,
+            idempotency_key=f"source-{len(self.repository.events)}",
+            source=MemorySource("workflow_result", f"task-{len(self.repository.events)}"),
+            observations=observations or [MemoryObservation("business_fact", value)],
+            metadata={"memory_candidates": [candidate(value, confidence)]},
+            trace_id="trace-1",
         )
+
+    def retrieve_request(self, types=None):
+        return MemoryRetrieveRequest(
+            principal=self.principal, scope=self.scope, query="customer budget",
+            types=types or ["customer"], trace_id="read-1",
+        )
+
+    def test_submit_processes_generic_observations_and_retrieves_context(self):
+        response = self.system.submit(self.submit_request({"amount": 1000000}))
+        self.assertEqual("processed", self.repository.get_event(response.event_id).status)
+        context = self.system.retrieve(self.retrieve_request())
         self.assertEqual("compressed memory context", context.summary)
         self.assertEqual(1, len(context.references))
-        self.assertFalse(hasattr(context.references[0], "embedding"))
-        self.assertEqual(1, len(audit.query("memory.created", "sales_agent")))
-        stored = consumer.repository.get_item(context.references[0].memory_id)
-        self.assertEqual([1.0, 0.0, 0.0], stored.embedding)
-        self.assertEqual("test-embedding", stored.embedding_model)
-        self.assertEqual("test", stored.embedding_version)
-        self.assertEqual(3, stored.embedding_dimension)
-        self.assertEqual(
-            EmbeddingSpace("test", "test-embedding", "test", 3).space_id,
-            stored.embedding_space_id,
-        )
 
-    def test_exact_duplicate_merges_without_new_version(self):
-        service, consumer, _, _, _ = self.build()
-        with redirect_stdout(StringIO()):
-            service.submit(self.request({"amount": 1000000}))
-            service.submit(self.request({"amount": 1000000}))
-        versions = consumer.repository.list_versions(
-            MemoryScope("tenant-1", "user-1", "sales_agent", "sales"),
-            MemoryIdentity("customer", "customer_a", "budget"),
+    def test_unknown_observation_is_preserved_for_extractor(self):
+        request = self.submit_request(
+            {"amount": 1},
+            observations=[MemoryObservation("crm_snapshot", {"segment": "A"})],
         )
-        self.assertEqual(1, len(versions))
+        response = self.system.submit(request)
+        event = self.repository.get_event(response.event_id)
+        self.assertEqual("crm_snapshot", event.observations[0].kind)
+        self.assertEqual({"segment": "A"}, event.observations[0].content)
 
     def test_changed_fact_creates_replacement_version(self):
-        service, consumer, _, _, _ = self.build()
-        with redirect_stdout(StringIO()):
-            service.submit(self.request({"amount": 1000000}, confidence=0.8))
-            service.submit(self.request({"amount": 1200000}, confidence=0.9))
-        versions = consumer.repository.list_versions(
-            MemoryScope("tenant-1", "user-1", "sales_agent", "sales"),
-            MemoryIdentity("customer", "customer_a", "budget"),
+        self.system.submit(self.submit_request({"amount": 100}, confidence=0.8))
+        self.system.submit(self.submit_request({"amount": 120}, confidence=0.9))
+        versions = self.repository.list_versions(
+            self.scope, MemoryIdentity("customer", "customer_a", "budget")
         )
         self.assertEqual([1, 2], [item.version for item in versions])
         self.assertEqual(MemoryItemStatus.REPLACED, versions[0].status)
-        self.assertEqual(versions[1].id, versions[0].replaced_by_id)
 
-    def test_conflict_preserves_active_history(self):
-        service, consumer, _, _, _ = self.build()
-        with redirect_stdout(StringIO()):
-            service.submit(self.request({"amount": 1000000}))
-            service.submit(self.request({"amount": 800000}, conflict=True))
-        versions = consumer.repository.list_versions(
-            MemoryScope("tenant-1", "user-1", "sales_agent", "sales"),
-            MemoryIdentity("customer", "customer_a", "budget"),
+    def test_exact_duplicate_merges_without_new_version(self):
+        self.system.submit(self.submit_request({"amount": 100}))
+        self.system.submit(self.submit_request({"amount": 100}))
+        versions = self.repository.list_versions(
+            self.scope, MemoryIdentity("customer", "customer_a", "budget")
         )
-        self.assertEqual(MemoryItemStatus.ACTIVE, versions[0].status)
-        self.assertEqual(MemoryItemStatus.CONFLICT, versions[1].status)
+        self.assertEqual(1, len(versions))
 
-    def test_conflict_then_replacement_keeps_one_active_head(self):
-        service, consumer, _, _, _ = self.build()
-        with redirect_stdout(StringIO()):
-            service.submit(self.request({"amount": 100}, confidence=0.9))
-            service.submit(self.request({"amount": 80}, confidence=0.8, conflict=True))
-            service.submit(self.request({"amount": 120}, confidence=0.95))
-        scope = MemoryScope("tenant-1", "user-1", "sales_agent", "sales")
-        identity = MemoryIdentity("customer", "customer_a", "budget")
-        versions = consumer.repository.list_versions(scope, identity)
-        self.assertEqual([1, 2, 3], [item.version for item in versions])
-        self.assertEqual(
-            [MemoryItemStatus.REPLACED, MemoryItemStatus.CONFLICT,
-             MemoryItemStatus.ACTIVE],
-            [item.status for item in versions],
+    def test_system_has_no_public_service_or_control_bypass(self):
+        self.assertFalse(hasattr(self.system, "client"))
+        self.assertFalse(hasattr(self.system, "control"))
+
+    def test_specific_read_grant_limits_empty_type_query(self):
+        class CustomerOnlyAuthorization:
+            def authorize_ingest(self, principal, scope, source):
+                return None
+
+            def authorize_read(self, principal, scope, requested_types):
+                from app.memory.ports.authorization import MemoryReadGrant
+                return MemoryReadGrant(frozenset({"customer"}))
+
+            def authorize_write_candidate(self, principal, scope, candidate_type):
+                return None
+
+        repository = TestMemoryRepository()
+        system = build_memory_system(
+            repository=repository, embedding_service=TestEmbeddingService(),
+            extractor=StructuredMemoryExtractor(), text_model=StubLLM(),
+            authorization_provider=CustomerOnlyAuthorization(), async_mode=False,
         )
-        self.assertEqual(versions[2].id, versions[0].replaced_by_id)
-        self.assertEqual(versions[2].id, consumer.repository.find_active_head(
-            scope, identity
-        ).id)
-
-    def test_conflict_then_lower_confidence_fact_still_compares_with_active(self):
-        service, consumer, _, _, _ = self.build()
-        with redirect_stdout(StringIO()):
-            service.submit(self.request({"amount": 100}, confidence=0.9))
-            service.submit(self.request({"amount": 80}, confidence=0.8, conflict=True))
-            service.submit(self.request({"amount": 70}, confidence=0.7))
-        scope = MemoryScope("tenant-1", "user-1", "sales_agent", "sales")
-        identity = MemoryIdentity("customer", "customer_a", "budget")
-        versions = consumer.repository.list_versions(scope, identity)
-        self.assertEqual(
-            [MemoryItemStatus.ACTIVE, MemoryItemStatus.CONFLICT,
-             MemoryItemStatus.CONFLICT],
-            [item.status for item in versions],
-        )
-        self.assertEqual(versions[0].id, consumer.repository.find_active_head(
-            scope, identity
-        ).id)
-
-    def test_concurrent_pipeline_writes_retry_without_duplicate_versions(self):
-        class CoordinatedRepository(TestMemoryRepository):
-            def __init__(self):
-                super().__init__()
-                self.barrier = Barrier(2)
-                self.thread_state = local()
-
-            def find_active_head(self, scope, identity):
-                head = super().find_active_head(scope, identity)
-                if head is None and not getattr(self.thread_state, "synchronized", False):
-                    self.thread_state.synchronized = True
-                    self.barrier.wait(timeout=5)
-                return head
-
-        repository = CoordinatedRepository()
-        embedding = TestEmbeddingService(mapping={
-            "first": [1.0, 0.0, 0.0],
-            "second": [0.0, 1.0, 0.0],
-        })
-        systems = []
-        for _ in range(2):
-            bus = EventBus()
-            systems.append(build_memory_system(
-                StubLLM(), bus, extractor=StructuredMemoryExtractor(),
-                async_mode=False, repository=repository,
-                embedding_service=embedding,
-            )[0])
-        errors = []
-
-        def submit(service, value):
-            try:
-                with redirect_stdout(StringIO()):
-                    service.submit(self.request(value))
-            except Exception as error:
-                errors.append(error)
-
-        threads = [
-            Thread(target=submit, args=(systems[0], "first")),
-            Thread(target=submit, args=(systems[1], "second")),
-        ]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join(timeout=10)
-        self.assertFalse(errors)
-        scope = MemoryScope("tenant-1", "user-1", "sales_agent", "sales")
-        identity = MemoryIdentity("customer", "customer_a", "budget")
-        versions = repository.list_versions(scope, identity)
-        self.assertEqual([1, 2], [item.version for item in versions])
-        self.assertEqual({"first", "second"}, {item.content for item in versions})
-        self.assertEqual(1, sum(
-            item.status == MemoryItemStatus.ACTIVE for item in versions
+        for type_id in ("customer", "profile"):
+            request = MemorySubmitRequest(
+                self.principal, self.scope, f"{type_id}-source",
+                MemorySource("test", type_id), [MemoryObservation("fact", type_id)],
+                metadata={"memory_candidates": [candidate(type_id, type_id=type_id)]},
+            )
+            system.submit(request)
+        context = system.retrieve(MemoryRetrieveRequest(
+            self.principal, self.scope, query="", types=[]
         ))
-
-    def test_governance_denies_read_and_write(self):
-        deny_read = MemoryGovernancePolicy(read_rule=lambda request: False)
-        service, _, _, audit, _ = self.build(deny_read)
-        with redirect_stdout(StringIO()), self.assertRaises(MemoryAccessDenied):
-            service.retrieve(self.retrieve_request())
-        self.assertEqual(1, len(audit.query("memory.read.denied")))
-
-        deny_write = MemoryGovernancePolicy(write_rule=lambda event, item: False)
-        service, consumer, _, audit, _ = self.build(deny_write)
-        with redirect_stdout(StringIO()):
-            response = service.submit(self.request({"amount": 1000000}))
-        self.assertEqual(MemoryEventStatus.FAILED, consumer.repository.get_event(response.event_id).status)
-        self.assertEqual(
-            "failed",
-            consumer.repository.processing_tasks[response.event_id]["status"],
-        )
-        self.assertEqual(0, len(consumer.repository.items))
-        self.assertEqual(1, len(audit.query("memory.failed")))
-
-    def test_response_event_enters_memory_pipeline_without_runtime_save(self):
-        service, consumer, _, _, bus = self.build()
-        event = Event("response.completed", {
-            "trace_id": "trace", "task_id": "task", "agent_id": "sales_agent",
-            "user_id": "user-1", "tenant_id": "tenant-1", "department_id": "sales",
-            "input": "customer budget", "output": "recorded", "tool_results": [],
-            "metadata": {"memory_candidates": [candidate({"amount": 1000000})]},
-        })
-        with redirect_stdout(StringIO()):
-            bus.publish(event)
-        self.assertEqual(1, len(consumer.repository.events))
-        self.assertEqual(1, len(consumer.repository.items))
-
-    def test_llm_extractor_extracts_candidates_without_persistence_decision(self):
-        service, consumer, _, _, _ = self.build()
-        event_request = self.request({"amount": 1})
-        response = service.submit(event_request)
-        event = consumer.repository.get_event(response.event_id)
-        extracted = LLMMemoryExtractor(ExtractionLLM()).extract(event)
-        self.assertEqual("customer:Customer A:budget", extracted[0].memory_key)
+        self.assertEqual(["customer"], [reference.type for reference in context.references])
 
 
 if __name__ == "__main__":

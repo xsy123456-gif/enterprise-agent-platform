@@ -9,6 +9,7 @@ from app.memory.api.models import (
 from app.memory.factory import build_memory_system
 from app.memory.ports.authorization import (
     AllowAllMemoryAuthorizationProvider, DenyByDefaultMemoryAuthorizationProvider,
+    MemoryReadGrant,
 )
 from app.memory.models.scope import MemoryScope
 
@@ -44,6 +45,23 @@ class MemoryBoundaryArchitectureTest(unittest.TestCase):
         from app.memory.api.service import MemoryService
         self.assertFalse(hasattr(MemoryService, "attach_consumer"))
 
+    def test_contract_cleanup_removes_legacy_requests_and_duplicate_domain_event(self):
+        from app.memory.api import models
+        from app.memory import events
+        from app.memory.models import event as event_model
+        self.assertFalse(hasattr(models, "MemoryEventRequest"))
+        self.assertFalse(hasattr(models, "LegacyMemoryEventRequest"))
+        self.assertFalse(hasattr(event_model, "MemoryDomainEvent"))
+        self.assertTrue(hasattr(events, "MemoryDomainEvent"))
+
+    def test_public_memory_system_is_data_plane_only(self):
+        from app.memory.factory import MemorySystem
+        self.assertFalse(hasattr(MemorySystem, "client"))
+        self.assertFalse(hasattr(MemorySystem, "control"))
+        self.assertFalse(hasattr(MemorySystem, "drain"))
+        self.assertTrue(callable(MemorySystem.retrieve))
+        self.assertTrue(callable(MemorySystem.submit))
+
     def test_authorization_is_not_implicitly_allow_all(self):
         provider = DenyByDefaultMemoryAuthorizationProvider()
         with self.assertRaises(PermissionError):
@@ -62,7 +80,7 @@ class MemoryBoundaryArchitectureTest(unittest.TestCase):
         retrieve = MemoryRetrieveRequest(
             principal=request.principal, scope=request.scope, query="hello"
         )
-        self.assertEqual("tenant", retrieve.tenant_id)
+        self.assertEqual("tenant", retrieve.scope.tenant_id)
 
     def test_factory_requires_explicit_authorization_provider(self):
         with self.assertRaisesRegex(ValueError, "authorization_provider"):
@@ -71,6 +89,14 @@ class MemoryBoundaryArchitectureTest(unittest.TestCase):
     def test_allow_all_provider_is_explicit(self):
         provider = AllowAllMemoryAuthorizationProvider()
         self.assertIsNotNone(provider.authorize_read(None, None, []))
+
+    def test_specific_grant_constrains_empty_requested_types(self):
+        grant = MemoryReadGrant(frozenset({"customer"}))
+        self.assertEqual(frozenset({"customer"}), grant.effective_types([]))
+        with self.assertRaises(PermissionError):
+            grant.effective_types(["profile"])
+        with self.assertRaises(PermissionError):
+            MemoryReadGrant.deny_all().effective_types([])
 
 
 if __name__ == "__main__":

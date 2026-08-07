@@ -96,11 +96,11 @@ class TestMemoryRepository(MemoryRepository):
     def _scoped_items(self, request):
         items = []
         for item in self.items.values():
-            if item.status != MemoryItemStatus.ACTIVE or item.tenant_id != request.tenant_id:
+            if item.status != MemoryItemStatus.ACTIVE or item.tenant_id != request.scope.tenant_id:
                 continue
-            if item.user_id != request.user_id or item.agent_id != request.agent_id:
+            if item.user_id != request.scope.user_id or item.agent_id != request.scope.agent_id:
                 continue
-            if item.department_id != request.department_id:
+            if item.department_id != request.scope.department_id:
                 continue
             if request.types and item.type not in request.types:
                 continue
@@ -161,7 +161,7 @@ class TestMemoryRepository(MemoryRepository):
     def record_access(self, memory_id, request):
         self.access_logs.append({
             "memory_id": memory_id, "trace_id": request.trace_id,
-            "user_id": request.user_id, "agent_id": request.agent_id,
+            "user_id": request.scope.user_id, "agent_id": request.scope.agent_id,
             "query": request.query, "created_at": datetime.now(timezone.utc),
         })
 

@@ -8,10 +8,12 @@ from threading import Barrier, Lock, Thread
 
 from psycopg.errors import UniqueViolation
 
-from app.events.bus import EventBus
 from app.main import build_runtime
 from app.memory.errors import ConcurrentMemoryWrite
-from app.memory.api.models import MemoryEventRequest, MemoryRetrieveRequest
+from app.memory.api.models import (
+    MemoryObservation, MemoryPrincipal, MemoryRetrieveRequest, MemorySource,
+    MemorySubmitRequest,
+)
 from app.memory.embedding.models import EmbeddingSpace
 from app.memory.factory import build_memory_system
 from app.memory.models.event import MemoryEvent, MemoryEventStatus
@@ -19,6 +21,7 @@ from app.memory.models.identity import MemoryIdentity
 from app.memory.models.item import MemoryItem, MemoryItemStatus
 from app.memory.models.scope import MemoryScope
 from app.memory.pipeline.write.extractor import StructuredMemoryExtractor
+from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
 from app.memory.storage.postgres import create_postgres_repository
 from app.runtime.context import AgentContext
 from tests.memory_repository import TestEmbeddingService
@@ -106,9 +109,12 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         )
 
     def retrieve_request(self, query="customer", limit=10):
+        scope = self.scope()
         return MemoryRetrieveRequest(
-            user_id=self.user_id, agent_id="sales_agent",
-            tenant_id=self.tenant_id, department_id="test",
+            principal=MemoryPrincipal(
+                self.user_id, self.tenant_id, self.user_id, "sales_agent"
+            ),
+            scope=scope,
             query=query, limit=limit, trace_id=self.suffix,
         )
 
@@ -217,9 +223,9 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         event = MemoryEvent(
             trace_id=self.suffix, task_id=self.suffix, agent_id="sales_agent",
             user_id=self.user_id, tenant_id=self.tenant_id,
-            department_id="test", event_type="response.completed",
-            input={"query": "customer"}, output={"answer": "done"},
-            tool_results=[], metadata={},
+            department_id="test", source_kind="test", source_id=self.suffix,
+            observations=[MemoryObservation("test_input", {"query": "customer"})],
+            metadata={},
         )
         self.repository.save_event(event)
         stored = self.repository.get_event(event.event_id)
@@ -350,14 +356,15 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
             f"customer:{self.suffix}:industry", "新能源", self.vector(0)
         )
         self.repository.create_item(item)
-        bus = EventBus()
-        service, _, _, _ = build_memory_system(
-            StubLLM(), bus, repository=self.repository,
+        system = build_memory_system(
+            repository=self.repository,
             extractor=StructuredMemoryExtractor(), async_mode=False,
             embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
+            text_model=StubLLM(),
+            authorization_provider=AllowAllMemoryAuthorizationProvider(),
         )
         with redirect_stdout(StringIO()):
-            context = service.retrieve(self.retrieve_request("industry"))
+            context = system.retrieve(self.retrieve_request("industry"))
         self.assertEqual([item.id], [reference.memory_id for reference in context.references])
         self.assertEqual(0, self.repository.get_item(item.id).access_count)
         with self.repository.connection_factory() as connection:
@@ -368,16 +375,20 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
                 self.assertEqual("industry", cursor.fetchone()[0])
 
     def test_write_pipeline_persists_embedding_metadata(self):
-        bus = EventBus()
-        service, _, _, _ = build_memory_system(
-            StubLLM(), bus, repository=self.repository,
+        system = build_memory_system(
+            repository=self.repository,
             extractor=StructuredMemoryExtractor(), async_mode=False,
             embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
+            text_model=StubLLM(),
+            authorization_provider=AllowAllMemoryAuthorizationProvider(),
         )
-        request = MemoryEventRequest(
-            trace_id=self.suffix, task_id=self.suffix, agent_id="sales_agent",
-            user_id=self.user_id, tenant_id=self.tenant_id, department_id="test",
-            event_type="response.completed", input={}, output={}, tool_results=[],
+        request = MemorySubmitRequest(
+            principal=MemoryPrincipal(
+                self.user_id, self.tenant_id, self.user_id, "sales_agent"
+            ),
+            scope=self.scope(), idempotency_key=self.suffix,
+            source=MemorySource("test", self.suffix),
+            observations=[MemoryObservation("test_input", {})], trace_id=self.suffix,
             metadata={"memory_candidates": [{
                 "type": "customer", "entity_id": self.suffix,
                 "attribute": "semantic", "content": "customer semantic fact",
@@ -386,7 +397,7 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
             }]},
         )
         with redirect_stdout(StringIO()):
-            service.submit(request)
+            system.submit(request)
         stored = self.repository.find_active_head(
             self.scope(), self.identity(attribute="semantic")
         )
@@ -454,9 +465,7 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
 
         with redirect_stdout(StringIO()):
             self.assertEqual("done", runtime.run(state()))
-            runtime.memory_consumer.drain()
             self.assertEqual("done", runtime.run(state()))
-            runtime.memory_consumer.drain()
 
         self.assertTrue(llm.observed_memory)
         with self.repository.connection_factory() as connection:

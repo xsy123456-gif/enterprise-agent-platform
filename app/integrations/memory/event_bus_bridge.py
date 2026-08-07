@@ -7,8 +7,8 @@ from app.memory.models.scope import MemoryScope
 class PlatformMemoryEventBridge:
     """Translate platform response events into Memory-owned submit contracts."""
 
-    def __init__(self, memory_client):
-        self.memory_client = memory_client
+    def __init__(self, memory_system):
+        self.memory_system = memory_system
 
     def handle(self, event):
         if getattr(event, "event_type", None) != "response.completed":
@@ -45,4 +45,4 @@ class PlatformMemoryEventBridge:
             observations=observations, trace_id=payload.get("trace_id", ""),
             metadata=dict(payload.get("metadata") or {}),
         )
-        return self.memory_client.submit(request)
+        return self.memory_system.submit(request)

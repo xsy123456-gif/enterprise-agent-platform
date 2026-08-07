@@ -5,8 +5,8 @@ from app.memory.models.scope import MemoryScope
 class RuntimeMemoryAdapter:
     """Translate Runtime state and Agent definition into Memory contracts."""
 
-    def __init__(self, memory_client):
-        self.memory_client = memory_client
+    def __init__(self, memory_system):
+        self.memory_system = memory_system
 
     def retrieve(self, state, definition):
         if hasattr(state, "retrieved_memory_context"):
@@ -29,6 +29,6 @@ class RuntimeMemoryAdapter:
             query=state.task, types=list(getattr(definition, "memory_read", []) or []),
             trace_id=state.trace_id,
         )
-        context = self.memory_client.retrieve(request)
+        context = self.memory_system.retrieve(request)
         state.retrieved_memory_context = context
         return context

@@ -4,10 +4,30 @@ from typing import Protocol
 
 @dataclass(frozen=True)
 class MemoryReadGrant:
-    allowed_types: frozenset[str] = field(default_factory=frozenset)
+    """The authorization result, not merely a boolean permission check.
 
-    def permits(self, requested_types):
-        return not requested_types or set(requested_types).issubset(self.allowed_types)
+    ``None`` means allow every type; an empty set means deny every type.
+    """
+
+    allowed_types: frozenset[str] | None = field(default_factory=frozenset)
+
+    @classmethod
+    def allow_all(cls):
+        return cls(None)
+
+    @classmethod
+    def deny_all(cls):
+        return cls(frozenset())
+
+    def effective_types(self, requested_types):
+        requested = frozenset(requested_types)
+        if self.allowed_types is None:
+            return requested
+        if not self.allowed_types:
+            raise PermissionError("Memory read denied for every type")
+        if requested and not requested.issubset(self.allowed_types):
+            raise PermissionError("Memory read denied for requested types")
+        return requested or self.allowed_types
 
 
 class MemoryAuthorizationProvider(Protocol):
@@ -28,7 +48,7 @@ class AllowAllMemoryAuthorizationProvider:
         return None
 
     def authorize_read(self, principal, scope, requested_types):
-        return MemoryReadGrant(frozenset(requested_types or ()))
+        return MemoryReadGrant.allow_all()
 
     def authorize_write_candidate(self, principal, scope, candidate_type):
         return None

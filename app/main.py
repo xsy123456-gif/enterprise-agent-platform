@@ -205,6 +205,7 @@ def build_runtime(
         authorization_provider=AllowAllMemoryAuthorizationProvider(),
         event_sink=PlatformMemoryEventSink(event_bus),
         text_model=llm,
+        async_mode=False,
     )
     memory_adapter = RuntimeMemoryAdapter(memory_system)
     memory_bridge = PlatformMemoryEventBridge(memory_system)
@@ -237,7 +238,6 @@ def build_runtime(
 
 
     # Control remains in the composition root; Runtime only receives the data-plane adapter.
-    event_bus.memory_control = memory_system.control
     return runtime, audit, event_bus
 
 
@@ -315,12 +315,6 @@ def main():
         user_id="sales_001",
         role="sales"
     )
-
-    # The response path remains asynchronous. A finite CLI process must drain
-    # accepted Memory events before shutdown so its daemon consumer is not cut off.
-    event_bus.memory_control.drain()
-
-
 
     print(
         "\n最终结果:"

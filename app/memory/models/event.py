@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
 import uuid
 
 from app.memory.models.scope import MemoryScope
@@ -25,11 +24,10 @@ class MemoryEvent:
     user_id: str
     tenant_id: str
     department_id: str | None
-    event_type: str
-    input: dict[str, Any]
-    output: dict[str, Any]
-    tool_results: list[Any]
-    metadata: dict[str, Any]
+    source_kind: str
+    source_id: str
+    observations: list
+    metadata: dict
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     status: str = MemoryEventStatus.RECEIVED
     created_at: datetime = field(default_factory=utc_now)
@@ -38,22 +36,12 @@ class MemoryEvent:
 
     @classmethod
     def from_submit_request(cls, request):
-        input_data = {}
-        output_data = {}
-        tool_results = []
-        for observation in request.observations:
-            if observation.kind == "user_input":
-                input_data = observation.content if isinstance(observation.content, dict) else {"content": observation.content}
-            elif observation.kind == "assistant_output":
-                output_data = observation.content if isinstance(observation.content, dict) else {"result": observation.content}
-            elif observation.kind == "tool_result":
-                tool_results.append(observation.content)
         return cls(
             trace_id=request.trace_id, task_id=request.source.source_id,
             agent_id=request.scope.agent_id, user_id=request.scope.user_id,
             tenant_id=request.scope.tenant_id, department_id=request.scope.department_id,
-            event_type=request.source.kind, input=input_data, output=output_data,
-            tool_results=tool_results,
+            source_kind=request.source.kind, source_id=request.source.source_id,
+            observations=list(request.observations),
             metadata={**request.metadata, "idempotency_key": request.idempotency_key,
                       "principal_subject_id": request.principal.subject_id},
         )
@@ -76,18 +64,36 @@ class MemoryEvent:
     @property
     def source(self):
         from app.memory.api.models import MemorySource
-        return MemorySource(self.event_type, self.task_id)
+        return MemorySource(self.source_kind, self.source_id)
 
-
-@dataclass(frozen=True)
-class MemoryDomainEvent:
-    event_type: str
-    payload: dict[str, Any]
-    created_at: datetime = field(default_factory=utc_now)
-
-    def to_dict(self):
+    def storage_metadata(self):
         return {
-            "event_type": self.event_type,
-            **self.payload,
-            "timestamp": self.created_at.isoformat(),
+            **self.metadata,
+            "_memory_event_source": {
+                "kind": self.source_kind, "source_id": self.source_id,
+            },
+            "_memory_event_observations": [
+                {"kind": item.kind, "content": item.content,
+                 "source_ref": item.source_ref, "metadata": item.metadata}
+                for item in self.observations
+            ],
         }
+
+    @classmethod
+    def from_storage_record(cls, row):
+        from app.memory.api.models import MemoryObservation
+        metadata = dict(row.pop("metadata") or {})
+        row.pop("event_type", None)
+        row.pop("input", None)
+        row.pop("output", None)
+        row.pop("tool_results", None)
+        source = metadata.pop("_memory_event_source", None)
+        observations = metadata.pop("_memory_event_observations", None)
+        if source is None or observations is None:
+            raise RuntimeError("Stored Memory event is missing generic source/observations")
+        return cls(
+            **row,
+            source_kind=source["kind"], source_id=source["source_id"],
+            observations=[MemoryObservation(**item) for item in observations],
+            metadata=metadata,
+        )

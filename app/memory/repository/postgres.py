@@ -305,9 +305,9 @@ class PostgresMemoryRepository(MemoryRepository):
                 %s,%s,%s,%s)"""
         values = (
             event.event_id, event.trace_id, event.task_id, event.agent_id,
-            event.user_id, event.tenant_id, event.department_id, event.event_type,
-            json.dumps(event.input), json.dumps(event.output),
-            json.dumps(event.tool_results), json.dumps(event.metadata), event.status,
+            event.user_id, event.tenant_id, event.department_id, event.source_kind,
+            json.dumps({}), json.dumps({}), json.dumps([]),
+            json.dumps(event.storage_metadata()), event.status,
             event.error, event.created_at, event.processed_at,
         )
         self._execute(sql, values)
@@ -422,7 +422,7 @@ class PostgresMemoryRepository(MemoryRepository):
             "SELECT memory_items.* FROM memory_items WHERE tenant_id=%s "
             "AND user_id=%s AND agent_id=%s AND status='active'"
         )
-        values = [request.tenant_id, request.user_id, request.agent_id]
+        values = [request.scope.tenant_id, request.scope.user_id, request.scope.agent_id]
         sql, values = self._scope_query(sql, values, request)
         normalized = [keyword.strip() for keyword in keywords if keyword.strip()]
         if normalized:
@@ -457,7 +457,7 @@ class PostgresMemoryRepository(MemoryRepository):
             " FROM memory_items WHERE tenant_id=%s AND user_id=%s "
             "AND agent_id=%s AND status='active'"
         )
-        values = [query_embedding, request.tenant_id, request.user_id, request.agent_id]
+        values = [query_embedding, request.scope.tenant_id, request.scope.user_id, request.scope.agent_id]
         sql, values = self._scope_query(sql, values, request)
         sql += (
             " AND embedding IS NOT NULL AND embedding_space_id=%s "
@@ -474,7 +474,7 @@ class PostgresMemoryRepository(MemoryRepository):
     @staticmethod
     def _scope_query(sql, values, request):
         sql += " AND department_id IS NOT DISTINCT FROM %s"
-        values.append(request.department_id)
+        values.append(request.scope.department_id)
         if request.types:
             sql += " AND type = ANY(%s)"
             values.append(request.types)
@@ -522,7 +522,7 @@ class PostgresMemoryRepository(MemoryRepository):
         self._execute(
             "INSERT INTO memory_access_logs(memory_id,trace_id,user_id,agent_id,query) "
             "VALUES(%s,%s,%s,%s,%s)",
-            (memory_id, request.trace_id, request.user_id, request.agent_id, request.query),
+            (memory_id, request.trace_id, request.scope.user_id, request.scope.agent_id, request.query),
         )
 
     def list_versions(self, scope, identity):
@@ -630,7 +630,7 @@ class PostgresMemoryRepository(MemoryRepository):
     def _hydrate(row, kind):
         if kind == "event":
             from app.memory.models.event import MemoryEvent
-            return MemoryEvent(**row)
+            return MemoryEvent.from_storage_record(row)
         from app.memory.models.item import MemoryItem
         embedding = row.get("embedding")
         if embedding is not None:

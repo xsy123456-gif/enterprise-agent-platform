@@ -60,7 +60,7 @@ class MemorySubmitRequest:
             raise ValueError("principal and scope do not describe the same subject")
 
 
-@dataclass(frozen=True, init=False)
+@dataclass(frozen=True)
 class MemoryRetrieveRequest:
     principal: MemoryPrincipal
     scope: MemoryScope
@@ -68,22 +68,6 @@ class MemoryRetrieveRequest:
     types: list[str] = field(default_factory=list)
     limit: int = 10
     trace_id: str = ""
-
-    def __init__(self, principal=None, scope=None, query="", types=None,
-                 limit=10, trace_id="", *, user_id=None, agent_id=None,
-                 tenant_id=None, department_id=None):
-        if principal is None or scope is None:
-            if not all((tenant_id, user_id, agent_id)):
-                raise ValueError("principal and scope are required")
-            principal = MemoryPrincipal(user_id, tenant_id, user_id, agent_id)
-            scope = MemoryScope(tenant_id, user_id, agent_id, department_id)
-        object.__setattr__(self, "principal", principal)
-        object.__setattr__(self, "scope", scope)
-        object.__setattr__(self, "query", query)
-        object.__setattr__(self, "types", list(types or ()))
-        object.__setattr__(self, "limit", limit)
-        object.__setattr__(self, "trace_id", trace_id)
-        self.__post_init__()
 
     def __post_init__(self):
         if self.limit < 1:
@@ -96,55 +80,8 @@ class MemoryRetrieveRequest:
             raise ValueError("principal and scope do not describe the same subject")
 
     @property
-    def tenant_id(self):
-        return self.scope.tenant_id
-
-    @property
-    def user_id(self):
-        return self.scope.user_id
-
-    @property
-    def agent_id(self):
-        return self.scope.agent_id
-
-    @property
-    def department_id(self):
-        return self.scope.department_id
-
-    @property
     def requested_types(self):
         return self.types
-
-
-@dataclass(frozen=True)
-class LegacyMemoryEventRequest:
-    trace_id: str
-    task_id: str
-    agent_id: str
-    user_id: str
-    tenant_id: str
-    event_type: str
-    input: dict[str, Any]
-    output: dict[str, Any]
-    tool_results: list[Any]
-    metadata: dict[str, Any] = field(default_factory=dict)
-    department_id: str | None = None
-
-    def __post_init__(self):
-        if not all((self.trace_id, self.task_id, self.agent_id, self.user_id, self.tenant_id, self.event_type)):
-            raise ValueError("Memory event identity and scope fields are required")
-
-    @property
-    def scope(self):
-        return MemoryScope(
-            tenant_id=self.tenant_id, department_id=self.department_id,
-            user_id=self.user_id, agent_id=self.agent_id,
-        )
-
-
-# Kept as an import-only migration alias while callers move to MemorySubmitRequest.
-MemoryEventRequest = LegacyMemoryEventRequest
-
 
 @dataclass(frozen=True)
 class MemorySubmitResponse:

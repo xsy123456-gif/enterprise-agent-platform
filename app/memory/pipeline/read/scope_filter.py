@@ -1,3 +1,6 @@
+from dataclasses import replace
+
+
 class MemoryScopeFilter:
     def __init__(self, authorization_provider):
         self.authorization_provider = authorization_provider
@@ -6,6 +9,4 @@ class MemoryScopeFilter:
         grant = self.authorization_provider.authorize_read(
             request.principal, request.scope, request.types
         )
-        if not grant.permits(request.types):
-            raise PermissionError("Memory read denied for requested types")
-        return request
+        return replace(request, types=list(grant.effective_types(request.types)))

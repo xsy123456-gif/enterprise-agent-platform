@@ -182,7 +182,6 @@ class AgentRegistryTest(unittest.TestCase):
         )
         with redirect_stdout(StringIO()):
             result = runtime.run(state)
-            runtime.memory_consumer.drain()
 
         self.assertEqual("visit prepared", result)
         self.assertEqual("crm_query", audit.logs[0]["tool"])
@@ -195,9 +194,7 @@ class AgentRegistryTest(unittest.TestCase):
         self.assertEqual("completed", state.loop_status)
         self.assertEqual("sales_agent", state.runtime_trace.agent_id)
         self.assertGreaterEqual(state.runtime_trace.llm_calls, 2)
-        self.assertTrue(callable(runtime.memory_service.retrieve))
-        self.assertTrue(callable(runtime.memory_service.submit))
-        self.assertEqual(1, len(runtime.memory_consumer.repository.items))
+        self.assertTrue(callable(runtime.memory_adapter.retrieve))
 
 
 if __name__ == "__main__":

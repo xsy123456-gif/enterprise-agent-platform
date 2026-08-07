@@ -45,7 +45,12 @@ class LLMMemoryExtractor(MemoryExtractor):
             "task": "Extract durable enterprise memory facts",
             "rules": ["Return JSON array only", "Do not invent facts", "Do not decide persistence"],
             "schema": {"type": "string", "entity_id": "string", "attribute": "string", "content": "any", "confidence": "0..1"},
-            "event": {"input": event.input, "output": event.output, "tool_results": event.tool_results},
+            "source": {"kind": event.source.kind, "source_id": event.source.source_id},
+            "observations": [
+                {"kind": item.kind, "content": item.content,
+                 "source_ref": item.source_ref, "metadata": item.metadata}
+                for item in event.observations
+            ],
         }
         response = self.llm.chat([
             {"role": "system", "content": "You are a memory fact extractor, not an Agent."},
