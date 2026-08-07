@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 import json
 from threading import Lock, RLock
+from contextlib import contextmanager
+import copy
 
 from app.memory.embedding.models import EmbeddingResult, EmbeddingSpace
 from app.memory.errors import ConcurrentMemoryWrite, MemoryInvariantViolation
@@ -20,11 +22,26 @@ class TestMemoryRepository(MemoryRepository):
         self.relations = []
         self.access_logs = []
         self.processing_tasks = {}
+        self.outbox = {}
         self._commit_lock = RLock()
 
     def save_event(self, event):
+        for stored in self.events.values():
+            if (stored.tenant_id, stored.source_kind, stored.idempotency_key) == (
+                event.tenant_id, event.source_kind, event.idempotency_key
+            ):
+                return stored
         self.events[event.event_id] = event
         return event
+
+    @contextmanager
+    def atomic_write(self):
+        snapshot = (copy.deepcopy(self.items), copy.deepcopy(self.relations))
+        try:
+            yield
+        except Exception:
+            self.items, self.relations = snapshot
+            raise
 
     def get_event(self, event_id):
         return self.events.get(event_id)
@@ -32,6 +49,46 @@ class TestMemoryRepository(MemoryRepository):
     def update_event(self, event):
         self.events[event.event_id] = event
         return event
+
+    def claim_events(self, worker_id, limit, lease_seconds):
+        now = datetime.now(timezone.utc)
+        claimed = []
+        for event in self.events.values():
+            claimable = event.status in {"received", "retry_wait"} and (
+                event.next_attempt_at is None or event.next_attempt_at <= now
+            )
+            expired = event.status == "processing" and event.lease_until and event.lease_until <= now
+            if (claimable or expired) and len(claimed) < limit:
+                event.status = "processing"
+                event.locked_by = worker_id
+                event.lease_until = now
+                event.attempt_count += 1
+                claimed.append(event)
+        return claimed
+
+    def add_outbox(self, event):
+        self.outbox.setdefault(event.event_id, {
+            "id": event.event_id, "event_type": event.event_type,
+            "aggregate_id": event.aggregate_id, "payload": event.payload,
+            "status": "pending", "attempt_count": 0,
+        })
+
+    def claim_outbox(self, limit):
+        return [item for item in self.outbox.values() if item["status"] == "pending"][:limit]
+
+    def mark_outbox_published(self, outbox_id):
+        self.outbox[outbox_id]["status"] = "published"
+
+    def retry_outbox(self, outbox_id, error, next_attempt_at):
+        item = self.outbox[outbox_id]
+        item["attempt_count"] += 1
+        item["last_error"] = error
+        item["available_at"] = next_attempt_at
+
+    def finalize_event(self, event, domain_events):
+        self.update_event(event)
+        for domain_event in domain_events:
+            self.add_outbox(domain_event)
 
     def create_item(self, item, relations=None):
         replacing_ids = {

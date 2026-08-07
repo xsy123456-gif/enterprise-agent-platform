@@ -1,4 +1,5 @@
 import json
+from contextlib import nullcontext
 
 from app.memory.errors import ConcurrentMemoryWrite, MemoryConcurrencyError
 from app.memory.events import MemoryDomainEvent
@@ -28,6 +29,11 @@ class WritePipeline:
         self.event_sink = event_sink
 
     def process(self, event):
+        transaction = getattr(self.repository, "atomic_write", None)
+        with (transaction() if transaction else nullcontext()):
+            return self._process(event)
+
+    def _process(self, event):
         stage = self.STAGES[0]
         try:
             self._stage(event, stage)

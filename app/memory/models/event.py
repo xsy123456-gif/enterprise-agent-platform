@@ -12,8 +12,10 @@ def utc_now():
 class MemoryEventStatus:
     RECEIVED = "received"
     PROCESSING = "processing"
+    RETRY_WAIT = "retry_wait"
     PROCESSED = "processed"
-    FAILED = "failed"
+    REJECTED = "rejected"
+    DEAD_LETTER = "dead_letter"
 
 
 @dataclass
@@ -26,6 +28,7 @@ class MemoryEvent:
     department_id: str | None
     source_kind: str
     source_id: str
+    idempotency_key: str
     observations: list
     metadata: dict
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -33,6 +36,11 @@ class MemoryEvent:
     created_at: datetime = field(default_factory=utc_now)
     processed_at: datetime | None = None
     error: str | None = None
+    attempt_count: int = 0
+    next_attempt_at: datetime | None = None
+    locked_by: str | None = None
+    lease_until: datetime | None = None
+    error_code: str | None = None
 
     @classmethod
     def from_submit_request(cls, request):
@@ -41,6 +49,7 @@ class MemoryEvent:
             agent_id=request.scope.agent_id, user_id=request.scope.user_id,
             tenant_id=request.scope.tenant_id, department_id=request.scope.department_id,
             source_kind=request.source.kind, source_id=request.source.source_id,
+            idempotency_key=request.idempotency_key,
             observations=list(request.observations),
             metadata={**request.metadata, "idempotency_key": request.idempotency_key,
                       "principal_subject_id": request.principal.subject_id},
@@ -69,6 +78,7 @@ class MemoryEvent:
     def storage_metadata(self):
         return {
             **self.metadata,
+            "_memory_event_idempotency_key": self.idempotency_key,
             "_memory_event_source": {
                 "kind": self.source_kind, "source_id": self.source_id,
             },
@@ -89,11 +99,15 @@ class MemoryEvent:
         row.pop("tool_results", None)
         source = metadata.pop("_memory_event_source", None)
         observations = metadata.pop("_memory_event_observations", None)
-        if source is None or observations is None:
+        idempotency_key = row.pop("idempotency_key", None) or metadata.pop(
+            "_memory_event_idempotency_key", None
+        )
+        if source is None or observations is None or not idempotency_key:
             raise RuntimeError("Stored Memory event is missing generic source/observations")
         return cls(
             **row,
             source_kind=source["kind"], source_id=source["source_id"],
+            idempotency_key=idempotency_key,
             observations=[MemoryObservation(**item) for item in observations],
             metadata=metadata,
         )

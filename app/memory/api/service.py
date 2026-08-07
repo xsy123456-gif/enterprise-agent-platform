@@ -35,13 +35,12 @@ class MemoryService:
             request.principal, request.scope, request.source
         )
         event = MemoryEvent.from_submit_request(request)
-        self._repository.save_event(event)
+        event = self._repository.save_event(event)
         return MemorySubmitResponse(True, event.event_id, MemoryEventStatus.RECEIVED)
 
     def _publish(self, event_type, payload):
-        if self.event_sink:
-            self.event_sink.publish(MemoryDomainEvent(
-                event_type=event_type,
-                aggregate_id=payload.get("event_id", payload.get("trace_id", "")),
-                payload=dict(payload),
-            ))
+        self._repository.add_outbox(MemoryDomainEvent(
+            event_type=event_type,
+            aggregate_id=payload.get("event_id", payload.get("trace_id", "")),
+            payload=dict(payload),
+        ))

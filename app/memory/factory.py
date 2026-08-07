@@ -39,9 +39,7 @@ class MemorySystem:
         return self._service.retrieve(request)
 
     def submit(self, request):
-        response = self._service.submit(request)
-        self._worker.enqueue(response.event_id)
-        return response
+        return self._service.submit(request)
 
 
 def build_memory_system(
@@ -83,11 +81,11 @@ def build_memory_system(
         repository, extractor, embedding_service, MemoryEvaluator(),
         MemoryNormalizer(), MemoryPreDeduplicator(), MemoryResolver(),
         MemoryFineDeduplicator(duplicate_judge), MemoryRanker(),
-        MemoryUpdater(repository), authorization_provider, event_sink,
+        MemoryUpdater(repository), authorization_provider, None,
     )
-    worker = MemoryWorker(
-        repository, write_pipeline, event_sink=event_sink, async_mode=async_mode
-    )
+    worker = MemoryWorker(repository, write_pipeline, event_sink=event_sink)
+    if async_mode:
+        worker.start()
     return MemorySystem(service, worker)
 
 

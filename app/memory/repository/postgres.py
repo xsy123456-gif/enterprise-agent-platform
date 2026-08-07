@@ -1,4 +1,5 @@
 import json
+from contextlib import contextmanager
 
 from app.memory.errors import ConcurrentMemoryWrite, MemoryInvariantViolation
 from app.memory.repository.base import MemoryRepository
@@ -10,12 +11,15 @@ TABLES = {
     "memory_relations",
     "memory_access_logs",
     "memory_processing_tasks",
+    "memory_outbox",
 }
 REQUIRED_COLUMNS = {
     "memory_events": {
         "event_id", "trace_id", "task_id", "agent_id", "user_id", "tenant_id",
         "department_id", "event_type", "input", "output", "tool_results",
         "metadata", "status", "created_at", "processed_at",
+        "idempotency_key", "attempt_count", "next_attempt_at", "locked_by",
+        "lease_until", "error_code",
     },
     "memory_items": {
         "id", "memory_key", "type", "entity_id", "attribute", "content",
@@ -37,6 +41,10 @@ REQUIRED_COLUMNS = {
         "id", "event_id", "pipeline_stage", "status", "retry_count", "error",
         "created_at", "updated_at",
     },
+    "memory_outbox": {
+        "id", "event_type", "aggregate_id", "payload", "status", "attempt_count",
+        "available_at", "created_at", "published_at", "last_error",
+    },
 }
 RELATION_TYPES = {"REPLACES", "DERIVED_FROM", "MERGED_FROM", "CONFLICT_WITH"}
 
@@ -52,8 +60,17 @@ CREATE TABLE IF NOT EXISTS memory_events (
   agent_id text NOT NULL, user_id text NOT NULL, tenant_id text NOT NULL,
   department_id text, event_type text NOT NULL, input jsonb NOT NULL,
   output jsonb NOT NULL, tool_results jsonb NOT NULL, metadata jsonb NOT NULL,
-  status text NOT NULL CHECK (status IN ('received','processing','processed','failed')),
-  error text, created_at timestamptz NOT NULL, processed_at timestamptz
+  status text NOT NULL CHECK (status IN ('received','processing','retry_wait','processed','rejected','dead_letter')),
+  error text, idempotency_key text, attempt_count integer NOT NULL DEFAULT 0,
+  next_attempt_at timestamptz, locked_by text, lease_until timestamptz,
+  error_code text, created_at timestamptz NOT NULL, processed_at timestamptz
+);
+CREATE TABLE IF NOT EXISTS memory_outbox (
+  id text PRIMARY KEY, event_type text NOT NULL, aggregate_id text NOT NULL,
+  payload jsonb NOT NULL, status text NOT NULL DEFAULT 'pending',
+  attempt_count integer NOT NULL DEFAULT 0, available_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(), published_at timestamptz,
+  last_error text
 );
 CREATE TABLE IF NOT EXISTS memory_items (
   id text PRIMARY KEY, memory_key text NOT NULL, type text NOT NULL,
@@ -93,6 +110,23 @@ CREATE TABLE IF NOT EXISTS memory_processing_tasks (
   error text, created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE memory_events DROP CONSTRAINT IF EXISTS memory_events_status_check;
+ALTER TABLE memory_events ADD CONSTRAINT memory_events_status_check CHECK (
+  status IN ('received','processing','retry_wait','processed','rejected','dead_letter')
+);
+ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS idempotency_key text;
+ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 0;
+ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS next_attempt_at timestamptz;
+ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS locked_by text;
+ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS lease_until timestamptz;
+ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS error_code text;
+CREATE UNIQUE INDEX IF NOT EXISTS memory_events_idempotency_uidx
+  ON memory_events (tenant_id, event_type, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS memory_events_claim_idx
+  ON memory_events (status, next_attempt_at, lease_until, created_at);
+CREATE INDEX IF NOT EXISTS memory_outbox_dispatch_idx
+  ON memory_outbox (status, available_at, created_at);
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_model text;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_version text;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_dimension integer;
@@ -123,6 +157,19 @@ class PostgresMemoryRepository(MemoryRepository):
     def __init__(self, connection_factory, embedding_dimension):
         self.connection_factory = connection_factory
         self.embedding_dimension = embedding_dimension
+        self._transaction_connection = None
+
+    @contextmanager
+    def atomic_write(self):
+        if self._transaction_connection is not None:
+            yield
+            return
+        with self.connection_factory() as connection:
+            self._transaction_connection = connection
+            try:
+                yield
+            finally:
+                self._transaction_connection = None
 
     def initialize(self):
         with self.connection_factory(register_types=False) as connection:
@@ -300,18 +347,27 @@ class PostgresMemoryRepository(MemoryRepository):
     def save_event(self, event):
         sql = """INSERT INTO memory_events
         (event_id,trace_id,task_id,agent_id,user_id,tenant_id,department_id,
-         event_type,input,output,tool_results,metadata,status,error,created_at,processed_at)
+         event_type,input,output,tool_results,metadata,status,error,idempotency_key,
+         attempt_count,next_attempt_at,locked_by,lease_until,error_code,created_at,processed_at)
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s::jsonb,
-                %s,%s,%s,%s)"""
+                %s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        ON CONFLICT (tenant_id,event_type,idempotency_key) WHERE idempotency_key IS NOT NULL
+        DO UPDATE SET event_id=memory_events.event_id
+        RETURNING event_id"""
         values = (
             event.event_id, event.trace_id, event.task_id, event.agent_id,
             event.user_id, event.tenant_id, event.department_id, event.source_kind,
             json.dumps({}), json.dumps({}), json.dumps([]),
             json.dumps(event.storage_metadata()), event.status,
-            event.error, event.created_at, event.processed_at,
+            event.error, event.idempotency_key, event.attempt_count,
+            event.next_attempt_at, event.locked_by, event.lease_until,
+            event.error_code, event.created_at, event.processed_at,
         )
-        self._execute(sql, values)
-        return event
+        with self._connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, values)
+                event_id = cursor.fetchone()[0]
+        return event if event_id == event.event_id else self.get_event(event_id)
 
     def get_event(self, event_id):
         return self._fetch_object(
@@ -320,10 +376,73 @@ class PostgresMemoryRepository(MemoryRepository):
 
     def update_event(self, event):
         self._execute(
-            "UPDATE memory_events SET status=%s,error=%s,processed_at=%s WHERE event_id=%s",
-            (event.status, event.error, event.processed_at, event.event_id),
+            "UPDATE memory_events SET status=%s,error=%s,error_code=%s,attempt_count=%s,"
+            "next_attempt_at=%s,locked_by=%s,lease_until=%s,processed_at=%s WHERE event_id=%s",
+            (event.status, event.error, event.error_code, event.attempt_count,
+             event.next_attempt_at, event.locked_by, event.lease_until,
+             event.processed_at, event.event_id),
         )
         return event
+
+    def claim_events(self, worker_id, limit, lease_seconds):
+        sql = """WITH candidates AS (
+          SELECT event_id FROM memory_events
+          WHERE (status IN ('received','retry_wait') AND
+                 (next_attempt_at IS NULL OR next_attempt_at <= now()))
+             OR (status='processing' AND lease_until < now())
+          ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT %s
+        ) UPDATE memory_events event SET status='processing', locked_by=%s,
+          lease_until=now() + (%s * interval '1 second'),
+          attempt_count=event.attempt_count + 1, error=NULL, error_code=NULL
+        FROM candidates WHERE event.event_id=candidates.event_id RETURNING event.*"""
+        with self.connection_factory() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(sql, (limit, worker_id, lease_seconds))
+                columns = [item.name for item in cursor.description]
+                rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return [self._hydrate(row, "event") for row in rows]
+
+    def add_outbox(self, event):
+        self._execute(
+            "INSERT INTO memory_outbox (id,event_type,aggregate_id,payload) "
+            "VALUES (%s,%s,%s,%s::jsonb) ON CONFLICT (id) DO NOTHING",
+            (event.event_id, event.event_type, event.aggregate_id,
+             json.dumps(event.payload)),
+        )
+
+    def claim_outbox(self, limit):
+        return self._fetch_rows(
+            "SELECT * FROM memory_outbox WHERE status='pending' AND available_at <= now() "
+            "ORDER BY created_at LIMIT %s FOR UPDATE SKIP LOCKED", (limit,)
+        )
+
+    def mark_outbox_published(self, outbox_id):
+        self._execute(
+            "UPDATE memory_outbox SET status='published',published_at=now() WHERE id=%s",
+            (outbox_id,),
+        )
+
+    def retry_outbox(self, outbox_id, error, next_attempt_at):
+        self._execute(
+            "UPDATE memory_outbox SET attempt_count=attempt_count+1,last_error=%s,"
+            "available_at=%s WHERE id=%s", (error, next_attempt_at, outbox_id)
+        )
+
+    def finalize_event(self, event, domain_events):
+        with self.connection_factory() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE memory_events SET status=%s,processed_at=%s,locked_by=NULL,"
+                    "lease_until=NULL,error=NULL,error_code=NULL WHERE event_id=%s",
+                    (event.status, event.processed_at, event.event_id),
+                )
+                for domain_event in domain_events:
+                    cursor.execute(
+                        "INSERT INTO memory_outbox (id,event_type,aggregate_id,payload) "
+                        "VALUES (%s,%s,%s,%s::jsonb) ON CONFLICT (id) DO NOTHING",
+                        (domain_event.event_id, domain_event.event_type,
+                         domain_event.aggregate_id, json.dumps(domain_event.payload)),
+                    )
 
     def create_item(self, item, relations=None):
         with self.connection_factory() as connection:
@@ -336,7 +455,7 @@ class PostgresMemoryRepository(MemoryRepository):
             item.tenant_id, item.department_id, item.user_id, item.agent_id,
             item.type, item.entity_id, item.attribute,
         ], ensure_ascii=False, separators=(",", ":"))
-        with self.connection_factory() as connection:
+        with self._connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
@@ -481,7 +600,7 @@ class PostgresMemoryRepository(MemoryRepository):
         return sql, values
 
     def link_replacement(self, old_id, new_id):
-        with self.connection_factory() as connection:
+        with self._connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     "UPDATE memory_items SET status='replaced',replaced_by_id=%s,"
@@ -608,16 +727,24 @@ class PostgresMemoryRepository(MemoryRepository):
             raise ValueError(f"Unsupported memory relation type: {relation_type}")
 
     def _execute(self, sql, values=()):
-        with self.connection_factory() as connection:
+        with self._connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(sql, values)
 
     def _fetch_rows(self, sql, values):
-        with self.connection_factory() as connection:
+        with self._connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(sql, values)
                 columns = [description.name for description in cursor.description]
                 return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    @contextmanager
+    def _connection(self):
+        if self._transaction_connection is not None:
+            yield self._transaction_connection
+        else:
+            with self.connection_factory() as connection:
+                yield connection
 
     def _fetch_objects(self, sql, values, kind):
         return [self._hydrate(row, kind) for row in self._fetch_rows(sql, values)]

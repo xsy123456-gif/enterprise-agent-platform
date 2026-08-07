@@ -12,6 +12,24 @@ class MemoryRepository(ABC):
     def update_event(self, event): pass
 
     @abstractmethod
+    def claim_events(self, worker_id, limit, lease_seconds): pass
+
+    @abstractmethod
+    def add_outbox(self, event): pass
+
+    @abstractmethod
+    def claim_outbox(self, limit): pass
+
+    @abstractmethod
+    def mark_outbox_published(self, outbox_id): pass
+
+    @abstractmethod
+    def retry_outbox(self, outbox_id, error, next_attempt_at): pass
+
+    @abstractmethod
+    def finalize_event(self, event, domain_events): pass
+
+    @abstractmethod
     def create_item(self, item, relations=None): pass
 
     @abstractmethod

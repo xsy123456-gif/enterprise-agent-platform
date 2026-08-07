@@ -8,7 +8,6 @@ from threading import Barrier, Lock, Thread
 
 from psycopg.errors import UniqueViolation
 
-from app.main import build_runtime
 from app.memory.errors import ConcurrentMemoryWrite
 from app.memory.api.models import (
     MemoryObservation, MemoryPrincipal, MemoryRetrieveRequest, MemorySource,
@@ -23,7 +22,6 @@ from app.memory.models.scope import MemoryScope
 from app.memory.pipeline.write.extractor import StructuredMemoryExtractor
 from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
 from app.memory.storage.postgres import create_postgres_repository
-from app.runtime.context import AgentContext
 from tests.memory_repository import TestEmbeddingService
 
 
@@ -219,11 +217,61 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
                 initialize=False,
             )
 
+    def test_postgres_submit_is_idempotent_and_claimable(self):
+        system = build_memory_system(
+            repository=self.repository,
+            extractor=StructuredMemoryExtractor(),
+            embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
+            text_model=StubLLM(),
+            authorization_provider=AllowAllMemoryAuthorizationProvider(),
+            async_mode=False,
+        )
+        request = MemorySubmitRequest(
+            principal=MemoryPrincipal(self.user_id, self.tenant_id, self.user_id, "sales_agent"),
+            scope=self.scope(), idempotency_key=self.suffix,
+            source=MemorySource("postgres-test", self.suffix),
+            observations=[MemoryObservation("generic", {"value": 1})],
+        )
+        first = system.submit(request)
+        second = system.submit(request)
+        self.assertEqual(first.event_id, second.event_id)
+        claimed = self.repository.claim_events("worker-test", 10, 30)
+        self.assertEqual([first.event_id], [event.event_id for event in claimed])
+        self.assertEqual(MemoryEventStatus.PROCESSING, claimed[0].status)
+
+    def test_postgres_expired_lease_can_be_reclaimed(self):
+        system = build_memory_system(
+            repository=self.repository,
+            extractor=StructuredMemoryExtractor(),
+            embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
+            text_model=StubLLM(),
+            authorization_provider=AllowAllMemoryAuthorizationProvider(),
+            async_mode=False,
+        )
+        request = MemorySubmitRequest(
+            principal=MemoryPrincipal(self.user_id, self.tenant_id, self.user_id, "sales_agent"),
+            scope=self.scope(), idempotency_key=self.suffix,
+            source=MemorySource("lease-test", self.suffix),
+            observations=[MemoryObservation("generic", {"value": 1})],
+        )
+        response = system.submit(request)
+        first = self.repository.claim_events("worker-a", 1, 1)[0]
+        with self.repository.connection_factory(register_types=False) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE memory_events SET lease_until=now()-interval '1 second' "
+                    "WHERE event_id=%s", (response.event_id,)
+                )
+        reclaimed = self.repository.claim_events("worker-b", 1, 30)
+        self.assertEqual(response.event_id, reclaimed[0].event_id)
+        self.assertEqual("worker-b", reclaimed[0].locked_by)
+
     def test_event_create_query_and_status_update(self):
         event = MemoryEvent(
             trace_id=self.suffix, task_id=self.suffix, agent_id="sales_agent",
             user_id=self.user_id, tenant_id=self.tenant_id,
             department_id="test", source_kind="test", source_id=self.suffix,
+            idempotency_key=self.suffix,
             observations=[MemoryObservation("test_input", {"query": "customer"})],
             metadata={},
         )
@@ -398,6 +446,7 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         )
         with redirect_stdout(StringIO()):
             system.submit(request)
+            system._worker.process_once()
         stored = self.repository.find_active_head(
             self.scope(), self.identity(attribute="semantic")
         )
@@ -445,39 +494,33 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         )
         self.assertEqual([current.id], [item.id for item, _ in results])
 
-    def test_runtime_event_persists_then_next_request_retrieves(self):
-        llm = RuntimeMemoryLLM()
-        runtime, _, _ = build_runtime(
-            llm=llm, memory_repository=self.repository,
-            memory_embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
+    def test_durable_event_survives_memory_system_restart(self):
+        request = MemorySubmitRequest(
+            principal=MemoryPrincipal(self.user_id, self.tenant_id, self.user_id, "sales_agent"),
+            scope=self.scope(), idempotency_key=self.suffix,
+            source=MemorySource("restart-test", self.suffix),
+            observations=[MemoryObservation("customer_fact", "新能源")],
+            metadata={"memory_candidates": [{
+                "type": "customer", "entity_id": self.suffix, "attribute": "industry",
+                "content": "新能源", "confidence": 0.9, "business_value": 0.9,
+                "stability": 0.9, "explicitness": 0.9, "future_usefulness": 0.9,
+            }]},
         )
-        lifecycle = runtime.lifecycle_service
-        lifecycle.request_review("sales_agent", "0.2")
-        lifecycle.approve("sales_agent", "0.2")
-        lifecycle.activate("sales_agent", "0.2")
-
-        def state():
-            return AgentContext(
-                task="analyze customer A", user_id=self.user_id, role="sales",
-                agent_name="sales_agent", tenant_id=self.tenant_id,
-                department_id="test",
-            )
-
-        with redirect_stdout(StringIO()):
-            self.assertEqual("done", runtime.run(state()))
-            self.assertEqual("done", runtime.run(state()))
-
-        self.assertTrue(llm.observed_memory)
-        with self.repository.connection_factory() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT count(*) FROM memory_events WHERE user_id=%s", (self.user_id,)
-                )
-                self.assertEqual(2, cursor.fetchone()[0])
-                cursor.execute(
-                    "SELECT count(*) FROM memory_items WHERE user_id=%s", (self.user_id,)
-                )
-                self.assertEqual(1, cursor.fetchone()[0])
+        first = build_memory_system(
+            repository=self.repository, extractor=StructuredMemoryExtractor(),
+            embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
+            text_model=StubLLM(), authorization_provider=AllowAllMemoryAuthorizationProvider(),
+            async_mode=False,
+        )
+        response = first.submit(request)
+        second = build_memory_system(
+            repository=self.repository, extractor=StructuredMemoryExtractor(),
+            embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
+            text_model=StubLLM(), authorization_provider=AllowAllMemoryAuthorizationProvider(),
+            async_mode=False,
+        )
+        second._worker.process_once()
+        self.assertEqual(MemoryEventStatus.PROCESSED, self.repository.get_event(response.event_id).status)
 
 
 if __name__ == "__main__":

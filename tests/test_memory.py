@@ -58,6 +58,7 @@ class MemorySystemTest(unittest.TestCase):
 
     def test_submit_processes_generic_observations_and_retrieves_context(self):
         response = self.system.submit(self.submit_request({"amount": 1000000}))
+        self.system._worker.process_once()
         self.assertEqual("processed", self.repository.get_event(response.event_id).status)
         context = self.system.retrieve(self.retrieve_request())
         self.assertEqual("compressed memory context", context.summary)
@@ -69,13 +70,16 @@ class MemorySystemTest(unittest.TestCase):
             observations=[MemoryObservation("crm_snapshot", {"segment": "A"})],
         )
         response = self.system.submit(request)
+        self.system._worker.process_once()
         event = self.repository.get_event(response.event_id)
         self.assertEqual("crm_snapshot", event.observations[0].kind)
         self.assertEqual({"segment": "A"}, event.observations[0].content)
 
     def test_changed_fact_creates_replacement_version(self):
         self.system.submit(self.submit_request({"amount": 100}, confidence=0.8))
+        self.system._worker.process_once()
         self.system.submit(self.submit_request({"amount": 120}, confidence=0.9))
+        self.system._worker.process_once()
         versions = self.repository.list_versions(
             self.scope, MemoryIdentity("customer", "customer_a", "budget")
         )
@@ -84,7 +88,9 @@ class MemorySystemTest(unittest.TestCase):
 
     def test_exact_duplicate_merges_without_new_version(self):
         self.system.submit(self.submit_request({"amount": 100}))
+        self.system._worker.process_once()
         self.system.submit(self.submit_request({"amount": 100}))
+        self.system._worker.process_once()
         versions = self.repository.list_versions(
             self.scope, MemoryIdentity("customer", "customer_a", "budget")
         )
@@ -119,6 +125,7 @@ class MemorySystemTest(unittest.TestCase):
                 metadata={"memory_candidates": [candidate(type_id, type_id=type_id)]},
             )
             system.submit(request)
+            system._worker.process_once()
         context = system.retrieve(MemoryRetrieveRequest(
             self.principal, self.scope, query="", types=[]
         ))
