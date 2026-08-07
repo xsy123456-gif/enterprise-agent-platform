@@ -45,11 +45,10 @@ class TestMemoryRepository(MemoryRepository):
     def get_item(self, memory_id):
         return self.items.get(memory_id)
 
-    def find_latest(self, memory_key, tenant_id, user_id, agent_id):
+    def find_latest(self, scope, identity):
         candidates = [
             item for item in self.items.values()
-            if item.memory_key == memory_key and item.tenant_id == tenant_id
-            and item.user_id == user_id and item.agent_id == agent_id
+            if item.scope == scope and item.identity == identity
         ]
         return max(candidates, key=lambda item: item.version) if candidates else None
 
@@ -65,7 +64,7 @@ class TestMemoryRepository(MemoryRepository):
                 continue
             if item.user_id != request.user_id or item.agent_id != request.agent_id:
                 continue
-            if request.department_id is not None and item.department_id != request.department_id:
+            if item.department_id != request.department_id:
                 continue
             if request.types and item.type not in request.types:
                 continue
@@ -126,11 +125,10 @@ class TestMemoryRepository(MemoryRepository):
             "query": request.query, "created_at": datetime.now(timezone.utc),
         })
 
-    def list_versions(self, memory_key, tenant_id, user_id, agent_id):
+    def list_versions(self, scope, identity):
         return sorted([
             item for item in self.items.values()
-            if item.memory_key == memory_key and item.tenant_id == tenant_id
-            and item.user_id == user_id and item.agent_id == agent_id
+            if item.scope == scope and item.identity == identity
         ], key=lambda item: item.version)
 
     def update_processing_task(self, event_id, stage, status, error=None):

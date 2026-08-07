@@ -9,7 +9,9 @@ from app.memory.api.models import MemoryEventRequest, MemoryRetrieveRequest
 from app.memory.factory import build_memory_system
 from app.memory.governance.policy import MemoryAccessDenied, MemoryGovernancePolicy
 from app.memory.models.event import MemoryEventStatus
+from app.memory.models.identity import MemoryIdentity
 from app.memory.models.item import MemoryItemStatus
+from app.memory.models.scope import MemoryScope
 from app.memory.pipeline.write.extractor import LLMMemoryExtractor, StructuredMemoryExtractor
 from tests.memory_repository import TestEmbeddingService, TestMemoryRepository
 
@@ -97,7 +99,8 @@ class MemorySystemTest(unittest.TestCase):
             service.submit(self.request({"amount": 1000000}))
             service.submit(self.request({"amount": 1000000}))
         versions = consumer.repository.list_versions(
-            "customer:customer_a:budget", "tenant-1", "user-1", "sales_agent"
+            MemoryScope("tenant-1", "user-1", "sales_agent", "sales"),
+            MemoryIdentity("customer", "customer_a", "budget"),
         )
         self.assertEqual(1, len(versions))
 
@@ -107,7 +110,8 @@ class MemorySystemTest(unittest.TestCase):
             service.submit(self.request({"amount": 1000000}, confidence=0.8))
             service.submit(self.request({"amount": 1200000}, confidence=0.9))
         versions = consumer.repository.list_versions(
-            "customer:customer_a:budget", "tenant-1", "user-1", "sales_agent"
+            MemoryScope("tenant-1", "user-1", "sales_agent", "sales"),
+            MemoryIdentity("customer", "customer_a", "budget"),
         )
         self.assertEqual([1, 2], [item.version for item in versions])
         self.assertEqual(MemoryItemStatus.REPLACED, versions[0].status)
@@ -119,7 +123,8 @@ class MemorySystemTest(unittest.TestCase):
             service.submit(self.request({"amount": 1000000}))
             service.submit(self.request({"amount": 800000}, conflict=True))
         versions = consumer.repository.list_versions(
-            "customer:customer_a:budget", "tenant-1", "user-1", "sales_agent"
+            MemoryScope("tenant-1", "user-1", "sales_agent", "sales"),
+            MemoryIdentity("customer", "customer_a", "budget"),
         )
         self.assertEqual(MemoryItemStatus.ACTIVE, versions[0].status)
         self.assertEqual(MemoryItemStatus.CONFLICT, versions[1].status)

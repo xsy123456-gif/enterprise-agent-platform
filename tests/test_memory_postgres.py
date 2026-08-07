@@ -10,7 +10,9 @@ from app.main import build_runtime
 from app.memory.api.models import MemoryEventRequest, MemoryRetrieveRequest
 from app.memory.factory import build_memory_system
 from app.memory.models.event import MemoryEvent, MemoryEventStatus
+from app.memory.models.identity import MemoryIdentity
 from app.memory.models.item import MemoryItem, MemoryItemStatus
+from app.memory.models.scope import MemoryScope
 from app.memory.pipeline.write.extractor import StructuredMemoryExtractor
 from app.memory.storage.postgres import create_postgres_repository
 from app.runtime.context import AgentContext
@@ -82,12 +84,14 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
                 cursor.execute("DELETE FROM memory_events WHERE user_id=%s", (self.user_id,))
 
     def make_item(self, key, content, embedding, version=1, status=MemoryItemStatus.ACTIVE,
-                  replaces_id=None):
+                  replaces_id=None, department_id="test"):
+        type_id, entity_id, attribute = key.split(":", 2)
         return MemoryItem(
-            memory_key=key, type="customer", content=content,
+            memory_key=key, type=type_id, entity_id=entity_id,
+            attribute=attribute, content=content,
             embedding=embedding, importance=0.9, confidence=0.9,
             source="integration-test", tenant_id=self.tenant_id,
-            department_id="test", user_id=self.user_id,
+            department_id=department_id, user_id=self.user_id,
             agent_id="sales_agent", version=version, status=status,
             replaces_id=replaces_id,
         )
@@ -105,6 +109,14 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         if secondary is not None:
             vector[secondary[1]] = secondary[2]
         return vector
+
+    def scope(self, department_id="test"):
+        return MemoryScope(
+            self.tenant_id, self.user_id, "sales_agent", department_id
+        )
+
+    def identity(self, entity_id=None, attribute="budget"):
+        return MemoryIdentity("customer", entity_id or self.suffix, attribute)
 
     def test_connection_schema_extension_and_vector_index(self):
         self.assertGreaterEqual(self.repository.healthcheck(), 160000)
@@ -161,15 +173,34 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         )
         self.repository.create_relation(second.id, self.suffix, "MERGED_FROM")
 
-        versions = self.repository.list_versions(
-            key, self.tenant_id, self.user_id, "sales_agent"
-        )
+        versions = self.repository.list_versions(self.scope(), self.identity())
         self.assertEqual([1, 2, 3], [item.version for item in versions])
         self.assertEqual(MemoryItemStatus.REPLACED, versions[0].status)
         self.assertEqual(second.id, versions[0].replaced_by_id)
         self.assertEqual(
             {"REPLACES", "DERIVED_FROM", "MERGED_FROM", "CONFLICT_WITH"},
             {relation["relation_type"] for relation in self.repository.list_relations()},
+        )
+
+    def test_department_is_part_of_version_scope(self):
+        identity = self.identity(attribute="department_budget")
+        department_a = self.scope("department-a")
+        department_b = self.scope("department-b")
+        first = self.make_item(
+            identity.memory_key, {"amount": 100}, self.vector(0),
+            department_id=department_a.department_id,
+        )
+        second = self.make_item(
+            identity.memory_key, {"amount": 200}, self.vector(1),
+            department_id=department_b.department_id,
+        )
+        self.repository.create_item(first)
+        self.repository.create_item(second)
+        self.assertEqual(
+            {"amount": 100}, self.repository.find_latest(department_a, identity).content
+        )
+        self.assertEqual(
+            {"amount": 200}, self.repository.find_latest(department_b, identity).content
         )
 
     def test_sql_retrieve_writes_access_log_without_realtime_counter(self):
@@ -215,8 +246,7 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         with redirect_stdout(StringIO()):
             service.submit(request)
         stored = self.repository.find_latest(
-            f"customer:{self.suffix}:semantic", self.tenant_id,
-            self.user_id, "sales_agent",
+            self.scope(), self.identity(attribute="semantic")
         )
         self.assertEqual(self.vector(0), stored.embedding)
         self.assertEqual("test-embedding", stored.embedding_model)

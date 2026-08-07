@@ -15,7 +15,9 @@ class MemoryUpdater:
         version = existing.version + 1 if existing else 1
         status = MemoryItemStatus.CONFLICT if resolution == Resolution.CONFLICT else MemoryItemStatus.ACTIVE
         item = MemoryItem(
-            memory_key=candidate.memory_key, type=candidate.type, content=candidate.content,
+            memory_key=candidate.memory_key, type=candidate.type,
+            entity_id=candidate.entity_id, attribute=candidate.attribute,
+            content=candidate.content,
             importance=importance, confidence=evaluation.confidence, source=candidate.source,
             tenant_id=event.tenant_id, department_id=event.department_id,
             user_id=event.user_id, agent_id=event.agent_id,

@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.memory.models.scope import MemoryScope
+
 
 @dataclass(frozen=True)
 class MemoryRetrieveRequest:
@@ -18,6 +20,13 @@ class MemoryRetrieveRequest:
             raise ValueError("user_id, agent_id and tenant_id are required")
         if self.limit < 1:
             raise ValueError("limit must be positive")
+
+    @property
+    def scope(self):
+        return MemoryScope(
+            tenant_id=self.tenant_id, department_id=self.department_id,
+            user_id=self.user_id, agent_id=self.agent_id,
+        )
 
 
 @dataclass(frozen=True)
@@ -37,6 +46,13 @@ class MemoryEventRequest:
     def __post_init__(self):
         if not all((self.trace_id, self.task_id, self.agent_id, self.user_id, self.tenant_id, self.event_type)):
             raise ValueError("Memory event identity and scope fields are required")
+
+    @property
+    def scope(self):
+        return MemoryScope(
+            tenant_id=self.tenant_id, department_id=self.department_id,
+            user_id=self.user_id, agent_id=self.agent_id,
+        )
 
 
 @dataclass(frozen=True)

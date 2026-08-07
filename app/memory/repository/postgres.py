@@ -17,11 +17,13 @@ REQUIRED_COLUMNS = {
         "metadata", "status", "created_at", "processed_at",
     },
     "memory_items": {
-        "id", "memory_key", "type", "content", "embedding", "importance",
+        "id", "memory_key", "type", "entity_id", "attribute", "content",
+        "schema_version", "embedding", "importance",
         "embedding_model", "embedding_version", "embedding_dimension",
         "confidence", "source", "tenant_id", "department_id", "user_id",
         "agent_id", "version", "status", "replaces_id", "replaced_by_id",
-        "access_count", "last_accessed_at", "created_at", "updated_at",
+        "observation_count", "last_observed_at", "access_count",
+        "last_accessed_at", "created_at", "updated_at",
     },
     "memory_relations": {
         "id", "source_id", "target_id", "relation_type", "created_at",
@@ -53,16 +55,17 @@ CREATE TABLE IF NOT EXISTS memory_events (
 );
 CREATE TABLE IF NOT EXISTS memory_items (
   id text PRIMARY KEY, memory_key text NOT NULL, type text NOT NULL,
+  entity_id text NOT NULL, attribute text NOT NULL, schema_version integer NOT NULL DEFAULT 1,
   content jsonb NOT NULL, embedding {vector_type}, importance double precision NOT NULL,
   embedding_model text, embedding_version text, embedding_dimension integer,
   confidence double precision NOT NULL, source text NOT NULL, tenant_id text NOT NULL,
   department_id text, user_id text NOT NULL, agent_id text NOT NULL,
   version integer NOT NULL CHECK (version > 0),
   status text NOT NULL CHECK (status IN ('active','replaced','conflict','archived')),
-  replaces_id text, replaced_by_id text, access_count integer NOT NULL DEFAULT 0,
-  last_accessed_at timestamptz, created_at timestamptz NOT NULL,
-  updated_at timestamptz NOT NULL,
-  UNIQUE(memory_key, tenant_id, user_id, agent_id, version)
+  replaces_id text, replaced_by_id text,
+  observation_count integer NOT NULL DEFAULT 1, last_observed_at timestamptz,
+  access_count integer NOT NULL DEFAULT 0, last_accessed_at timestamptz,
+  created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL
 );
 CREATE TABLE IF NOT EXISTS memory_relations (
   id bigserial PRIMARY KEY, source_id text NOT NULL, target_id text NOT NULL,
@@ -89,8 +92,25 @@ CREATE TABLE IF NOT EXISTS memory_processing_tasks (
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_model text;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_version text;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_dimension integer;
+ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS entity_id text;
+ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS attribute text;
+ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS schema_version integer NOT NULL DEFAULT 1;
+ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS observation_count integer NOT NULL DEFAULT 1;
+ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS last_observed_at timestamptz;
+UPDATE memory_items SET
+  entity_id=split_part(memory_key, ':', 2),
+  attribute=split_part(memory_key, ':', 3)
+WHERE entity_id IS NULL OR attribute IS NULL;
+ALTER TABLE memory_items ALTER COLUMN entity_id SET NOT NULL;
+ALTER TABLE memory_items ALTER COLUMN attribute SET NOT NULL;
+ALTER TABLE memory_items DROP CONSTRAINT IF EXISTS
+  memory_items_memory_key_tenant_id_user_id_agent_id_version_key;
+CREATE UNIQUE INDEX IF NOT EXISTS memory_items_scope_identity_version_uidx
+  ON memory_items (
+    tenant_id, department_id, user_id, agent_id, type, entity_id, attribute, version
+  ) NULLS NOT DISTINCT;
 CREATE INDEX IF NOT EXISTS memory_items_scope_active_idx
-  ON memory_items (tenant_id, user_id, agent_id, status);
+  ON memory_items (tenant_id, department_id, user_id, agent_id, status);
 CREATE INDEX IF NOT EXISTS memory_events_status_idx ON memory_events (status);
 CREATE INDEX IF NOT EXISTS memory_relations_source_idx
   ON memory_relations (source_id, relation_type);
@@ -266,11 +286,17 @@ class PostgresMemoryRepository(MemoryRepository):
             "SELECT * FROM memory_items WHERE id=%s", (memory_id,), "item"
         )
 
-    def find_latest(self, memory_key, tenant_id, user_id, agent_id):
+    def find_latest(self, scope, identity):
         return self._fetch_object(
-            "SELECT * FROM memory_items WHERE memory_key=%s AND tenant_id=%s "
-            "AND user_id=%s AND agent_id=%s ORDER BY version DESC LIMIT 1",
-            (memory_key, tenant_id, user_id, agent_id), "item",
+            "SELECT * FROM memory_items WHERE tenant_id=%s "
+            "AND department_id IS NOT DISTINCT FROM %s AND user_id=%s "
+            "AND agent_id=%s AND type=%s AND entity_id=%s AND attribute=%s "
+            "ORDER BY version DESC LIMIT 1",
+            (
+                scope.tenant_id, scope.department_id, scope.user_id, scope.agent_id,
+                identity.type, identity.entity_id, identity.attribute,
+            ),
+            "item",
         )
 
     def search(self, request, query_embedding=None):
@@ -329,9 +355,8 @@ class PostgresMemoryRepository(MemoryRepository):
 
     @staticmethod
     def _scope_query(sql, values, request):
-        if request.department_id is not None:
-            sql += " AND department_id=%s"
-            values.append(request.department_id)
+        sql += " AND department_id IS NOT DISTINCT FROM %s"
+        values.append(request.department_id)
         if request.types:
             sql += " AND type = ANY(%s)"
             values.append(request.types)
@@ -382,11 +407,17 @@ class PostgresMemoryRepository(MemoryRepository):
             (memory_id, request.trace_id, request.user_id, request.agent_id, request.query),
         )
 
-    def list_versions(self, memory_key, tenant_id, user_id, agent_id):
+    def list_versions(self, scope, identity):
         return self._fetch_objects(
-            "SELECT * FROM memory_items WHERE memory_key=%s AND tenant_id=%s "
-            "AND user_id=%s AND agent_id=%s ORDER BY version",
-            (memory_key, tenant_id, user_id, agent_id), "item",
+            "SELECT * FROM memory_items WHERE tenant_id=%s "
+            "AND department_id IS NOT DISTINCT FROM %s AND user_id=%s "
+            "AND agent_id=%s AND type=%s AND entity_id=%s AND attribute=%s "
+            "ORDER BY version",
+            (
+                scope.tenant_id, scope.department_id, scope.user_id, scope.agent_id,
+                identity.type, identity.entity_id, identity.attribute,
+            ),
+            "item",
         )
 
     def update_processing_task(self, event_id, stage, status, error=None):
@@ -404,18 +435,23 @@ class PostgresMemoryRepository(MemoryRepository):
             self._validate_embedding(item.embedding)
         cursor.execute(
             """INSERT INTO memory_items
-            (id,memory_key,type,content,embedding,importance,confidence,source,tenant_id,
+            (id,memory_key,type,entity_id,attribute,schema_version,content,
+             embedding,importance,confidence,source,tenant_id,
              embedding_model,embedding_version,embedding_dimension,
              department_id,user_id,agent_id,version,status,replaces_id,replaced_by_id,
-             access_count,last_accessed_at,created_at,updated_at)
-            VALUES (%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+             observation_count,last_observed_at,access_count,last_accessed_at,
+             created_at,updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                    %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (
-                item.id, item.memory_key, item.type, json.dumps(item.content),
-                item.embedding, item.importance, item.confidence, item.source,
+                item.id, item.memory_key, item.type, item.entity_id, item.attribute,
+                item.schema_version, json.dumps(item.content), item.embedding,
+                item.importance, item.confidence, item.source,
                 item.tenant_id, item.embedding_model, item.embedding_version,
                 item.embedding_dimension, item.department_id, item.user_id, item.agent_id,
                 item.version, item.status, item.replaces_id, item.replaced_by_id,
-                item.access_count, item.last_accessed_at, item.created_at, item.updated_at,
+                item.observation_count, item.last_observed_at, item.access_count,
+                item.last_accessed_at, item.created_at, item.updated_at,
             ),
         )
 

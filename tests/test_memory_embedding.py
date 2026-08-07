@@ -70,6 +70,7 @@ class HybridRepository:
 def item(identifier):
     return MemoryItem(
         id=identifier, memory_key=f"customer:{identifier}:fact", type="customer",
+        entity_id=identifier, attribute="fact",
         content=identifier, embedding=[1.0, 0.0], importance=0.8,
         confidence=0.9, source="test", tenant_id="tenant", department_id=None,
         user_id="user", agent_id="sales_agent",

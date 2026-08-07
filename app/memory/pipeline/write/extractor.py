@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from typing import Any
 import json
 
+from app.memory.models.identity import MemoryIdentity
+
 
 @dataclass
 class MemoryCandidate:
@@ -23,6 +25,10 @@ class MemoryCandidate:
     @property
     def memory_key(self):
         return f"{self.type}:{self.entity_id}:{self.attribute}"
+
+    @property
+    def identity(self):
+        return MemoryIdentity(self.type, self.entity_id, self.attribute)
 
 
 class MemoryExtractor:

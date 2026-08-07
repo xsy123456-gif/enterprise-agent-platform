@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from typing import Any
 import uuid
 
+from app.memory.models.scope import MemoryScope
+
 
 def utc_now():
     return datetime.now(timezone.utc)
@@ -33,6 +35,13 @@ class MemoryEvent:
     created_at: datetime = field(default_factory=utc_now)
     processed_at: datetime | None = None
     error: str | None = None
+
+    @property
+    def scope(self):
+        return MemoryScope(
+            tenant_id=self.tenant_id, department_id=self.department_id,
+            user_id=self.user_id, agent_id=self.agent_id,
+        )
 
 
 @dataclass(frozen=True)
