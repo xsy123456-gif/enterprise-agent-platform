@@ -46,13 +46,14 @@ class MemoryScopeIdentityTest(unittest.TestCase):
         ))
 
     def test_required_scope_and_identity_fields_reject_empty_values(self):
+        from app.memory.errors import MemoryValidationError
         for field, values in {
             "tenant": ("", "user", "agent", None),
             "user": ("tenant", " ", "agent", None),
             "agent": ("tenant", "user", "", None),
             "department": ("tenant", "user", "agent", " "),
         }.items():
-            with self.subTest(field=field), self.assertRaises(ValueError):
+            with self.subTest(field=field), self.assertRaises(MemoryValidationError):
                 MemoryScope(*values)
         with self.assertRaises(ValueError):
             MemoryIdentity("customer", "", "budget")

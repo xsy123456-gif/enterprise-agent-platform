@@ -97,7 +97,8 @@ class MemorySystemTest(unittest.TestCase):
         self.assertEqual(1, len(versions))
 
     def test_system_has_no_public_service_or_control_bypass(self):
-        self.assertFalse(hasattr(self.system, "client"))
+        self.assertTrue(hasattr(self.system, "client"))
+        self.assertTrue(hasattr(self.system, "runtime"))
         self.assertFalse(hasattr(self.system, "control"))
 
     def test_specific_read_grant_limits_empty_type_query(self):

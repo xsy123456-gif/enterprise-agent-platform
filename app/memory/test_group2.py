@@ -31,7 +31,7 @@ from app.memory.memory_test import _InMemoryRepository, _InMemoryEmbeddingServic
 
 
 def make_request(key, obs="fact", content="x",
-                 entity_id=None, type_id="t", attribute="a",
+                 entity_id=None, type_id="fact", attribute="a",
                  user="u", tenant="tn", agent="ag"):
     principal = MemoryPrincipal(user, tenant, user, agent)
     scope = MemoryScope(tenant, user, agent)

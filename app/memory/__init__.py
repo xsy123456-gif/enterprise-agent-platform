@@ -1,45 +1,70 @@
-from app.memory.api import (
-    MemoryObservation, MemoryPrincipal, MemoryRetrieveRequest,
-    MemorySource, MemorySubmitRequest, MemorySubmitResponse,
+"""Memory — independent enterprise memory subsystem.
+
+Public API (supported, stable):
+  write(request) → MemoryWriteReceipt
+  read(request)  → MemoryReadResult
+
+Composition:
+  system = build_memory_system(...)
+  system.runtime.start()
+  system.client.write(...)
+
+Everything else under app.memory is internal implementation.
+"""
+
+from app.memory.api.models import (
+    MemoryObservation,
+    MemoryPrincipal,
+    MemorySource,
 )
-from app.memory.api.service import MemoryService
-from app.memory.factory import MemoryClient as Memory, MemoryRuntime
-from app.memory.models.context import MemoryContext, MemoryReference
+from app.memory.api.public_models import (
+    MemoryReadRequest,
+    MemoryReadResult,
+    MemoryRecord,
+    MemoryWriteReceipt,
+    MemoryWriteRequest,
+)
+from app.memory.api.type_registry import MemoryType
+from app.memory.errors import (
+    MemoryAccessDenied,
+    MemoryError,
+    MemoryValidationError,
+)
+from app.memory.factory import (
+    MemoryClient,
+    MemoryRuntime,
+    MemorySystem,
+    build_memory_system,
+)
 from app.memory.models.scope import MemoryScope
 from app.memory.ports.authorization import (
     AllowAllMemoryAuthorizationProvider,
     DenyByDefaultMemoryAuthorizationProvider,
     MemoryAuthorizationProvider,
-    MemoryReadGrant,
 )
-from app.memory.ports.text_model import MemoryTextModel
-from app.memory.errors import (
-    MemoryAccessDenied,
-    MemoryError,
-    MemoryInvariantViolation,
-    MemoryValidationError,
-)
+
+Memory = MemoryClient
 
 __all__ = [
     "Memory",
+    "MemoryClient",
+    "MemorySystem",
     "MemoryRuntime",
-    "MemoryContext",
-    "MemoryReference",
+    "build_memory_system",
+    "MemoryWriteRequest",
+    "MemoryWriteReceipt",
+    "MemoryReadRequest",
+    "MemoryReadResult",
+    "MemoryRecord",
     "MemoryObservation",
     "MemoryPrincipal",
-    "MemoryRetrieveRequest",
-    "MemoryScope",
-    "MemoryService",
     "MemorySource",
-    "MemorySubmitRequest",
-    "MemorySubmitResponse",
+    "MemoryScope",
+    "MemoryType",
+    "MemoryError",
+    "MemoryValidationError",
+    "MemoryAccessDenied",
     "MemoryAuthorizationProvider",
-    "MemoryReadGrant",
     "AllowAllMemoryAuthorizationProvider",
     "DenyByDefaultMemoryAuthorizationProvider",
-    "MemoryTextModel",
-    "MemoryAccessDenied",
-    "MemoryError",
-    "MemoryInvariantViolation",
-    "MemoryValidationError",
 ]

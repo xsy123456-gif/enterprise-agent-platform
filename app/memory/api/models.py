@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.memory.errors import MemoryValidationError
 from app.memory.models.scope import MemoryScope
 
 
@@ -22,7 +23,7 @@ class MemoryPrincipal:
         for name in ("subject_id", "tenant_id", "user_id", "agent_id"):
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
-                raise ValueError(f"{name} is required")
+                raise MemoryValidationError(f"{name} is required")
             object.__setattr__(self, name, value.strip())
 
 
@@ -33,9 +34,9 @@ class MemorySource:
 
     def __post_init__(self):
         if not isinstance(self.kind, str) or not self.kind.strip():
-            raise ValueError("Memory source kind is required")
+            raise MemoryValidationError("Memory source kind is required")
         if not isinstance(self.source_id, str) or not self.source_id.strip():
-            raise ValueError("Memory source source_id is required")
+            raise MemoryValidationError("Memory source source_id is required")
 
 
 @dataclass(frozen=True)
@@ -47,9 +48,9 @@ class MemoryObservation:
 
     def __post_init__(self):
         if not isinstance(self.kind, str) or not self.kind.strip():
-            raise ValueError("Memory observation kind is required")
+            raise MemoryValidationError("Memory observation kind is required")
         if not isinstance(self.metadata, dict):
-            raise ValueError("Memory observation metadata must be a dict")
+            raise MemoryValidationError("Memory observation metadata must be a dict")
 
 
 @dataclass(frozen=True)
@@ -64,15 +65,15 @@ class MemorySubmitRequest:
 
     def __post_init__(self):
         if not self.idempotency_key:
-            raise ValueError("idempotency_key is required")
+            raise MemoryValidationError("idempotency_key is required")
         if len(self.idempotency_key) > MAX_IDEMPOTENCY_KEY_LENGTH:
-            raise ValueError(
+            raise MemoryValidationError(
                 f"idempotency_key exceeds max length of {MAX_IDEMPOTENCY_KEY_LENGTH}"
             )
         if not self.observations:
-            raise ValueError("observations are required")
+            raise MemoryValidationError("observations are required")
         if len(self.observations) > MAX_OBSERVATIONS:
-            raise ValueError(
+            raise MemoryValidationError(
                 f"observations exceeds max of {MAX_OBSERVATIONS}"
             )
         if (
@@ -80,7 +81,7 @@ class MemorySubmitRequest:
             or self.principal.user_id != self.scope.user_id
             or self.principal.agent_id != self.scope.agent_id
         ):
-            raise ValueError("principal and scope do not describe the same subject")
+            raise MemoryValidationError("principal and scope do not describe the same subject")
 
 
 @dataclass(frozen=True)
@@ -94,15 +95,15 @@ class MemoryRetrieveRequest:
 
     def __post_init__(self):
         if len(self.query) > MAX_QUERY_LENGTH:
-            raise ValueError(f"query exceeds max length of {MAX_QUERY_LENGTH}")
+            raise MemoryValidationError(f"query exceeds max length of {MAX_QUERY_LENGTH}")
         if self.limit < MIN_LIMIT or self.limit > MAX_LIMIT:
-            raise ValueError(f"limit must be between {MIN_LIMIT} and {MAX_LIMIT}")
+            raise MemoryValidationError(f"limit must be between {MIN_LIMIT} and {MAX_LIMIT}")
         if (
             self.principal.tenant_id != self.scope.tenant_id
             or self.principal.user_id != self.scope.user_id
             or self.principal.agent_id != self.scope.agent_id
         ):
-            raise ValueError("principal and scope do not describe the same subject")
+            raise MemoryValidationError("principal and scope do not describe the same subject")
         deduped = list(dict.fromkeys(self.types))
         if len(deduped) != len(self.types):
             object.__setattr__(self, "types", deduped)
@@ -117,4 +118,14 @@ class MemorySubmitResponse:
     accepted: bool
     event_id: str
     status: str
+
+
+# ── Public API aliases (Group 3) ─────────────────────────────────
+
+# Write
+MemoryWriteRequest = MemorySubmitRequest
+MemoryWriteReceipt = MemorySubmitResponse
+
+# Read
+MemoryReadRequest = MemoryRetrieveRequest
 

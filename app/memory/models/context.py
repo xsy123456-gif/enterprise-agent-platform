@@ -20,3 +20,9 @@ class MemoryReference:
 class MemoryContext:
     summary: str = ""
     references: list[MemoryReference] = field(default_factory=list)
+
+
+# ── Public API aliases (Group 3) ─────────────────────────────────
+
+MemoryRecord = MemoryReference
+MemoryReadResult = MemoryContext

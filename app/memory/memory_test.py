@@ -404,13 +404,14 @@ class MemorySealTest(unittest.TestCase):
             principal=principal, scope=scope,
             query="张三的职业是什么？", types=["person"],
         )
-        context = system.read(read_request)
+        context = system.read(read_request) if hasattr(system, "read") else system.retrieve(read_request)
         self.assertIsNotNone(context.summary)
-        self.assertGreaterEqual(len(context.references), 1,
+        records = getattr(context, "records", getattr(context, "references", []))
+        self.assertGreaterEqual(len(records), 1,
                                 "read back must find the persisted memory item")
         found_engineer = False
-        for ref in context.references:
-            content_str = json.dumps(ref.content, ensure_ascii=False) if ref.content is not None else ""
+        for rec in records:
+            content_str = json.dumps(rec.content, ensure_ascii=False) if rec.content is not None else ""
             if "工程师" in content_str:
                 found_engineer = True
                 break
@@ -433,7 +434,7 @@ class MemorySealTest(unittest.TestCase):
             source=MemorySource("test", "clr-1"),
             observations=[MemoryObservation("fact", "x")],
             metadata={"memory_candidates": [{
-                "type": "t", "entity_id": "e", "attribute": "a",
+                "type": "fact", "entity_id": "e", "attribute": "a",
                 "content": "x", "confidence": 0.9,
                 "business_value": 0.9, "stability": 0.9,
                 "explicitness": 1.0, "future_usefulness": 0.9,
@@ -468,7 +469,7 @@ class MemorySealTest(unittest.TestCase):
             source=MemorySource("test", "rw-1"),
             observations=[MemoryObservation("fact", "x")],
             metadata={"memory_candidates": [{
-                "type": "t", "entity_id": "e", "attribute": "a",
+                "type": "fact", "entity_id": "e", "attribute": "a",
                 "content": "x", "confidence": 0.9,
                 "business_value": 0.9, "stability": 0.9,
                 "explicitness": 1.0, "future_usefulness": 0.9,
@@ -502,7 +503,7 @@ class MemorySealTest(unittest.TestCase):
             source=MemorySource("test", "rj-1"),
             observations=[MemoryObservation("fact", "x")],
             metadata={"memory_candidates": [{
-                "type": "t", "entity_id": "e", "attribute": "a",
+                "type": "fact", "entity_id": "e", "attribute": "a",
                 "content": "x", "confidence": 0.9,
                 "business_value": 0.9, "stability": 0.9,
                 "explicitness": 1.0, "future_usefulness": 0.9,
@@ -532,7 +533,7 @@ class MemorySealTest(unittest.TestCase):
             source=MemorySource("test", "exp-1"),
             observations=[MemoryObservation("fact", "x")],
             metadata={"memory_candidates": [{
-                "type": "t", "entity_id": "e", "attribute": "a",
+                "type": "fact", "entity_id": "e", "attribute": "a",
                 "content": "x", "confidence": 0.9,
                 "business_value": 0.9, "stability": 0.9,
                 "explicitness": 1.0, "future_usefulness": 0.9,

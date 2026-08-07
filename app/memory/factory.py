@@ -31,57 +31,105 @@ from app.memory.worker.event_worker import MemoryWorker
 
 
 class MemoryClient:
-    """The only interface Agent/Application sees: read/write.
+    """Public Memory API — read() and write() only.
 
-    Backward-compat aliases: retrieve() and submit().
+    Internal implementation delegates to MemoryService via mappers.
     """
 
-    def __init__(self, service: MemoryService, worker: MemoryWorker):
+    def __init__(self, service: MemoryService):
         self._service = service
-        self._worker = worker
 
     def read(self, request):
-        return self._service.retrieve(request)
+        from app.memory.api.mappers import from_context, to_retrieve_request
+        internal = to_retrieve_request(request)
+        context = self._service.retrieve(internal)
+        return from_context(context)
 
     def write(self, request):
+        from app.memory.api.mappers import from_submit_response, to_submit_request
+        internal = to_submit_request(request)
+        response = self._service.submit(internal)
+        return from_submit_response(response)
+
+    # ── deprecated backward-compat aliases ──
+
+    def retrieve(self, request):
+        import warnings
+        warnings.warn("retrieve() is internal; use read()", DeprecationWarning, stacklevel=2)
+        return self._service.retrieve(request)
+
+    def submit(self, request):
+        import warnings
+        warnings.warn("submit() is internal; use write()", DeprecationWarning, stacklevel=2)
         return self._service.submit(request)
-
-    retrieve = read
-    submit = write
-
-
-MemorySystem = MemoryClient  # backward-compat alias
 
 
 class MemoryRuntime:
-    """Composition Root controls lifecycle: start, stop, health."""
+    """Lifecycle controller — start, stop, health. NOT part of the Agent API."""
 
     def __init__(self, worker: MemoryWorker):
         self._worker = worker
+        self.running = False
 
     def start(self):
+        if self.running:
+            return
         self._worker.start()
+        self.running = True
 
     def stop(self, timeout=None):
-        return self._worker.stop(timeout)
+        if not self.running:
+            return False
+        result = self._worker.stop(timeout)
+        if result:
+            self.running = False
+        return result
 
     def health(self):
         return self._worker.health()
+
+
+@dataclass(frozen=True)
+class MemorySystem:
+    """Built Memory subsystem — client for Agent, runtime for Composition Root."""
+    client: MemoryClient
+    runtime: MemoryRuntime
+
+    # ── proxy to client (backward-compat) ──
+    @property
+    def _worker(self):
+        return self.runtime._worker
+
+    @property
+    def _service(self):
+        return self.client._service
+
+    def read(self, request):
+        return self.client.read(request)
+
+    def write(self, request):
+        return self.client.write(request)
+
+    def retrieve(self, request):
+        return self.client.retrieve(request)
+
+    def submit(self, request):
+        return self.client.submit(request)
+
+
+Memory = MemoryClient  # convenience alias
 
 
 def build_memory_system(
     repository=None, embedding_service=None, extractor=None, compressor=None,
     duplicate_judge=None, authorization_provider: MemoryAuthorizationProvider = None,
     event_sink: MemoryEventSink = None, config=None, text_model=None,
-    async_mode=True,
+    async_mode=False,
 ):
-    """Build Memory with only Memory ports and dependencies.
+    """Build Memory. Returns MemorySystem(client, runtime).
 
-    Platform adapters (Runtime state, EventBus, audit) belong outside this factory.
-    A production composition root must explicitly provide authorization_provider.
-
-    Returns MemoryClient with .read() / .write() (and .retrieve() / .submit() aliases).
-    Access ._runtime on the client for MemoryRuntime lifecycle control.
+    The factory does NOT auto-start the worker.
+    Call system.runtime.start() explicitly.
     """
     if authorization_provider is None:
         raise ValueError("authorization_provider is required; choose an explicit policy")
@@ -120,11 +168,9 @@ def build_memory_system(
     worker = MemoryWorker(
         repository, write_pipeline, event_sink=event_sink, claim_limit=1,
     )
-    client = MemoryClient(service, worker)
-    client._runtime = MemoryRuntime(worker)
-    if async_mode:
-        worker.start()
-    return client
+    client = MemoryClient(service)
+    runtime = MemoryRuntime(worker)
+    return MemorySystem(client=client, runtime=runtime)
 
 
 def _repository_from_environment(config=None):
