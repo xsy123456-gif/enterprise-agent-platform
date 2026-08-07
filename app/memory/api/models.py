@@ -60,7 +60,7 @@ class MemorySubmitRequest:
             raise ValueError("principal and scope do not describe the same subject")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class MemoryRetrieveRequest:
     principal: MemoryPrincipal
     scope: MemoryScope
@@ -68,6 +68,22 @@ class MemoryRetrieveRequest:
     types: list[str] = field(default_factory=list)
     limit: int = 10
     trace_id: str = ""
+
+    def __init__(self, principal=None, scope=None, query="", types=None,
+                 limit=10, trace_id="", *, user_id=None, agent_id=None,
+                 tenant_id=None, department_id=None):
+        if principal is None or scope is None:
+            if not all((tenant_id, user_id, agent_id)):
+                raise ValueError("principal and scope are required")
+            principal = MemoryPrincipal(user_id, tenant_id, user_id, agent_id)
+            scope = MemoryScope(tenant_id, user_id, agent_id, department_id)
+        object.__setattr__(self, "principal", principal)
+        object.__setattr__(self, "scope", scope)
+        object.__setattr__(self, "query", query)
+        object.__setattr__(self, "types", list(types or ()))
+        object.__setattr__(self, "limit", limit)
+        object.__setattr__(self, "trace_id", trace_id)
+        self.__post_init__()
 
     def __post_init__(self):
         if self.limit < 1:
