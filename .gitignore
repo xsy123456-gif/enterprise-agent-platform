@@ -1,7 +1,38 @@
-.venv/
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+
+# Virtual environment
+.venv/
+venv/
+
+# Environment
 .env
+.env.*
+
+# IDE
 .vscode/
 .idea/
+
+# OS
+.DS_Store
+
+# Logs
 *.log
+
+# Database
+*.sqlite
+*.db
+
+# Test artifacts
+.coverage
+.pytest_cache/
+
+# Model cache
+models/
+*.bin
+*.safetensors
+
+# Runtime
+tmp/
