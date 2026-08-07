@@ -4,11 +4,13 @@ import uuid
 from contextlib import redirect_stdout
 from datetime import datetime, timezone
 from io import StringIO
+from threading import Barrier, Lock, Thread
 
 from psycopg.errors import UniqueViolation
 
 from app.events.bus import EventBus
 from app.main import build_runtime
+from app.memory.errors import ConcurrentMemoryWrite
 from app.memory.api.models import MemoryEventRequest, MemoryRetrieveRequest
 from app.memory.factory import build_memory_system
 from app.memory.models.event import MemoryEvent, MemoryEventStatus
@@ -217,6 +219,59 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         self.repository.create_item(first)
         with self.assertRaises(UniqueViolation):
             self.repository.create_item(second)
+
+    def test_concurrent_commits_allocate_unique_versions_and_one_active_head(self):
+        identity = self.identity(attribute="concurrent_budget")
+        scope = self.scope()
+        barrier = Barrier(2)
+        errors = []
+        committed = []
+        result_lock = Lock()
+
+        def commit(amount, vector_index):
+            item = self.make_item(
+                identity.memory_key, amount, self.vector(vector_index)
+            )
+            try:
+                active = self.repository.find_active_head(scope, identity)
+                barrier.wait(timeout=5)
+                for _ in range(3):
+                    relations = (
+                        [(active.id, "REPLACES")] if active is not None else []
+                    )
+                    try:
+                        self.repository.commit_resolution(
+                            item,
+                            expected_active_head_id=(active.id if active else None),
+                            relations=relations,
+                        )
+                        with result_lock:
+                            committed.append(item.id)
+                        return
+                    except ConcurrentMemoryWrite:
+                        active = self.repository.find_active_head(scope, identity)
+                raise AssertionError("concurrent commit did not stabilize")
+            except Exception as error:
+                with result_lock:
+                    errors.append(error)
+
+        threads = [
+            Thread(target=commit, args=(100, 0)),
+            Thread(target=commit, args=(120, 1)),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+
+        self.assertFalse(errors)
+        self.assertEqual(2, len(committed))
+        versions = self.repository.list_versions(scope, identity)
+        self.assertEqual([1, 2], [item.version for item in versions])
+        self.assertEqual({100, 120}, {item.content for item in versions})
+        self.assertEqual(1, sum(
+            item.status == MemoryItemStatus.ACTIVE for item in versions
+        ))
 
     def test_sql_retrieve_writes_access_log_without_realtime_counter(self):
         item = self.make_item(

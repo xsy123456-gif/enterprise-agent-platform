@@ -2,6 +2,7 @@ import json
 import unittest
 from contextlib import redirect_stdout
 from io import StringIO
+from threading import Barrier, Thread, local
 
 from app.events.bus import EventBus
 from app.events.models import Event
@@ -166,6 +167,60 @@ class MemorySystemTest(unittest.TestCase):
         self.assertEqual(versions[0].id, consumer.repository.find_active_head(
             scope, identity
         ).id)
+
+    def test_concurrent_pipeline_writes_retry_without_duplicate_versions(self):
+        class CoordinatedRepository(TestMemoryRepository):
+            def __init__(self):
+                super().__init__()
+                self.barrier = Barrier(2)
+                self.thread_state = local()
+
+            def find_active_head(self, scope, identity):
+                head = super().find_active_head(scope, identity)
+                if head is None and not getattr(self.thread_state, "synchronized", False):
+                    self.thread_state.synchronized = True
+                    self.barrier.wait(timeout=5)
+                return head
+
+        repository = CoordinatedRepository()
+        embedding = TestEmbeddingService(mapping={
+            "first": [1.0, 0.0, 0.0],
+            "second": [0.0, 1.0, 0.0],
+        })
+        systems = []
+        for _ in range(2):
+            bus = EventBus()
+            systems.append(build_memory_system(
+                StubLLM(), bus, extractor=StructuredMemoryExtractor(),
+                async_mode=False, repository=repository,
+                embedding_service=embedding,
+            )[0])
+        errors = []
+
+        def submit(service, value):
+            try:
+                with redirect_stdout(StringIO()):
+                    service.submit(self.request(value))
+            except Exception as error:
+                errors.append(error)
+
+        threads = [
+            Thread(target=submit, args=(systems[0], "first")),
+            Thread(target=submit, args=(systems[1], "second")),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=10)
+        self.assertFalse(errors)
+        scope = MemoryScope("tenant-1", "user-1", "sales_agent", "sales")
+        identity = MemoryIdentity("customer", "customer_a", "budget")
+        versions = repository.list_versions(scope, identity)
+        self.assertEqual([1, 2], [item.version for item in versions])
+        self.assertEqual({"first", "second"}, {item.content for item in versions})
+        self.assertEqual(1, sum(
+            item.status == MemoryItemStatus.ACTIVE for item in versions
+        ))
 
     def test_governance_denies_read_and_write(self):
         deny_read = MemoryGovernancePolicy(read_rule=lambda request: False)

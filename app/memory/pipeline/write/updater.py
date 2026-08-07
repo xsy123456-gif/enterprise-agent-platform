@@ -12,9 +12,6 @@ class MemoryUpdater:
                 existing.id, event.event_id, "MERGED_FROM"
             )
             return existing, False
-        version = self.repository.get_latest_version(
-            event.scope, candidate.identity
-        ) + 1
         status = MemoryItemStatus.CONFLICT if resolution == Resolution.CONFLICT else MemoryItemStatus.ACTIVE
         item = MemoryItem(
             memory_key=candidate.memory_key, type=candidate.type,
@@ -27,7 +24,7 @@ class MemoryUpdater:
             embedding_model=candidate.metadata.get("embedding_model"),
             embedding_version=candidate.metadata.get("embedding_version"),
             embedding_dimension=candidate.metadata.get("embedding_dimension"),
-            version=version,
+            version=1,
             status=status, replaces_id=(existing.id if resolution == Resolution.REPLACE else None),
         )
         relations = [(event.event_id, "DERIVED_FROM")]
@@ -35,5 +32,9 @@ class MemoryUpdater:
             relations.append((existing.id, "REPLACES"))
         elif resolution == Resolution.CONFLICT:
             relations.append((existing.id, "CONFLICT_WITH"))
-        self.repository.create_item(item, relations=relations)
+        self.repository.commit_resolution(
+            item,
+            expected_active_head_id=(existing.id if existing else None),
+            relations=relations,
+        )
         return item, True

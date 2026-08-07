@@ -1,9 +1,11 @@
 import json
 
+from app.memory.errors import ConcurrentMemoryWrite, MemoryConcurrencyError
 from app.memory.pipeline.write.resolver import Resolution
 
 
 class WritePipeline:
+    MAX_CONCURRENT_WRITE_ATTEMPTS = 3
     STAGES = (
         "EXTRACTING", "EVALUATING", "NORMALIZING", "PRE_DEDUP",
         "RESOLVING", "FINE_DEDUP", "RANKING", "PERSISTING",
@@ -53,24 +55,35 @@ class WritePipeline:
                 if not self.pre_dedup.accept(event, candidate):
                     continue
                 self.governance.check_write(event, candidate)
-                existing = self.repository.find_active_head(
-                    event.scope, candidate.identity
-                )
-                stage = "RESOLVING"
-                self._stage(event, stage)
-                resolution = self.resolver.resolve(candidate, existing)
-                stage = "FINE_DEDUP"
-                self._stage(event, stage)
-                if self.fine_dedup.is_duplicate(candidate, existing):
-                    resolution = Resolution.UPDATE
-                stage = "RANKING"
-                self._stage(event, stage)
-                importance = self.ranker.rank(candidate)
-                stage = "PERSISTING"
-                self._stage(event, stage)
-                item, created = self.updater.persist(
-                    event, candidate, evaluation, importance, resolution, existing
-                )
+                item = created = resolution = existing = None
+                for attempt in range(self.MAX_CONCURRENT_WRITE_ATTEMPTS):
+                    existing = self.repository.find_active_head(
+                        event.scope, candidate.identity
+                    )
+                    stage = "RESOLVING"
+                    self._stage(event, stage)
+                    resolution = self.resolver.resolve(candidate, existing)
+                    stage = "FINE_DEDUP"
+                    self._stage(event, stage)
+                    if self.fine_dedup.is_duplicate(candidate, existing):
+                        resolution = Resolution.UPDATE
+                    stage = "RANKING"
+                    self._stage(event, stage)
+                    importance = self.ranker.rank(candidate)
+                    stage = "PERSISTING"
+                    self._stage(event, stage)
+                    try:
+                        item, created = self.updater.persist(
+                            event, candidate, evaluation, importance,
+                            resolution, existing,
+                        )
+                        break
+                    except ConcurrentMemoryWrite as error:
+                        if attempt + 1 == self.MAX_CONCURRENT_WRITE_ATTEMPTS:
+                            raise MemoryConcurrencyError(
+                                "Memory write could not stabilize after "
+                                f"{self.MAX_CONCURRENT_WRITE_ATTEMPTS} attempts"
+                            ) from error
                 results.append(item)
                 event_type = (
                     "memory.conflict" if resolution == Resolution.CONFLICT

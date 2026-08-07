@@ -1,9 +1,9 @@
 from datetime import datetime, timezone
 import json
-from threading import Lock
+from threading import Lock, RLock
 
 from app.memory.embedding.models import EmbeddingResult
-from app.memory.errors import MemoryInvariantViolation
+from app.memory.errors import ConcurrentMemoryWrite, MemoryInvariantViolation
 from app.memory.models.item import MemoryItemStatus
 from app.memory.repository.base import MemoryRepository
 
@@ -20,6 +20,7 @@ class TestMemoryRepository(MemoryRepository):
         self.relations = []
         self.access_logs = []
         self.processing_tasks = {}
+        self._commit_lock = RLock()
 
     def save_event(self, event):
         self.events[event.event_id] = event
@@ -56,6 +57,17 @@ class TestMemoryRepository(MemoryRepository):
                 old.replaced_by_id = item.id
                 old.updated_at = datetime.now(timezone.utc)
         return item
+
+    def commit_resolution(self, item, expected_active_head_id, relations=None):
+        with self._commit_lock:
+            current = self.find_active_head(item.scope, item.identity)
+            current_id = current.id if current else None
+            if current_id != expected_active_head_id:
+                raise ConcurrentMemoryWrite(
+                    "ACTIVE head changed while committing Memory"
+                )
+            item.version = self.get_latest_version(item.scope, item.identity) + 1
+            return self.create_item(item, relations=relations)
 
     def get_item(self, memory_id):
         return self.items.get(memory_id)

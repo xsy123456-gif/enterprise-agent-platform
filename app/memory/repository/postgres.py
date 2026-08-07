@@ -1,6 +1,6 @@
 import json
 
-from app.memory.errors import MemoryInvariantViolation
+from app.memory.errors import ConcurrentMemoryWrite, MemoryInvariantViolation
 from app.memory.repository.base import MemoryRepository
 
 
@@ -278,21 +278,52 @@ class PostgresMemoryRepository(MemoryRepository):
     def create_item(self, item, relations=None):
         with self.connection_factory() as connection:
             with connection.cursor() as cursor:
-                for target_id, relation_type in relations or []:
-                    if relation_type == "REPLACES":
-                        cursor.execute(
-                            "UPDATE memory_items SET status='replaced',replaced_by_id=%s,"
-                            "updated_at=now() WHERE id=%s AND status='active'",
-                            (item.id, target_id),
-                        )
-                self._insert_item(cursor, item)
-                for target_id, relation_type in relations or []:
-                    self._validate_relation_type(relation_type)
-                    cursor.execute(
-                        "INSERT INTO memory_relations(source_id,target_id,relation_type) "
-                        "VALUES(%s,%s,%s)",
-                        (item.id, target_id, relation_type),
+                self._write_item(cursor, item, relations)
+        return item
+
+    def commit_resolution(self, item, expected_active_head_id, relations=None):
+        lock_key = json.dumps([
+            item.tenant_id, item.department_id, item.user_id, item.agent_id,
+            item.type, item.entity_id, item.attribute,
+        ], ensure_ascii=False, separators=(",", ":"))
+        with self.connection_factory() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (lock_key,),
+                )
+                cursor.execute(
+                    "SELECT id FROM memory_items WHERE tenant_id=%s "
+                    "AND department_id IS NOT DISTINCT FROM %s AND user_id=%s "
+                    "AND agent_id=%s AND type=%s AND entity_id=%s "
+                    "AND attribute=%s AND status='active' FOR UPDATE",
+                    (
+                        item.tenant_id, item.department_id, item.user_id,
+                        item.agent_id, item.type, item.entity_id, item.attribute,
+                    ),
+                )
+                active_rows = cursor.fetchall()
+                if len(active_rows) > 1:
+                    raise MemoryInvariantViolation(
+                        "Memory scope and identity have multiple ACTIVE heads"
                     )
+                current_active_id = active_rows[0][0] if active_rows else None
+                if current_active_id != expected_active_head_id:
+                    raise ConcurrentMemoryWrite(
+                        "ACTIVE head changed while committing Memory"
+                    )
+                cursor.execute(
+                    "SELECT COALESCE(MAX(version),0) FROM memory_items "
+                    "WHERE tenant_id=%s AND department_id IS NOT DISTINCT FROM %s "
+                    "AND user_id=%s AND agent_id=%s AND type=%s "
+                    "AND entity_id=%s AND attribute=%s",
+                    (
+                        item.tenant_id, item.department_id, item.user_id,
+                        item.agent_id, item.type, item.entity_id, item.attribute,
+                    ),
+                )
+                item.version = int(cursor.fetchone()[0]) + 1
+                self._write_item(cursor, item, relations)
         return item
 
     def get_item(self, memory_id):
@@ -486,6 +517,27 @@ class PostgresMemoryRepository(MemoryRepository):
                 item.last_accessed_at, item.created_at, item.updated_at,
             ),
         )
+
+    def _write_item(self, cursor, item, relations):
+        for target_id, relation_type in relations or []:
+            self._validate_relation_type(relation_type)
+            if relation_type == "REPLACES":
+                cursor.execute(
+                    "UPDATE memory_items SET status='replaced',replaced_by_id=%s,"
+                    "updated_at=now() WHERE id=%s AND status='active'",
+                    (item.id, target_id),
+                )
+                if cursor.rowcount != 1:
+                    raise ConcurrentMemoryWrite(
+                        "Expected ACTIVE head is no longer replaceable"
+                    )
+        self._insert_item(cursor, item)
+        for target_id, relation_type in relations or []:
+            cursor.execute(
+                "INSERT INTO memory_relations(source_id,target_id,relation_type) "
+                "VALUES(%s,%s,%s)",
+                (item.id, target_id, relation_type),
+            )
 
     def _validate_embedding(self, embedding):
         if len(embedding) != self.embedding_dimension:

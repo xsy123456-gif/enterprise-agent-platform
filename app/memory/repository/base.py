@@ -15,6 +15,11 @@ class MemoryRepository(ABC):
     def create_item(self, item, relations=None): pass
 
     @abstractmethod
+    def commit_resolution(
+        self, item, expected_active_head_id, relations=None
+    ): pass
+
+    @abstractmethod
     def get_item(self, memory_id): pass
 
     @abstractmethod
