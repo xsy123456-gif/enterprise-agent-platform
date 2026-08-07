@@ -10,7 +10,7 @@ from app.memory.models.item import MemoryItemStatus
 from app.memory.models.scope import MemoryScope
 from app.memory.pipeline.write.extractor import StructuredMemoryExtractor
 from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
-from tests.memory_repository import TestEmbeddingService, TestMemoryRepository
+from app.memory.test_repository import TestEmbeddingService, TestMemoryRepository
 
 
 def candidate(content, confidence=0.9, type_id="customer", **metadata):

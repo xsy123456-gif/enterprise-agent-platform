@@ -13,7 +13,7 @@ from app.registry.storage import InMemoryAgentRepository
 from app.runtime.action import AgentAction
 from app.runtime.context import AgentContext
 from app.runtime.engine import RuntimeEngine
-from tests.memory_repository import TestEmbeddingService, TestMemoryRepository
+from app.memory.test_repository import TestEmbeddingService, TestMemoryRepository
 
 
 class StubAgent:

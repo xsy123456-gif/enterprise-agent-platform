@@ -46,7 +46,7 @@ REQUIRED_COLUMNS = {
     "memory_outbox": {
         "id", "event_type", "aggregate_id", "payload", "status", "attempt_count",
         "available_at", "created_at", "published_at", "last_error",
-        "locked_by", "lease_until",
+        "locked_by", "lease_until", "lock_token",
     },
 }
 RELATION_TYPES = {"REPLACES", "DERIVED_FROM", "MERGED_FROM", "CONFLICT_WITH"}
@@ -65,19 +65,43 @@ CREATE TABLE IF NOT EXISTS memory_events (
   agent_id text NOT NULL, user_id text NOT NULL, tenant_id text NOT NULL,
   department_id text, event_type text NOT NULL, input jsonb NOT NULL,
   output jsonb NOT NULL, tool_results jsonb NOT NULL, metadata jsonb NOT NULL,
-  status text NOT NULL CHECK (status IN ('received','processing','retry_wait','processed','rejected','dead_letter')),
-  error text, idempotency_key text, attempt_count integer NOT NULL DEFAULT 0,
+  status text NOT NULL, error text, idempotency_key text,
+  attempt_count integer NOT NULL DEFAULT 0,
   next_attempt_at timestamptz, locked_by text, lease_until timestamptz,
-  error_code text, lock_token text, created_at timestamptz NOT NULL, processed_at timestamptz
+  error_code text, lock_token text, created_at timestamptz NOT NULL,
+  processed_at timestamptz,
+  CONSTRAINT memory_events_status_check CHECK (
+    status IN ('received','processing','retry_wait','processed','rejected','dead_letter')
+  ),
+  CONSTRAINT memory_events_attempt_check CHECK (attempt_count >= 0),
+  CONSTRAINT memory_events_processing_lease_check CHECK (
+    (status = 'processing'
+     AND locked_by IS NOT NULL
+     AND lock_token IS NOT NULL
+     AND lease_until IS NOT NULL)
+    OR
+    (status <> 'processing'
+     AND locked_by IS NULL
+     AND lock_token IS NULL
+     AND lease_until IS NULL)
+  ),
+  CONSTRAINT memory_events_retry_wait_check CHECK (
+    status <> 'retry_wait' OR next_attempt_at IS NOT NULL
+  ),
+  CONSTRAINT memory_events_terminal_check CHECK (
+    status NOT IN ('processed','rejected','dead_letter') OR processed_at IS NOT NULL
+  )
 );
 CREATE TABLE IF NOT EXISTS memory_outbox (
   id text PRIMARY KEY, event_type text NOT NULL, aggregate_id text NOT NULL,
-  payload jsonb NOT NULL,
-  status text NOT NULL DEFAULT 'pending'
-    CHECK (status IN ('pending','processing','published','dead_letter')),
+  payload jsonb NOT NULL, status text NOT NULL DEFAULT 'pending',
   attempt_count integer NOT NULL DEFAULT 0, available_at timestamptz NOT NULL DEFAULT now(),
   created_at timestamptz NOT NULL DEFAULT now(), published_at timestamptz,
-  last_error text, locked_by text, lease_until timestamptz
+  last_error text, locked_by text, lease_until timestamptz, lock_token text,
+  CONSTRAINT memory_outbox_status_check CHECK (
+    status IN ('pending','processing','published','dead_letter')
+  ),
+  CONSTRAINT memory_outbox_attempt_check CHECK (attempt_count >= 0)
 );
 CREATE TABLE IF NOT EXISTS memory_items (
   id text PRIMARY KEY, memory_key text NOT NULL, type text NOT NULL,
@@ -121,15 +145,7 @@ CREATE TABLE IF NOT EXISTS memory_processing_tasks (
   error text, created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-ALTER TABLE memory_events DROP CONSTRAINT IF EXISTS memory_events_status_check;
-ALTER TABLE memory_events ADD CONSTRAINT memory_events_status_check CHECK (
-  status IN ('received','processing','retry_wait','processed','rejected','dead_letter')
-);
-ALTER TABLE memory_events ADD CONSTRAINT memory_events_processing_lease_check CHECK (
-  (status = 'processing' AND locked_by IS NOT NULL AND lease_until IS NOT NULL)
-  OR
-  (status <> 'processing' AND (locked_by IS NULL OR lease_until IS NOT NULL))
-);
+-- Add missing columns first (before constraint repairs that depend on them)
 ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS idempotency_key text;
 ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS attempt_count integer NOT NULL DEFAULT 0;
 ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS next_attempt_at timestamptz;
@@ -137,15 +153,10 @@ ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS locked_by text;
 ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS lease_until timestamptz;
 ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS error_code text;
 ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS lock_token text;
+ALTER TABLE memory_events ADD COLUMN IF NOT EXISTS processed_at timestamptz;
 ALTER TABLE memory_outbox ADD COLUMN IF NOT EXISTS locked_by text;
 ALTER TABLE memory_outbox ADD COLUMN IF NOT EXISTS lease_until timestamptz;
-CREATE UNIQUE INDEX IF NOT EXISTS memory_events_idempotency_uidx
-  ON memory_events (tenant_id, event_type, idempotency_key)
-  WHERE idempotency_key IS NOT NULL;
-CREATE INDEX IF NOT EXISTS memory_events_claim_idx
-  ON memory_events (status, next_attempt_at, lease_until, created_at);
-CREATE INDEX IF NOT EXISTS memory_outbox_dispatch_idx
-  ON memory_outbox (status, available_at, created_at);
+ALTER TABLE memory_outbox ADD COLUMN IF NOT EXISTS lock_token text;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_model text;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_version text;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS embedding_dimension integer;
@@ -158,8 +169,52 @@ ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS attribute text;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS schema_version integer NOT NULL DEFAULT 1;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS observation_count integer NOT NULL DEFAULT 1;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS last_observed_at timestamptz;
-ALTER TABLE memory_items DROP CONSTRAINT IF EXISTS
-  memory_items_memory_key_tenant_id_user_id_agent_id_version_key;
+-- Repair legacy rows (after columns exist)
+UPDATE memory_events SET locked_by=NULL, lease_until=NULL, lock_token=NULL
+  WHERE status <> 'processing'
+    AND (locked_by IS NOT NULL OR lease_until IS NOT NULL OR lock_token IS NOT NULL);
+UPDATE memory_events SET next_attempt_at = COALESCE(next_attempt_at, created_at)
+  WHERE status = 'retry_wait' AND next_attempt_at IS NULL;
+UPDATE memory_events SET processed_at = COALESCE(processed_at, created_at)
+  WHERE status IN ('processed','rejected','dead_letter') AND processed_at IS NULL;
+UPDATE memory_events SET attempt_count = 0 WHERE attempt_count < 0;
+-- Add constraint checks last
+ALTER TABLE memory_events DROP CONSTRAINT IF EXISTS memory_events_status_check;
+ALTER TABLE memory_events ADD CONSTRAINT memory_events_status_check CHECK (
+  status IN ('received','processing','retry_wait','processed','rejected','dead_letter')
+);
+ALTER TABLE memory_events DROP CONSTRAINT IF EXISTS memory_events_attempt_check;
+ALTER TABLE memory_events ADD CONSTRAINT memory_events_attempt_check CHECK (
+  attempt_count >= 0
+);
+ALTER TABLE memory_events DROP CONSTRAINT IF EXISTS memory_events_processing_lease_check;
+ALTER TABLE memory_events ADD CONSTRAINT memory_events_processing_lease_check CHECK (
+  (status = 'processing'
+   AND locked_by IS NOT NULL
+   AND lock_token IS NOT NULL
+   AND lease_until IS NOT NULL)
+  OR
+  (status <> 'processing'
+   AND locked_by IS NULL
+   AND lock_token IS NULL
+   AND lease_until IS NULL)
+);
+ALTER TABLE memory_events DROP CONSTRAINT IF EXISTS memory_events_retry_wait_check;
+ALTER TABLE memory_events ADD CONSTRAINT memory_events_retry_wait_check CHECK (
+  status <> 'retry_wait' OR next_attempt_at IS NOT NULL
+);
+ALTER TABLE memory_events DROP CONSTRAINT IF EXISTS memory_events_terminal_check;
+ALTER TABLE memory_events ADD CONSTRAINT memory_events_terminal_check CHECK (
+  status NOT IN ('processed','rejected','dead_letter') OR processed_at IS NOT NULL
+);
+-- Indexes
+CREATE UNIQUE INDEX IF NOT EXISTS memory_events_idempotency_uidx
+  ON memory_events (tenant_id, event_type, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS memory_events_claim_idx
+  ON memory_events (status, next_attempt_at, lease_until, created_at);
+CREATE INDEX IF NOT EXISTS memory_outbox_dispatch_idx
+  ON memory_outbox (status, available_at, created_at);
 CREATE INDEX IF NOT EXISTS memory_items_scope_active_idx
   ON memory_items (tenant_id, department_id, user_id, agent_id, status);
 CREATE INDEX IF NOT EXISTS memory_events_status_idx ON memory_events (status);
@@ -167,11 +222,12 @@ CREATE INDEX IF NOT EXISTS memory_relations_source_idx
   ON memory_relations (source_id, relation_type);
 CREATE INDEX IF NOT EXISTS memory_access_logs_memory_idx
   ON memory_access_logs (memory_id, created_at DESC);
+ALTER TABLE memory_items DROP CONSTRAINT IF EXISTS
+  memory_items_memory_key_tenant_id_user_id_agent_id_version_key;
 """
 
 
 class PostgresMemoryRepository(MemoryRepository):
-    """Transactional PostgreSQL + pgvector implementation of MemoryRepository."""
 
     def __init__(self, connection_factory, embedding_dimension):
         self.connection_factory = connection_factory
@@ -398,6 +454,11 @@ class PostgresMemoryRepository(MemoryRepository):
         )
 
     def update_event(self, event):
+        import warnings
+        warnings.warn(
+            "update_event is deprecated without fencing; use commit_event_result",
+            DeprecationWarning, stacklevel=2,
+        )
         self._execute(
             "UPDATE memory_events SET status=%s,error=%s,error_code=%s,attempt_count=%s,"
             "next_attempt_at=%s,locked_by=%s,lease_until=%s,lock_token=%s,"
@@ -418,7 +479,7 @@ class PostgresMemoryRepository(MemoryRepository):
           ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT %s
         ) UPDATE memory_events event SET status='processing', locked_by=%s,
           lease_until=now() + (%s * interval '1 second'), lock_token=%s,
-          attempt_count=event.attempt_count + 1, error=NULL, error_code=NULL
+          attempt_count=event.attempt_count + 1
         FROM candidates WHERE event.event_id=candidates.event_id RETURNING event.*"""
         with self.connection_factory() as connection:
             with connection.cursor() as cursor:
@@ -427,28 +488,51 @@ class PostgresMemoryRepository(MemoryRepository):
                 rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
         return [self._hydrate(row, "event") for row in rows]
 
-    def renew_lease(self, event_id, lock_token, lease_seconds):
+    def renew_lease(self, event_id, worker_id, lock_token, lease_seconds):
         with self._connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     "UPDATE memory_events SET lease_until=now() + (%s * interval '1 second') "
-                    "WHERE event_id=%s AND status='processing' AND lock_token=%s",
-                    (lease_seconds, event_id, lock_token),
+                    "WHERE event_id=%s AND status='processing' "
+                    "AND locked_by=%s AND lock_token=%s AND lease_until > now()",
+                    (lease_seconds, event_id, worker_id, lock_token),
                 )
                 return cursor.rowcount > 0
 
-    def commit_event_result(self, event, domain_events, lock_token):
+    def commit_event_result(self, event, worker_id, domain_events, lock_token):
+        status = event.status
+        base_sql = """UPDATE memory_events SET {set_clause}
+            WHERE event_id=%s AND status='processing'
+            AND locked_by=%s AND lock_token=%s AND lease_until > now()"""
+        if status == "processed":
+            set_clause = (
+                "status='processed', processed_at=%s, "
+                "error=NULL, error_code=NULL, next_attempt_at=NULL, "
+                "locked_by=NULL, lease_until=NULL, lock_token=NULL"
+            )
+            params = (event.processed_at, event.event_id, worker_id, lock_token)
+        elif status == "retry_wait":
+            set_clause = (
+                "status='retry_wait', next_attempt_at=%s, error=%s, error_code=%s, "
+                "locked_by=NULL, lease_until=NULL, lock_token=NULL"
+            )
+            params = (event.next_attempt_at, event.error, event.error_code,
+                      event.event_id, worker_id, lock_token)
+        else:
+            set_clause = (
+                "status=%s, processed_at=%s, error=%s, error_code=%s, "
+                "locked_by=NULL, lease_until=NULL, lock_token=NULL"
+            )
+            params = (status, event.processed_at, event.error, event.error_code,
+                      event.event_id, worker_id, lock_token)
+        sql = base_sql.format(set_clause=set_clause)
         with self._connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    "UPDATE memory_events SET status=%s,processed_at=%s,locked_by=NULL,"
-                    "lease_until=NULL,lock_token=NULL,error=NULL,error_code=NULL "
-                    "WHERE event_id=%s AND status='processing' AND lock_token=%s",
-                    (event.status, event.processed_at, event.event_id, lock_token),
-                )
+                cursor.execute(sql, params)
                 if cursor.rowcount != 1:
                     raise ConcurrentMemoryWrite(
-                        "Event result rejected: lock_token mismatch or event not in PROCESSING"
+                        "Event result rejected: ownership lost "
+                        "(lock_token mismatch, wrong worker, or lease expired)"
                     )
                 for domain_event in domain_events:
                     cursor.execute(
@@ -459,6 +543,11 @@ class PostgresMemoryRepository(MemoryRepository):
                     )
 
     def finalize_event(self, event, domain_events):
+        import warnings
+        warnings.warn(
+            "finalize_event is deprecated; use commit_event_result for fenced inbox writes",
+            DeprecationWarning, stacklevel=2,
+        )
         lock_token = getattr(event, "lock_token", None)
         with self.connection_factory() as connection:
             with connection.cursor() as cursor:
@@ -499,41 +588,65 @@ class PostgresMemoryRepository(MemoryRepository):
         )
 
     def claim_outbox(self, limit, worker_id, lease_seconds=30):
+        lock_token = str(uuid.uuid4())
         sql = """WITH candidates AS (
           SELECT id FROM memory_outbox
-          WHERE status='pending' AND available_at <= now()
+          WHERE
+            (status='pending' AND available_at <= now())
+            OR (status='processing' AND lease_until < now())
           ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT %s
         ) UPDATE memory_outbox SET status='processing', locked_by=%s,
-          lease_until=now() + (%s * interval '1 second'),
+          lock_token=%s, lease_until=now() + (%s * interval '1 second'),
           attempt_count=attempt_count + 1
         FROM candidates WHERE memory_outbox.id=candidates.id
         RETURNING memory_outbox.*"""
         with self.connection_factory() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(sql, (limit, worker_id, lease_seconds))
+                cursor.execute(sql, (limit, worker_id, lock_token, lease_seconds))
                 columns = [item.name for item in cursor.description]
                 return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
-    def mark_outbox_published(self, outbox_id):
-        self._execute(
-            "UPDATE memory_outbox SET status='published',published_at=now(),"
-            "locked_by=NULL,lease_until=NULL WHERE id=%s AND status='processing'",
-            (outbox_id,),
-        )
+    def mark_outbox_published(self, outbox_id, worker_id, lock_token):
+        with self._connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE memory_outbox SET status='published',published_at=now(),"
+                    "locked_by=NULL,lease_until=NULL,lock_token=NULL "
+                    "WHERE id=%s AND status='processing' "
+                    "AND locked_by=%s AND lock_token=%s AND lease_until > now()",
+                    (outbox_id, worker_id, lock_token),
+                )
+                if cursor.rowcount != 1:
+                    raise ConcurrentMemoryWrite("Outbox CAS mark_published: ownership lost")
+                return True
 
-    def retry_outbox(self, outbox_id, error, next_attempt_at):
-        self._execute(
-            "UPDATE memory_outbox SET status='pending',attempt_count=attempt_count+1,"
-            "last_error=%s,available_at=%s,locked_by=NULL,lease_until=NULL WHERE id=%s",
-            (error, next_attempt_at, outbox_id),
-        )
+    def retry_outbox(self, outbox_id, error, next_attempt_at, worker_id, lock_token):
+        with self._connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE memory_outbox SET status='pending',"
+                    "last_error=%s,available_at=%s,locked_by=NULL,lease_until=NULL,lock_token=NULL "
+                    "WHERE id=%s AND status='processing' "
+                    "AND locked_by=%s AND lock_token=%s AND lease_until > now()",
+                    (error, next_attempt_at, outbox_id, worker_id, lock_token),
+                )
+                if cursor.rowcount != 1:
+                    raise ConcurrentMemoryWrite("Outbox CAS retry: ownership lost")
+                return True
 
-    def dead_letter_outbox(self, outbox_id, error):
-        self._execute(
-            "UPDATE memory_outbox SET status='dead_letter',last_error=%s,"
-            "locked_by=NULL,lease_until=NULL WHERE id=%s",
-            (error, outbox_id),
-        )
+    def dead_letter_outbox(self, outbox_id, error, worker_id, lock_token):
+        with self._connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE memory_outbox SET status='dead_letter',last_error=%s,"
+                    "locked_by=NULL,lease_until=NULL,lock_token=NULL "
+                    "WHERE id=%s AND status='processing' "
+                    "AND locked_by=%s AND lock_token=%s AND lease_until > now()",
+                    (error, outbox_id, worker_id, lock_token),
+                )
+                if cursor.rowcount != 1:
+                    raise ConcurrentMemoryWrite("Outbox CAS dead_letter: ownership lost")
+                return True
 
     # ── Memory Items ──────────────────────────────────────────────
 

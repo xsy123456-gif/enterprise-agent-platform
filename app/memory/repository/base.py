@@ -9,16 +9,17 @@ class MemoryRepository(ABC):
     def get_event(self, event_id): pass
 
     @abstractmethod
-    def update_event(self, event): pass
+    def update_event(self, event):  # deprecated — use commit_event_result
+        pass
 
     @abstractmethod
     def claim_events(self, worker_id, limit, lease_seconds): pass
 
     @abstractmethod
-    def renew_lease(self, event_id, lock_token, lease_seconds): pass
+    def renew_lease(self, event_id, worker_id, lock_token, lease_seconds): pass
 
     @abstractmethod
-    def commit_event_result(self, event, domain_events, lock_token): pass
+    def commit_event_result(self, event, worker_id, domain_events, lock_token): pass
 
     @abstractmethod
     def add_outbox(self, event): pass
@@ -27,16 +28,17 @@ class MemoryRepository(ABC):
     def claim_outbox(self, limit, worker_id, lease_seconds): pass
 
     @abstractmethod
-    def mark_outbox_published(self, outbox_id): pass
+    def mark_outbox_published(self, outbox_id, worker_id, lock_token): pass
 
     @abstractmethod
-    def retry_outbox(self, outbox_id, error, next_attempt_at): pass
+    def retry_outbox(self, outbox_id, error, next_attempt_at, worker_id, lock_token): pass
 
     @abstractmethod
-    def dead_letter_outbox(self, outbox_id, error): pass
+    def dead_letter_outbox(self, outbox_id, error, worker_id, lock_token): pass
 
     @abstractmethod
-    def finalize_event(self, event, domain_events): pass
+    def finalize_event(self, event, domain_events):  # deprecated — use commit_event_result
+        pass
 
     @abstractmethod
     def create_item(self, item, relations=None): pass

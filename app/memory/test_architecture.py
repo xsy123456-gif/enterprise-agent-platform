@@ -20,9 +20,11 @@ class MemoryBoundaryArchitectureTest(unittest.TestCase):
             "app.runtime", "app.agents", "app.orchestration", "app.manifest",
             "app.events", "app.audit", "app.main",
         )
-        root = Path(__file__).parents[1] / "app" / "memory"
+        root = Path(__file__).parent
         imports = []
         for path in root.rglob("*.py"):
+            if path.name.startswith("test_"):
+                continue
             tree = ast.parse(path.read_text())
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
@@ -34,7 +36,7 @@ class MemoryBoundaryArchitectureTest(unittest.TestCase):
         )
 
     def test_platform_adapters_are_outside_memory_core(self):
-        root = Path(__file__).parents[1]
+        root = Path(__file__).parents[2]
         self.assertTrue((root / "app/integrations/memory/runtime_adapter.py").exists())
         self.assertTrue((root / "app/integrations/memory/event_bus_bridge.py").exists())
         self.assertTrue((root / "app/memory/worker/event_worker.py").exists())

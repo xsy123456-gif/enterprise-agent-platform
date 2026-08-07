@@ -9,7 +9,7 @@ from app.memory.pipeline.write.extractor import MemoryExtractor, StructuredMemor
 from app.memory.models.event import MemoryEventStatus
 from app.memory.models.scope import MemoryScope
 from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
-from tests.memory_repository import TestEmbeddingService, TestMemoryRepository
+from app.memory.test_repository import TestEmbeddingService, TestMemoryRepository
 
 
 def request(key="source-1"):

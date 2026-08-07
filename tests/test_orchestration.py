@@ -23,7 +23,7 @@ from app.runtime.loop import AgentExecutionLoop
 from app.runtime.context import AgentContext
 from app.runtime.context_builder import AgentContextBuilder
 from app.agents.definition import AgentDefinition
-from tests.memory_repository import TestEmbeddingService, TestMemoryRepository
+from app.memory.test_repository import TestEmbeddingService, TestMemoryRepository
 
 
 class StubAgent:

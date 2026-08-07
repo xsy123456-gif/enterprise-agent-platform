@@ -14,15 +14,17 @@ class MemoryWorker:
 
     def __init__(self, repository, write_pipeline, event_sink=None, worker_id=None,
                  max_attempts=5, lease_seconds=30, poll_interval=0.1,
-                 claim_limit=1):
+                 claim_limit=1, heartbeat_interval=None):
         self.repository = repository
         self.write_pipeline = write_pipeline
         self.event_sink = event_sink
         self.worker_id = worker_id or f"memory-worker-{uuid.uuid4()}"
         self.max_attempts = max_attempts
+        self.max_outbox_attempts = max_attempts
         self.lease_seconds = lease_seconds
         self.poll_interval = poll_interval
         self.claim_limit = claim_limit
+        self.heartbeat_interval = heartbeat_interval or max(1, lease_seconds // 3)
         self._running = Event()
         self._stopped = Event()
         self._thread = None
@@ -62,27 +64,44 @@ class MemoryWorker:
         self.dispatch_outbox()
         return len(claimed)
 
-    def dispatch_outbox(self, limit=100):
+    def dispatch_outbox(self):
         if not self.event_sink:
             return 0
         published = 0
-        records = self.repository.claim_outbox(limit, self.worker_id, 30)
+        records = self.repository.claim_outbox(1, self.worker_id, 30)
         for record in records:
+            outbox_id = record["id"]
+            outbox_lock_token = record["lock_token"]
+            attempt_count = record.get("attempt_count", 0)
             try:
                 event = MemoryDomainEvent(
-                    event_id=record["id"],
+                    event_id=outbox_id,
                     event_type=record["event_type"],
                     aggregate_id=record["aggregate_id"],
                     payload=record["payload"],
                 )
                 self.event_sink.publish(event)
-                self.repository.mark_outbox_published(event.event_id)
+                self.repository.mark_outbox_published(
+                    outbox_id, self.worker_id, outbox_lock_token,
+                )
                 published += 1
             except Exception as error:
-                self.repository.retry_outbox(
-                    record["id"], str(error),
-                    datetime.now(timezone.utc) + timedelta(seconds=1)
-                )
+                if attempt_count >= self.max_outbox_attempts:
+                    try:
+                        self.repository.dead_letter_outbox(
+                            outbox_id, str(error), self.worker_id, outbox_lock_token,
+                        )
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        self.repository.retry_outbox(
+                            outbox_id, str(error),
+                            datetime.now(timezone.utc) + timedelta(seconds=1),
+                            self.worker_id, outbox_lock_token,
+                        )
+                    except Exception:
+                        pass
         return published
 
     def _run(self):
@@ -99,23 +118,50 @@ class MemoryWorker:
     def _process(self, event):
         with self._processing:
             lock_token = getattr(event, "lock_token", None)
+            stopped = Event()
+            heartbeat = Thread(
+                target=self._heartbeat,
+                args=(event.event_id, lock_token, stopped),
+                daemon=True,
+            )
+            heartbeat.start()
             try:
-                self.write_pipeline.process(event)
-                self._renew_lease_if_needed(event.event_id, lock_token)
-                domain_events = list(self.write_pipeline.domain_events)
-                completed = MemoryDomainEvent(
-                    event_type="memory.processing.completed",
-                    aggregate_id=event.event_id,
-                    payload={"trace_id": event.trace_id,
-                             "source_kind": event.source_kind},
-                )
-                domain_events.append(completed)
-                event.status = MemoryEventStatus.PROCESSED
-                event.processed_at = datetime.now(timezone.utc)
-                self.repository.commit_event_result(event, domain_events, lock_token)
-                event.locked_by = None
-                event.lease_until = None
-                event.lock_token = None
+                pending, domain_events = self.write_pipeline.prepare(event)
+            except (PermissionError, MemoryAccessDenied) as error:
+                stopped.set()
+                self._finish_rejected(event, error, "authorization_denied", lock_token)
+                return
+            except MemoryValidationError as error:
+                stopped.set()
+                self._finish_rejected(event, error, "validation_failed", lock_token)
+                return
+            except MemoryInvariantViolation as error:
+                stopped.set()
+                self._finish_dead_letter(event, error, lock_token)
+                return
+            except Exception as error:
+                stopped.set()
+                self._finish_retry_or_dead_letter(event, error, lock_token)
+                return
+
+            try:
+                with self.repository.atomic_write():
+                    for cand, eval_, imp, res, existing in pending:
+                        self.write_pipeline.updater.persist(
+                            event, cand, eval_, imp, res, existing,
+                        )
+                    completed = MemoryDomainEvent(
+                        event_type="memory.processing.completed",
+                        aggregate_id=event.event_id,
+                        payload={"trace_id": event.trace_id,
+                                 "source_kind": event.source_kind},
+                    )
+                    domain_events.append(completed)
+                    event.status = MemoryEventStatus.PROCESSED
+                    event.processed_at = datetime.now(timezone.utc)
+                    self.repository.commit_event_result(
+                        event, self.worker_id, domain_events, lock_token,
+                    )
             except (PermissionError, MemoryAccessDenied) as error:
                 self._finish_rejected(event, error, "authorization_denied", lock_token)
             except MemoryValidationError as error:
@@ -124,10 +170,22 @@ class MemoryWorker:
                 self._finish_dead_letter(event, error, lock_token)
             except Exception as error:
                 self._finish_retry_or_dead_letter(event, error, lock_token)
+            finally:
+                stopped.set()
+                event.locked_by = None
+                event.lease_until = None
+                event.lock_token = None
 
-    def _renew_lease_if_needed(self, event_id, lock_token):
-        if lock_token:
-            self.repository.renew_lease(event_id, lock_token, self.lease_seconds)
+    def _heartbeat(self, event_id, lock_token, stopped):
+        while not stopped.wait(self.heartbeat_interval):
+            if not lock_token:
+                break
+            try:
+                self.repository.renew_lease(
+                    event_id, self.worker_id, lock_token, self.lease_seconds,
+                )
+            except Exception:
+                pass
 
     def _finish_rejected(self, event, error, error_code, lock_token):
         event.status = MemoryEventStatus.REJECTED
@@ -136,14 +194,11 @@ class MemoryWorker:
         event.processed_at = datetime.now(timezone.utc)
         if lock_token:
             try:
-                self.repository.commit_event_result(event, [], lock_token)
+                self.repository.commit_event_result(
+                    event, self.worker_id, [], lock_token,
+                )
             except Exception:
-                self.repository.update_event(event)
-        else:
-            self.repository.update_event(event)
-        event.locked_by = None
-        event.lease_until = None
-        event.lock_token = None
+                pass
 
     def _finish_dead_letter(self, event, error, lock_token):
         event.status = MemoryEventStatus.DEAD_LETTER
@@ -152,14 +207,11 @@ class MemoryWorker:
         event.processed_at = datetime.now(timezone.utc)
         if lock_token:
             try:
-                self.repository.commit_event_result(event, [], lock_token)
+                self.repository.commit_event_result(
+                    event, self.worker_id, [], lock_token,
+                )
             except Exception:
-                self.repository.update_event(event)
-        else:
-            self.repository.update_event(event)
-        event.locked_by = None
-        event.lease_until = None
-        event.lock_token = None
+                pass
 
     def _finish_retry_or_dead_letter(self, event, error, lock_token):
         event.error = str(error)
@@ -178,11 +230,8 @@ class MemoryWorker:
             )
         if lock_token:
             try:
-                self.repository.commit_event_result(event, [], lock_token)
+                self.repository.commit_event_result(
+                    event, self.worker_id, [], lock_token,
+                )
             except Exception:
-                self.repository.update_event(event)
-        else:
-            self.repository.update_event(event)
-        event.locked_by = None
-        event.lease_until = None
-        event.lock_token = None
+                pass

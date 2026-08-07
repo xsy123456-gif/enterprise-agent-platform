@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from threading import Lock, RLock
 from contextlib import contextmanager
@@ -11,19 +11,30 @@ from app.memory.repository.base import MemoryRepository
 
 
 class TestMemoryRepository(MemoryRepository):
-    """Test-only repository; production code has no dictionary storage fallback."""
+    """Test-only repository; production code has no dictionary storage fallback.
+
+    Row state (_event_state) is tracked independently of Python event objects
+    so that pre-setting event.status before commit_event_result does not
+    contaminate the ownership check.
+    """
 
     __test__ = False
 
     def __init__(self):
         self.embedding_dimension = 3
         self.events = {}
+        self._event_state = {}
         self.items = {}
         self.relations = []
         self.access_logs = []
         self.processing_tasks = {}
         self.outbox = {}
         self._commit_lock = RLock()
+        self._tx_active = False
+        self._tx_snapshot = None
+
+    def _es(self, event_id):
+        return self._event_state.setdefault(event_id, {})
 
     def save_event(self, event):
         for stored in self.events.values():
@@ -32,90 +43,179 @@ class TestMemoryRepository(MemoryRepository):
             ):
                 return stored
         self.events[event.event_id] = event
+        st = self._es(event.event_id)
+        st["status"] = event.status
         return event
 
     @contextmanager
     def atomic_write(self):
-        snapshot = (copy.deepcopy(self.items), copy.deepcopy(self.relations))
+        if self._tx_active:
+            yield
+            return
+        self._tx_active = True
+        self._tx_snapshot = (copy.deepcopy(self.items), copy.deepcopy(self.relations))
         try:
             yield
         except Exception:
-            self.items, self.relations = snapshot
+            self.items, self.relations = self._tx_snapshot
             raise
+        finally:
+            self._tx_active = False
+            self._tx_snapshot = None
 
     def get_event(self, event_id):
         return self.events.get(event_id)
 
     def update_event(self, event):
         self.events[event.event_id] = event
+        st = self._es(event.event_id)
+        st["status"] = event.status
         return event
 
     def claim_events(self, worker_id, limit, lease_seconds):
         import uuid
         now = datetime.now(timezone.utc)
         claimed = []
-        for event in self.events.values():
-            claimable = event.status in {"received", "retry_wait"} and (
+        for event in list(self.events.values()):
+            st = self._es(event.event_id)
+            status = st.get("status", event.status)
+            claimable = status in {"received", "retry_wait"} and (
                 event.next_attempt_at is None or event.next_attempt_at <= now
             )
-            expired = event.status == "processing" and event.lease_until and event.lease_until <= now
+            expired = (
+                status == "processing"
+                and st.get("lease_until")
+                and st["lease_until"] <= now
+            )
             if (claimable or expired) and len(claimed) < limit:
+                st["status"] = "processing"
+                st["locked_by"] = worker_id
+                st["lock_token"] = str(uuid.uuid4())
+                st["lease_until"] = now + timedelta(seconds=lease_seconds)
                 event.status = "processing"
                 event.locked_by = worker_id
-                event.lease_until = now
+                event.lock_token = st["lock_token"]
+                event.lease_until = st["lease_until"]
                 event.attempt_count += 1
-                event.lock_token = str(uuid.uuid4())
+                event.error = None
+                event.error_code = None
                 claimed.append(event)
         return claimed
 
-    def renew_lease(self, event_id, lock_token, lease_seconds):
-        event = self.events.get(event_id)
-        if event and event.status == "processing" and getattr(event, "lock_token", None) == lock_token:
-            event.lease_until = datetime.now(timezone.utc)
+    def renew_lease(self, event_id, worker_id, lock_token, lease_seconds):
+        st = self._es(event_id)
+        if (
+            st.get("status") == "processing"
+            and st.get("locked_by") == worker_id
+            and st.get("lock_token") == lock_token
+            and st.get("lease_until")
+            and st["lease_until"] > datetime.now(timezone.utc)
+        ):
+            st["lease_until"] = datetime.now(timezone.utc) + timedelta(seconds=lease_seconds)
+            event = self.events.get(event_id)
+            if event:
+                event.lease_until = st["lease_until"]
             return True
         return False
 
-    def commit_event_result(self, event, domain_events, lock_token):
-        stored = self.events.get(event.event_id)
-        if not stored:
+    def commit_event_result(self, event, worker_id, domain_events, lock_token):
+        st = self._es(event.event_id)
+        if not self.events.get(event.event_id):
             raise ConcurrentMemoryWrite("Event result rejected: event not found")
-        if getattr(stored, "lock_token", None) != lock_token:
-            raise ConcurrentMemoryWrite("Event result rejected: lock_token mismatch")
+        if (st.get("status") != "processing"
+                or st.get("locked_by") != worker_id
+                or st.get("lock_token") != lock_token
+                or not st.get("lease_until")
+                or st["lease_until"] <= datetime.now(timezone.utc)):
+            raise ConcurrentMemoryWrite("Event result rejected: ownership lost")
+        status = event.status
+        if status == "processed":
+            event.error = None
+            event.error_code = None
+            event.next_attempt_at = None
+        st["status"] = status
+        st.pop("locked_by", None)
+        st.pop("lock_token", None)
+        st.pop("lease_until", None)
         event.locked_by = None
         event.lease_until = None
         event.lock_token = None
         return self.finalize_event(event, domain_events)
 
-    def add_outbox(self, event):
-        self.outbox.setdefault(event.event_id, {
-            "id": event.event_id, "event_type": event.event_type,
-            "aggregate_id": event.aggregate_id, "payload": event.payload,
-            "status": "pending", "attempt_count": 0,
-        })
-
-    def claim_outbox(self, limit, worker_id=None, lease_seconds=30):
-        return [item for item in self.outbox.values() if item["status"] == "pending"][:limit]
-
-    def mark_outbox_published(self, outbox_id):
-        if outbox_id in self.outbox:
-            self.outbox[outbox_id]["status"] = "published"
-
-    def retry_outbox(self, outbox_id, error, next_attempt_at):
-        if outbox_id in self.outbox:
-            item = self.outbox[outbox_id]
-            item["attempt_count"] += 1
-            item["last_error"] = error
-            item["available_at"] = next_attempt_at
-
-    def dead_letter_outbox(self, outbox_id, error):
-        if outbox_id in self.outbox:
-            self.outbox[outbox_id]["status"] = "dead_letter"
-            self.outbox[outbox_id]["last_error"] = error
-
     def finalize_event(self, event, domain_events):
         self.update_event(event)
         for domain_event in domain_events:
             self.add_outbox(domain_event)
+
+    def add_outbox(self, event):
+        self.outbox.setdefault(event.event_id, {
+            "id": event.event_id, "event_type": event.event_type,
+            "aggregate_id": event.aggregate_id, "payload": event.payload,
+            "status": "pending", "attempt_count": 0, "lock_token": None,
+            "locked_by": None, "lease_until": None,
+        })
+
+    def claim_outbox(self, limit, worker_id=None, lease_seconds=30):
+        import uuid
+        now = datetime.now(timezone.utc)
+        claimed = []
+        for item in list(self.outbox.values()):
+            claimable = item["status"] == "pending"
+            expired = (
+                item["status"] == "processing"
+                and item.get("lease_until")
+                and item["lease_until"] <= now
+            )
+            if (claimable or expired) and len(claimed) < limit:
+                item["status"] = "processing"
+                item["locked_by"] = worker_id
+                item["lock_token"] = str(uuid.uuid4())
+                item["lease_until"] = now + timedelta(seconds=lease_seconds)
+                item["attempt_count"] += 1
+                claimed.append(item)
+        return claimed
+
+    def mark_outbox_published(self, outbox_id, worker_id, lock_token):
+        item = self.outbox.get(outbox_id)
+        if not item:
+            raise ConcurrentMemoryWrite("Outbox CAS mark_published: record not found")
+        if (item["status"] != "processing"
+                or item.get("locked_by") != worker_id
+                or item.get("lock_token") != lock_token
+                or not item.get("lease_until")
+                or item["lease_until"] <= datetime.now(timezone.utc)):
+            raise ConcurrentMemoryWrite("Outbox CAS mark_published: ownership lost")
+        item["status"] = "published"
+        return True
+
+    def retry_outbox(self, outbox_id, error, next_attempt_at, worker_id, lock_token):
+        item = self.outbox.get(outbox_id)
+        if not item:
+            raise ConcurrentMemoryWrite("Outbox CAS retry: record not found")
+        if (item["status"] != "processing"
+                or item.get("locked_by") != worker_id
+                or item.get("lock_token") != lock_token
+                or not item.get("lease_until")
+                or item["lease_until"] <= datetime.now(timezone.utc)):
+            raise ConcurrentMemoryWrite("Outbox CAS retry: ownership lost")
+        item["status"] = "pending"
+        item["last_error"] = error
+        item["available_at"] = next_attempt_at
+        return True
+
+    def dead_letter_outbox(self, outbox_id, error, worker_id, lock_token):
+        item = self.outbox.get(outbox_id)
+        if not item:
+            raise ConcurrentMemoryWrite("Outbox CAS dead_letter: record not found")
+        if (item["status"] != "processing"
+                or item.get("locked_by") != worker_id
+                or item.get("lock_token") != lock_token
+                or not item.get("lease_until")
+                or item["lease_until"] <= datetime.now(timezone.utc)):
+            raise ConcurrentMemoryWrite("Outbox CAS dead_letter: ownership lost")
+        item["status"] = "dead_letter"
+        item["last_error"] = error
+        return True
 
     def create_item(self, item, relations=None):
         replacing_ids = {
@@ -156,7 +256,9 @@ class TestMemoryRepository(MemoryRepository):
     def merge_observation(self, item, evaluation):
         stored = self.items.get(item.id)
         if not stored or stored.status != MemoryItemStatus.ACTIVE:
-            raise ConcurrentMemoryWrite("Could not merge observation: item is no longer ACTIVE")
+            raise ConcurrentMemoryWrite(
+                "Could not merge observation: item is no longer ACTIVE"
+            )
         stored.observation_count += 1
         stored.last_observed_at = datetime.now(timezone.utc)
         stored.updated_at = datetime.now(timezone.utc)

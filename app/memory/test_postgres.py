@@ -2,7 +2,7 @@ import os
 import unittest
 import uuid
 from contextlib import redirect_stdout
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 from threading import Barrier, Lock, Thread
 
@@ -22,7 +22,7 @@ from app.memory.models.scope import MemoryScope
 from app.memory.pipeline.write.extractor import StructuredMemoryExtractor
 from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
 from app.memory.storage.postgres import create_postgres_repository
-from tests.memory_repository import TestEmbeddingService
+from app.memory.test_repository import TestEmbeddingService
 
 
 class StubLLM:
@@ -494,7 +494,7 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         )
         self.assertEqual([current.id], [item.id for item, _ in results])
 
-    def test_durable_event_survives_memory_system_restart(self):
+    def test_event_create_query_and_status_update(self):
         request = MemorySubmitRequest(
             principal=MemoryPrincipal(self.user_id, self.tenant_id, self.user_id, "sales_agent"),
             scope=self.scope(), idempotency_key=self.suffix,
@@ -521,6 +521,163 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         )
         second._worker.process_once()
         self.assertEqual(MemoryEventStatus.PROCESSED, self.repository.get_event(response.event_id).status)
+
+    # ── Group-1 integration: CHECK constraints, lease fencing, outbox fencing ──
+
+    def test_group1_processing_check_requires_lease_fields(self):
+        """DB CHECK: processing must have locked_by + lock_token + lease_until all NOT NULL."""
+        event = MemoryEvent(
+            trace_id=self.suffix, task_id=self.suffix, agent_id="a",
+            user_id=self.user_id, tenant_id=self.tenant_id,
+            department_id="test", source_kind="g1-check", source_id=self.suffix,
+            idempotency_key=self.suffix + "-check",
+            observations=[MemoryObservation("x", "y")], metadata={},
+        )
+        self.repository.save_event(event)
+        with self.repository.connection_factory(register_types=False) as connection:
+            with connection.cursor() as cursor:
+                with self.assertRaises(Exception):
+                    cursor.execute(
+                        "UPDATE memory_events SET status='processing', locked_by=NULL, "
+                        "lock_token='tok', lease_until=now() WHERE event_id=%s",
+                        (event.event_id,),
+                    )
+
+    def test_group1_commit_event_result_rejects_expired_lease(self):
+        """lease_until > NOW() is checked; expired lease blocks commit."""
+        event = MemoryEvent(
+            trace_id=self.suffix, task_id=self.suffix, agent_id="a",
+            user_id=self.user_id, tenant_id=self.tenant_id,
+            department_id="test", source_kind="g1-lease", source_id=self.suffix,
+            idempotency_key=self.suffix + "-lease",
+            observations=[MemoryObservation("x", "y")], metadata={},
+        )
+        self.repository.save_event(event)
+        claimed = self.repository.claim_events("w-g1", 1, 2)
+        self.assertEqual(1, len(claimed))
+        ev = claimed[0]
+        with self.repository.connection_factory(register_types=False) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE memory_events SET lease_until=now()-interval '1 second' "
+                    "WHERE event_id=%s", (ev.event_id,)
+                )
+        ev.status = "processed"
+        ev.processed_at = datetime.now(timezone.utc)
+        with self.assertRaises(ConcurrentMemoryWrite):
+            self.repository.commit_event_result(ev, "w-g1", [], ev.lock_token)
+
+    def test_group1_outbox_claim_generates_lock_token(self):
+        from app.memory.events import MemoryDomainEvent
+        de = MemoryDomainEvent(event_type="test", aggregate_id="agg", payload={})
+        self.repository.add_outbox(de)
+        records = self.repository.claim_outbox(1, "pub-g1", 30)
+        self.assertEqual(1, len(records))
+        self.assertIsNotNone(records[0]["lock_token"])
+        self.assertEqual("processing", records[0]["status"])
+        self.assertEqual("pub-g1", records[0]["locked_by"])
+
+    def test_group1_outbox_mark_published_cas_rejects_wrong_worker(self):
+        from app.memory.events import MemoryDomainEvent
+        de = MemoryDomainEvent(
+            event_id="g1-ob-1", event_type="test", aggregate_id="agg", payload={},
+        )
+        self.repository.add_outbox(de)
+        records = self.repository.claim_outbox(1, "pub-A", 30)
+        lock_token = records[0]["lock_token"]
+        with self.assertRaises(ConcurrentMemoryWrite):
+            self.repository.mark_outbox_published("g1-ob-1", "pub-B", lock_token)
+        with self.repository.connection_factory(register_types=False) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT status FROM memory_outbox WHERE id=%s", ("g1-ob-1",)
+                )
+                self.assertEqual("processing", cursor.fetchone()[0])
+
+    def test_group1_outbox_retry_cas_rejects_wrong_lock_token(self):
+        from app.memory.events import MemoryDomainEvent
+        de = MemoryDomainEvent(
+            event_id="g1-ob-2", event_type="test", aggregate_id="agg", payload={},
+        )
+        self.repository.add_outbox(de)
+        records = self.repository.claim_outbox(1, "pub-A", 30)
+        with self.assertRaises(ConcurrentMemoryWrite):
+            self.repository.retry_outbox(
+                "g1-ob-2", "err", datetime.now(timezone.utc), "pub-A", "wrong-tok",
+            )
+        with self.repository.connection_factory(register_types=False) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT status FROM memory_outbox WHERE id=%s", ("g1-ob-2",)
+                )
+                self.assertEqual("processing", cursor.fetchone()[0])
+
+    def test_group1_outbox_expired_lease_is_reclaimed(self):
+        from app.memory.events import MemoryDomainEvent
+        de = MemoryDomainEvent(
+            event_id="g1-ob-3", event_type="test", aggregate_id="agg", payload={},
+        )
+        self.repository.add_outbox(de)
+        first_records = self.repository.claim_outbox(1, "pub-old", 1)
+        old_lock_token = first_records[0]["lock_token"]
+        old_locked_by = first_records[0]["locked_by"]
+        with self.repository.connection_factory(register_types=False) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE memory_outbox SET lease_until=now()-interval '1 second' "
+                    "WHERE id='g1-ob-3'"
+                )
+        records = self.repository.claim_outbox(1, "pub-new", 30)
+        self.assertEqual(1, len(records))
+        self.assertEqual("g1-ob-3", records[0]["id"], "same record reclaimed")
+        self.assertEqual("pub-new", records[0]["locked_by"])
+        self.assertNotEqual(old_locked_by, records[0]["locked_by"], "owner changed")
+        self.assertNotEqual(old_lock_token, records[0]["lock_token"], "token changed")
+
+    def test_group1_commit_result_clears_error_on_processed(self):
+        event = MemoryEvent(
+            trace_id=self.suffix, task_id=self.suffix, agent_id="a",
+            user_id=self.user_id, tenant_id=self.tenant_id,
+            department_id="test", source_kind="g1-clr", source_id=self.suffix,
+            idempotency_key=self.suffix + "-clr",
+            observations=[MemoryObservation("x", "y")], metadata={},
+        )
+        self.repository.save_event(event)
+        claimed = self.repository.claim_events("w-clr", 1, 30)
+        ev = claimed[0]
+        ev.status = "processed"
+        ev.processed_at = datetime.now(timezone.utc)
+        ev.error = "old-error"
+        ev.error_code = "old-code"
+        ev.next_attempt_at = datetime.now(timezone.utc)
+        self.repository.commit_event_result(ev, "w-clr", [], ev.lock_token)
+        stored = self.repository.get_event(ev.event_id)
+        self.assertEqual("processed", stored.status)
+        self.assertIsNone(stored.error)
+        self.assertIsNone(stored.error_code)
+        self.assertIsNone(stored.next_attempt_at)
+
+    def test_group1_commit_result_persists_error_on_retry_wait(self):
+        event = MemoryEvent(
+            trace_id=self.suffix, task_id=self.suffix, agent_id="a",
+            user_id=self.user_id, tenant_id=self.tenant_id,
+            department_id="test", source_kind="g1-rw", source_id=self.suffix,
+            idempotency_key=self.suffix + "-rw",
+            observations=[MemoryObservation("x", "y")], metadata={},
+        )
+        self.repository.save_event(event)
+        claimed = self.repository.claim_events("w-rw", 1, 30)
+        ev = claimed[0]
+        ev.status = "retry_wait"
+        ev.next_attempt_at = datetime.now(timezone.utc) + timedelta(seconds=60)
+        ev.error = "transient-failure"
+        ev.error_code = "provider_error"
+        self.repository.commit_event_result(ev, "w-rw", [], ev.lock_token)
+        stored = self.repository.get_event(ev.event_id)
+        self.assertEqual("retry_wait", stored.status)
+        self.assertEqual("transient-failure", stored.error)
+        self.assertEqual("provider_error", stored.error_code)
+        self.assertIsNotNone(stored.next_attempt_at)
 
 
 if __name__ == "__main__":

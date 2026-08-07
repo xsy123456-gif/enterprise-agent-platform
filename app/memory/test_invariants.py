@@ -6,7 +6,7 @@ from app.memory.models.identity import MemoryIdentity
 from app.memory.errors import MemoryInvariantViolation
 from app.memory.models.item import MemoryItem, MemoryItemStatus
 from app.memory.models.scope import MemoryScope
-from tests.memory_repository import TestMemoryRepository
+from app.memory.test_repository import TestMemoryRepository
 
 
 def memory_item(scope, identity, content, version=1):
