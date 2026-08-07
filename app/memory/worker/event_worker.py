@@ -3,7 +3,9 @@ from threading import Event, Lock, Thread
 import uuid
 
 from app.memory.errors import (
-    MemoryAccessDenied, MemoryError, MemoryInvariantViolation, MemoryValidationError,
+    classify_error,
+    MemoryAccessDenied, MemoryConcurrencyError, MemoryError,
+    MemoryInvariantViolation, MemoryStorageError, MemoryValidationError,
 )
 from app.memory.events import MemoryDomainEvent
 from app.memory.models.event import MemoryEventStatus
@@ -139,6 +141,10 @@ class MemoryWorker:
                 stopped.set()
                 self._finish_dead_letter(event, error, lock_token)
                 return
+            except MemoryError as error:
+                stopped.set()
+                self._finish_retry_or_dead_letter(event, error, lock_token)
+                return
             except Exception as error:
                 stopped.set()
                 self._finish_retry_or_dead_letter(event, error, lock_token)
@@ -168,6 +174,8 @@ class MemoryWorker:
                 self._finish_rejected(event, error, "validation_failed", lock_token)
             except MemoryInvariantViolation as error:
                 self._finish_dead_letter(event, error, lock_token)
+            except MemoryError as error:
+                self._finish_retry_or_dead_letter(event, error, lock_token)
             except Exception as error:
                 self._finish_retry_or_dead_letter(event, error, lock_token)
             finally:
@@ -214,12 +222,9 @@ class MemoryWorker:
                 pass
 
     def _finish_retry_or_dead_letter(self, event, error, lock_token):
+        disposition = classify_error(error)
         event.error = str(error)
-        event.error_code = (
-            "provider_error" if isinstance(error, MemoryError) and getattr(error, "transient", False)
-            else "storage_error" if isinstance(error, MemoryError)
-            else "unknown_error"
-        )
+        event.error_code = disposition.code
         if event.attempt_count >= self.max_attempts:
             event.status = MemoryEventStatus.DEAD_LETTER
             event.processed_at = datetime.now(timezone.utc)

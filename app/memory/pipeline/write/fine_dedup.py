@@ -1,6 +1,8 @@
 import json
 import math
 
+from app.memory.errors import MemoryError, MemoryProviderError
+
 
 class LLMSemanticDuplicateJudge:
     """Memory-internal judge; it is not an Agent and cannot execute tools."""
@@ -9,22 +11,29 @@ class LLMSemanticDuplicateJudge:
         self.llm = llm
 
     def __call__(self, candidate, existing):
-        response = self.llm.chat([
-            {
-                "role": "system",
-                "content": (
-                    "Judge whether two memory facts express the same durable fact. "
-                    "Return JSON only: {\"duplicate\":true|false}."
-                ),
-            },
-            {
-                "role": "user",
-                "content": json.dumps({
-                    "candidate": candidate.content,
-                    "existing": existing.content,
-                }, ensure_ascii=False),
-            },
-        ])
+        try:
+            response = self.llm.chat([
+                {
+                    "role": "system",
+                    "content": (
+                        "Judge whether two memory facts express the same durable fact. "
+                        "Return JSON only: {\"duplicate\":true|false}."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps({
+                        "candidate": candidate.content,
+                        "existing": existing.content,
+                    }, ensure_ascii=False),
+                },
+            ])
+        except MemoryError:
+            raise
+        except Exception as exc:
+            raise MemoryProviderError(
+                f"LLM duplicate judge failed: {exc}"
+            ) from exc
         text = response.strip()
         if text.startswith("```"):
             text = "\n".join(text.splitlines()[1:-1]).strip()

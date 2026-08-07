@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+
+
 class MemoryError(Exception):
     pass
 
@@ -30,3 +33,32 @@ class ConcurrentMemoryWrite(MemoryError):
 
 class MemoryConcurrencyError(MemoryError):
     pass
+
+
+@dataclass(frozen=True)
+class ErrorDisposition:
+    code: str
+    retryable: bool
+
+
+_ERROR_TABLE = {
+    (PermissionError, MemoryAccessDenied): ErrorDisposition("authorization_denied", False),
+    MemoryValidationError:          ErrorDisposition("validation_failed", False),
+    MemoryInvariantViolation:       ErrorDisposition("invariant_violation", False),
+    MemoryProviderError:            ErrorDisposition("provider_error", True),
+    MemoryStorageError:             ErrorDisposition("storage_error", True),
+    MemoryConcurrencyError:         ErrorDisposition("concurrency_error", True),
+    ConcurrentMemoryWrite:          ErrorDisposition("concurrency_error", True),
+}
+
+
+def classify_error(exc):
+    """Map an exception to an ErrorDisposition.
+
+    Matches by isinstance so subclassing works.
+    Unknown exceptions get 'unknown_error' / retryable=True.
+    """
+    for types, disposition in _ERROR_TABLE.items():
+        if isinstance(exc, types):
+            return disposition
+    return ErrorDisposition("unknown_error", True)

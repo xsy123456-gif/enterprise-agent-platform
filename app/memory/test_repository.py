@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import copy
 
 from app.memory.embedding.models import EmbeddingResult, EmbeddingSpace
-from app.memory.errors import ConcurrentMemoryWrite, MemoryInvariantViolation
+from app.memory.errors import ConcurrentMemoryWrite, MemoryError, MemoryInvariantViolation
 from app.memory.models.item import MemoryItemStatus
 from app.memory.repository.base import MemoryRepository
 
@@ -56,9 +56,14 @@ class TestMemoryRepository(MemoryRepository):
         self._tx_snapshot = (copy.deepcopy(self.items), copy.deepcopy(self.relations))
         try:
             yield
-        except Exception:
+        except Exception as exc:
             self.items, self.relations = self._tx_snapshot
-            raise
+            if isinstance(exc, MemoryError):
+                raise
+            from app.memory.errors import MemoryStorageError
+            raise MemoryStorageError(
+                f"Repository atomic write failed: {exc}"
+            ) from exc
         finally:
             self._tx_active = False
             self._tx_snapshot = None
@@ -361,6 +366,10 @@ class TestMemoryRepository(MemoryRepository):
             "user_id": request.scope.user_id, "agent_id": request.scope.agent_id,
             "query": request.query, "created_at": datetime.now(timezone.utc),
         })
+        item = self.items.get(memory_id)
+        if item:
+            item.access_count += 1
+            item.last_accessed_at = datetime.now(timezone.utc)
 
     def list_versions(self, scope, identity):
         return sorted([

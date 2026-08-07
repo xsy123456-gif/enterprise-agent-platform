@@ -16,7 +16,7 @@ from app.memory.api.models import (
     MemoryObservation, MemoryPrincipal, MemoryRetrieveRequest, MemorySource,
     MemorySubmitRequest,
 )
-from app.memory.errors import ConcurrentMemoryWrite
+from app.memory.errors import ConcurrentMemoryWrite, MemoryError
 from app.memory.factory import build_memory_system
 from app.memory.models.event import MemoryEventStatus
 from app.memory.models.scope import MemoryScope
@@ -53,9 +53,14 @@ class _InMemoryRepository:
         self._tx_snapshot = (copy.deepcopy(self.items), copy.deepcopy(self.relations))
         try:
             yield
-        except Exception:
+        except Exception as exc:
             self.items, self.relations = self._tx_snapshot
-            raise
+            if isinstance(exc, MemoryError):
+                raise
+            from app.memory.errors import MemoryStorageError
+            raise MemoryStorageError(
+                f"Repository atomic write failed: {exc}"
+            ) from exc
         finally:
             self._tx_active = False
             self._tx_snapshot = None
@@ -310,6 +315,10 @@ class _InMemoryRepository:
 
     def record_access(self, memory_id, request):
         self.access_logs.append({"memory_id": memory_id})
+        item = self.items.get(memory_id)
+        if item:
+            item.access_count += 1
+            item.last_accessed_at = datetime.now(timezone.utc)
 
     def update_processing_task(self, event_id, stage, status, error=None):
         pass

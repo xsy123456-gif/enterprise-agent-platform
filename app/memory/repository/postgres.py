@@ -3,7 +3,9 @@ import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from app.memory.errors import ConcurrentMemoryWrite, MemoryInvariantViolation
+from app.memory.errors import (
+    ConcurrentMemoryWrite, MemoryError, MemoryInvariantViolation, MemoryStorageError,
+)
 from app.memory.repository.base import MemoryRepository
 
 
@@ -178,6 +180,10 @@ UPDATE memory_events SET next_attempt_at = COALESCE(next_attempt_at, created_at)
 UPDATE memory_events SET processed_at = COALESCE(processed_at, created_at)
   WHERE status IN ('processed','rejected','dead_letter') AND processed_at IS NULL;
 UPDATE memory_events SET attempt_count = 0 WHERE attempt_count < 0;
+UPDATE memory_items SET observation_count = 1
+  WHERE observation_count IS NULL OR observation_count < 1;
+UPDATE memory_items SET access_count = 0
+  WHERE access_count IS NULL OR access_count < 0;
 -- Add constraint checks last
 ALTER TABLE memory_events DROP CONSTRAINT IF EXISTS memory_events_status_check;
 ALTER TABLE memory_events ADD CONSTRAINT memory_events_status_check CHECK (
@@ -206,6 +212,14 @@ ALTER TABLE memory_events ADD CONSTRAINT memory_events_retry_wait_check CHECK (
 ALTER TABLE memory_events DROP CONSTRAINT IF EXISTS memory_events_terminal_check;
 ALTER TABLE memory_events ADD CONSTRAINT memory_events_terminal_check CHECK (
   status NOT IN ('processed','rejected','dead_letter') OR processed_at IS NOT NULL
+);
+ALTER TABLE memory_items DROP CONSTRAINT IF EXISTS memory_items_obs_count_check;
+ALTER TABLE memory_items ADD CONSTRAINT memory_items_obs_count_check CHECK (
+  observation_count >= 1
+);
+ALTER TABLE memory_items DROP CONSTRAINT IF EXISTS memory_items_acc_count_check;
+ALTER TABLE memory_items ADD CONSTRAINT memory_items_acc_count_check CHECK (
+  access_count >= 0
 );
 -- Indexes
 CREATE UNIQUE INDEX IF NOT EXISTS memory_events_idempotency_uidx
@@ -239,12 +253,19 @@ class PostgresMemoryRepository(MemoryRepository):
         if token is not None:
             yield
             return
-        with self.connection_factory() as connection:
-            token = _tx_connection.set(connection)
-            try:
-                yield
-            finally:
-                _tx_connection.reset(token)
+        try:
+            with self.connection_factory() as connection:
+                token = _tx_connection.set(connection)
+                try:
+                    yield
+                finally:
+                    _tx_connection.reset(token)
+        except MemoryError:
+            raise
+        except Exception as exc:
+            raise MemoryStorageError(
+                f"Repository atomic write failed: {exc}"
+            ) from exc
 
     def initialize(self):
         with self.connection_factory(register_types=False) as connection:
@@ -861,16 +882,18 @@ class PostgresMemoryRepository(MemoryRepository):
         return self._fetch_rows(sql, tuple(values))
 
     def record_access(self, memory_id, request):
-        self._execute(
-            "INSERT INTO memory_access_logs(memory_id,trace_id,user_id,agent_id,query) "
-            "VALUES(%s,%s,%s,%s,%s)",
-            (memory_id, request.trace_id, request.scope.user_id, request.scope.agent_id, request.query),
-        )
-        self._execute(
-            "UPDATE memory_items SET access_count=access_count+1, "
-            "last_accessed_at=now() WHERE id=%s",
-            (memory_id,),
-        )
+        with self._connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO memory_access_logs(memory_id,trace_id,user_id,agent_id,query) "
+                    "VALUES(%s,%s,%s,%s,%s)",
+                    (memory_id, request.trace_id, request.scope.user_id, request.scope.agent_id, request.query),
+                )
+                cursor.execute(
+                    "UPDATE memory_items SET access_count=access_count+1, "
+                    "last_accessed_at=now() WHERE id=%s",
+                    (memory_id,),
+                )
 
     def list_versions(self, scope, identity):
         return self._fetch_objects(
@@ -970,12 +993,19 @@ class PostgresMemoryRepository(MemoryRepository):
 
     @contextmanager
     def _connection(self):
-        connection = _tx_connection.get(None)
-        if connection is not None:
-            yield connection
-        else:
-            with self.connection_factory() as connection:
+        try:
+            connection = _tx_connection.get(None)
+            if connection is not None:
                 yield connection
+            else:
+                with self.connection_factory() as connection:
+                    yield connection
+        except MemoryError:
+            raise
+        except Exception as exc:
+            raise MemoryStorageError(
+                f"Repository storage failed: {exc}"
+            ) from exc
 
     def _fetch_objects(self, sql, values, kind):
         return [self._hydrate(row, kind) for row in self._fetch_rows(sql, values)]

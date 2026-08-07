@@ -399,7 +399,7 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
             item.status == MemoryItemStatus.ACTIVE for item in versions
         ))
 
-    def test_sql_retrieve_writes_access_log_without_realtime_counter(self):
+    def test_sql_retrieve_writes_access_log_and_increments_counter(self):
         item = self.make_item(
             f"customer:{self.suffix}:industry", "新能源", self.vector(0)
         )
@@ -414,7 +414,8 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         with redirect_stdout(StringIO()):
             context = system.retrieve(self.retrieve_request("industry"))
         self.assertEqual([item.id], [reference.memory_id for reference in context.references])
-        self.assertEqual(0, self.repository.get_item(item.id).access_count)
+        self.assertEqual(1, self.repository.get_item(item.id).access_count)
+        self.assertIsNotNone(self.repository.get_item(item.id).last_accessed_at)
         with self.repository.connection_factory() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -678,6 +679,69 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         self.assertEqual("transient-failure", stored.error)
         self.assertEqual("provider_error", stored.error_code)
         self.assertIsNotNone(stored.next_attempt_at)
+
+    # ── Group-2 counter concurrency ─────────────────────────────────
+
+    def test_group2_concurrent_observation_does_not_lose_update(self):
+        item = self.make_item(
+            f"customer:{self.suffix}:g2-obs", "first", self.vector(0)
+        )
+        self.repository.create_item(item)
+        self.assertEqual(1, item.observation_count)
+        barrier = Barrier(2)
+        errors = []
+
+        class Eval:
+            confidence = 0.9
+            importance = 0.8
+
+        def merge_obs():
+            try:
+                barrier.wait(timeout=5)
+                self.repository.merge_observation(item, Eval())
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [Thread(target=merge_obs) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+        self.assertFalse(errors)
+        stored = self.repository.get_item(item.id)
+        self.assertEqual(3, stored.observation_count,
+                         "two concurrent observations must not lose update")
+
+    def test_group2_concurrent_access_does_not_lose_update(self):
+        item = self.make_item(
+            f"customer:{self.suffix}:g2-acc", "x", self.vector(0)
+        )
+        self.repository.create_item(item)
+        barrier = Barrier(5)
+        errors = []
+
+        class FakeReq:
+            trace_id = "t"
+            scope = item.scope
+            query = "x"
+            types = []
+
+        def record():
+            try:
+                barrier.wait(timeout=5)
+                self.repository.record_access(item.id, FakeReq())
+            except Exception as exc:
+                errors.append(exc)
+
+        threads = [Thread(target=record) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+        self.assertFalse(errors)
+        stored = self.repository.get_item(item.id)
+        self.assertEqual(5, stored.access_count,
+                         "five concurrent reads must not lose update")
 
 
 if __name__ == "__main__":

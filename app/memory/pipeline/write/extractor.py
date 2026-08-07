@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any
 import json
 
+from app.memory.errors import MemoryError, MemoryProviderError
 from app.memory.models.identity import MemoryIdentity
 
 
@@ -52,10 +53,17 @@ class LLMMemoryExtractor(MemoryExtractor):
                 for item in event.observations
             ],
         }
-        response = self.llm.chat([
-            {"role": "system", "content": "You are a memory fact extractor, not an Agent."},
-            {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
-        ])
+        try:
+            response = self.llm.chat([
+                {"role": "system", "content": "You are a memory fact extractor, not an Agent."},
+                {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+            ])
+        except MemoryError:
+            raise
+        except Exception as exc:
+            raise MemoryProviderError(
+                f"LLM extraction failed: {exc}"
+            ) from exc
         text = response.strip()
         if text.startswith("```"):
             lines = text.splitlines()

@@ -1,5 +1,6 @@
 import json
 
+from app.memory.errors import MemoryError, MemoryProviderError, MemoryStorageError
 from app.memory.events import MemoryDomainEvent
 from app.memory.pipeline.write.resolver import Resolution
 
@@ -34,9 +35,14 @@ class WritePipeline:
         raw_candidates = self.extractor.extract(event)
         pending = []
         for raw_candidate in raw_candidates:
-            embedding = self.embedding_service.embed(
-                self._embedding_text(raw_candidate.content)
-            )
+            try:
+                embedding = self.embedding_service.embed(
+                    self._embedding_text(raw_candidate.content)
+                )
+            except Exception as exc:
+                raise MemoryProviderError(
+                    f"Embedding provider failed: {exc}"
+                ) from exc
             raw_candidate.embedding = embedding.vector
             raw_candidate.metadata.update({
                 "embedding_provider": embedding.provider,
@@ -54,9 +60,16 @@ class WritePipeline:
             self.authorization_provider.authorize_write_candidate(
                 event.principal, event.scope, candidate.type
             )
-            existing = self.repository.find_active_head(
-                event.scope, candidate.identity
-            )
+            try:
+                existing = self.repository.find_active_head(
+                    event.scope, candidate.identity
+                )
+            except MemoryError:
+                raise
+            except Exception as exc:
+                raise MemoryStorageError(
+                    f"Repository read failed: {exc}"
+                ) from exc
             resolution = self.resolver.resolve(candidate, existing)
             if self.fine_dedup.is_duplicate(candidate, existing):
                 resolution = Resolution.UPDATE
