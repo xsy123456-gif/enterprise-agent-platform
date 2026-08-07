@@ -134,10 +134,77 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         self.assertTrue(state["pgvector_version"])
         self.assertEqual("memory_items_embedding_hnsw_idx", state["vector_index"])
         self.assertEqual("memory_items_active_head_uidx", state["active_head_index"])
+        self.assertEqual(
+            "memory_items_scope_identity_version_uidx", state["version_index"]
+        )
         self.assertTrue({
             "memory_events", "memory_items", "memory_relations",
             "memory_access_logs", "memory_processing_tasks",
         }.issubset(state["tables"]))
+
+    def test_validate_schema_fails_when_version_identity_index_is_missing(self):
+        with self.repository.connection_factory(register_types=False) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("DROP INDEX memory_items_scope_identity_version_uidx")
+        try:
+            with self.assertRaisesRegex(RuntimeError, "version unique index is missing"):
+                self.repository.validate_schema()
+        finally:
+            with self.repository.connection_factory(register_types=False) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "CREATE UNIQUE INDEX memory_items_scope_identity_version_uidx "
+                        "ON memory_items (tenant_id, department_id, user_id, agent_id, "
+                        "type, entity_id, attribute, version) NULLS NOT DISTINCT"
+                    )
+
+    def test_legacy_key_backfill_accepts_unambiguous_key(self):
+        with self.repository.connection_factory(register_types=False) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "CREATE TEMP TABLE memory_items ("
+                    "id text, memory_key text NOT NULL, type text NOT NULL, "
+                    "entity_id text, attribute text)"
+                )
+                cursor.execute(
+                    "INSERT INTO memory_items (id, memory_key, type) "
+                    "VALUES ('legacy-1', 'customer:customer_A:industry', 'customer')"
+                )
+                self.repository._backfill_legacy_identity(cursor)
+                cursor.execute(
+                    "SELECT entity_id, attribute FROM memory_items WHERE id='legacy-1'"
+                )
+                self.assertEqual(("customer_A", "industry"), cursor.fetchone())
+
+    def test_legacy_key_backfill_rejects_ambiguous_key(self):
+        with self.repository.connection_factory(register_types=False) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "CREATE TEMP TABLE memory_items ("
+                    "id text, memory_key text NOT NULL, type text NOT NULL, "
+                    "entity_id text, attribute text)"
+                )
+                cursor.execute(
+                    "INSERT INTO memory_items (id, memory_key, type) "
+                    "VALUES ('legacy-ambiguous', 'customer:customer_A:industry:extra', 'customer')"
+                )
+                with self.assertRaisesRegex(RuntimeError, "Cannot safely backfill"):
+                    self.repository._backfill_legacy_identity(cursor)
+
+    def test_legacy_key_backfill_rejects_type_mismatch(self):
+        with self.repository.connection_factory(register_types=False) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "CREATE TEMP TABLE memory_items ("
+                    "id text, memory_key text NOT NULL, type text NOT NULL, "
+                    "entity_id text, attribute text)"
+                )
+                cursor.execute(
+                    "INSERT INTO memory_items (id, memory_key, type) "
+                    "VALUES ('legacy-mismatch', 'string:customer_A:industry', 'customer')"
+                )
+                with self.assertRaisesRegex(RuntimeError, "Cannot safely backfill"):
+                    self.repository._backfill_legacy_identity(cursor)
 
     def test_embedding_dimension_mismatch_fails_at_startup(self):
         with self.assertRaisesRegex(RuntimeError, "dimension mismatch"):

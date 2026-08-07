@@ -105,22 +105,8 @@ ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS attribute text;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS schema_version integer NOT NULL DEFAULT 1;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS observation_count integer NOT NULL DEFAULT 1;
 ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS last_observed_at timestamptz;
-UPDATE memory_items SET
-  entity_id=split_part(memory_key, ':', 2),
-  attribute=split_part(memory_key, ':', 3)
-WHERE entity_id IS NULL OR attribute IS NULL;
-ALTER TABLE memory_items ALTER COLUMN entity_id SET NOT NULL;
-ALTER TABLE memory_items ALTER COLUMN attribute SET NOT NULL;
 ALTER TABLE memory_items DROP CONSTRAINT IF EXISTS
   memory_items_memory_key_tenant_id_user_id_agent_id_version_key;
-CREATE UNIQUE INDEX IF NOT EXISTS memory_items_scope_identity_version_uidx
-  ON memory_items (
-    tenant_id, department_id, user_id, agent_id, type, entity_id, attribute, version
-  ) NULLS NOT DISTINCT;
-CREATE UNIQUE INDEX IF NOT EXISTS memory_items_active_head_uidx
-  ON memory_items (
-    tenant_id, department_id, user_id, agent_id, type, entity_id, attribute
-  ) NULLS NOT DISTINCT WHERE status='active';
 CREATE INDEX IF NOT EXISTS memory_items_scope_active_idx
   ON memory_items (tenant_id, department_id, user_id, agent_id, status);
 CREATE INDEX IF NOT EXISTS memory_events_status_idx ON memory_events (status);
@@ -142,6 +128,17 @@ class PostgresMemoryRepository(MemoryRepository):
         with self.connection_factory(register_types=False) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(build_schema_sql(self.embedding_dimension))
+                self._backfill_legacy_identity(cursor)
+                cursor.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS memory_items_scope_identity_version_uidx "
+                    "ON memory_items (tenant_id, department_id, user_id, agent_id, type, "
+                    "entity_id, attribute, version) NULLS NOT DISTINCT"
+                )
+                cursor.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS memory_items_active_head_uidx "
+                    "ON memory_items (tenant_id, department_id, user_id, agent_id, type, "
+                    "entity_id, attribute) NULLS NOT DISTINCT WHERE status='active'"
+                )
                 cursor.execute(
                     "SELECT format_type(attribute.atttypid,attribute.atttypmod) "
                     "FROM pg_attribute attribute "
@@ -203,6 +200,11 @@ class PostgresMemoryRepository(MemoryRepository):
                 )
                 active_head_index = cursor.fetchone()
                 cursor.execute(
+                    "SELECT indexname FROM pg_indexes WHERE schemaname=current_schema() "
+                    "AND indexname='memory_items_scope_identity_version_uidx'"
+                )
+                version_index = cursor.fetchone()
+                cursor.execute(
                     "SELECT table_name,column_name FROM information_schema.columns "
                     "WHERE table_schema=current_schema() AND table_name = ANY(%s)",
                     (list(TABLES),),
@@ -229,6 +231,8 @@ class PostgresMemoryRepository(MemoryRepository):
             raise RuntimeError("Memory vector index is missing")
         if not active_head_index:
             raise RuntimeError("Memory ACTIVE head unique index is missing")
+        if not version_index:
+            raise RuntimeError("Memory scope identity version unique index is missing")
         missing_columns = {
             table: sorted(required - columns.get(table, set()))
             for table, required in REQUIRED_COLUMNS.items()
@@ -250,9 +254,48 @@ class PostgresMemoryRepository(MemoryRepository):
             "tables": tables,
             "vector_index": vector_index[0],
             "active_head_index": active_head_index[0],
+            "version_index": version_index[0],
             "embedding_dimension": self.embedding_dimension,
             "vector_type": actual_vector_type,
         }
+
+    @staticmethod
+    def _parse_legacy_identity(memory_key, type_id):
+        parts = memory_key.split(":") if isinstance(memory_key, str) else []
+        if len(parts) != 3 or not all(parts) or parts[0] != type_id:
+            raise RuntimeError(
+                "Cannot safely backfill Memory identity: "
+                f"memory_key={memory_key!r}, type={type_id!r}"
+            )
+        return parts[1], parts[2]
+
+    def _backfill_legacy_identity(self, cursor):
+        cursor.execute(
+            "SELECT id, memory_key, type, entity_id, attribute "
+            "FROM memory_items ORDER BY id"
+        )
+        rows = cursor.fetchall()
+        for item_id, memory_key, type_id, entity_id, attribute in rows:
+            if (entity_id is None) != (attribute is None):
+                raise RuntimeError(
+                    "Cannot safely backfill Memory identity: partial identity "
+                    f"for id={item_id!r}"
+                )
+            if entity_id is None:
+                entity_id, attribute = self._parse_legacy_identity(memory_key, type_id)
+                cursor.execute(
+                    "UPDATE memory_items SET entity_id=%s, attribute=%s WHERE id=%s",
+                    (entity_id, attribute, item_id),
+                )
+            expected_key = f"{type_id}:{entity_id}:{attribute}"
+            if memory_key != expected_key:
+                raise RuntimeError(
+                    "Memory identity does not match memory_key: "
+                    f"id={item_id!r}, memory_key={memory_key!r}, "
+                    f"expected={expected_key!r}"
+                )
+        cursor.execute("ALTER TABLE memory_items ALTER COLUMN entity_id SET NOT NULL")
+        cursor.execute("ALTER TABLE memory_items ALTER COLUMN attribute SET NOT NULL")
 
     def save_event(self, event):
         sql = """INSERT INTO memory_events
