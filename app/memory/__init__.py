@@ -1,3 +1,9 @@
-from app.memory.api import MemoryEventRequest, MemoryRetrieveRequest, MemoryService
+from app.memory.api import (
+    MemoryObservation, MemoryPrincipal, MemoryRetrieveRequest, MemoryService,
+    MemorySource, MemorySubmitRequest,
+)
 
-__all__ = ["MemoryEventRequest", "MemoryRetrieveRequest", "MemoryService"]
+__all__ = [
+    "MemoryObservation", "MemoryPrincipal", "MemoryRetrieveRequest", "MemoryService",
+    "MemorySource", "MemorySubmitRequest",
+]

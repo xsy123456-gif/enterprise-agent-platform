@@ -1,6 +1,7 @@
 import json
 
 from app.memory.errors import ConcurrentMemoryWrite, MemoryConcurrencyError
+from app.memory.events import MemoryDomainEvent
 from app.memory.pipeline.write.resolver import Resolution
 
 
@@ -12,7 +13,7 @@ class WritePipeline:
     )
 
     def __init__(self, repository, extractor, embedding_service, evaluator, normalizer, pre_dedup,
-                 resolver, fine_dedup, ranker, updater, governance, event_publisher=None):
+                 resolver, fine_dedup, ranker, updater, authorization_provider, event_sink=None):
         self.repository = repository
         self.extractor = extractor
         self.embedding_service = embedding_service
@@ -23,8 +24,8 @@ class WritePipeline:
         self.fine_dedup = fine_dedup
         self.ranker = ranker
         self.updater = updater
-        self.governance = governance
-        self.event_publisher = event_publisher
+        self.authorization_provider = authorization_provider
+        self.event_sink = event_sink
 
     def process(self, event):
         stage = self.STAGES[0]
@@ -56,7 +57,9 @@ class WritePipeline:
                 self._stage(event, stage)
                 if not self.pre_dedup.accept(event, candidate):
                     continue
-                self.governance.check_write(event, candidate)
+                self.authorization_provider.authorize_write_candidate(
+                    event.principal, event.scope, candidate.type
+                )
                 item = created = resolution = existing = None
                 for attempt in range(self.MAX_CONCURRENT_WRITE_ATTEMPTS):
                     existing = self.repository.find_active_head(
@@ -121,5 +124,9 @@ class WritePipeline:
         )
 
     def _publish(self, event_type, event, metadata):
-        if self.event_publisher:
-            self.event_publisher(event_type, event, metadata)
+        if self.event_sink:
+            self.event_sink.publish(MemoryDomainEvent(
+                event_type=event_type, aggregate_id=event.event_id,
+                payload={"trace_id": event.trace_id, "task_id": event.task_id,
+                         "agent_id": event.agent_id, **metadata},
+            ))

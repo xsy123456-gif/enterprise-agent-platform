@@ -1,24 +1,22 @@
 from app.memory.api.models import MemorySubmitResponse
-from app.memory.governance.policy import MemoryAccessDenied
 from app.memory.models.event import MemoryEvent, MemoryEventStatus
+from app.memory.events import MemoryDomainEvent
 
 
 class MemoryService:
     """The only external Memory API: retrieve(request) and submit(request)."""
 
-    def __init__(self, repository, read_pipeline, event_publisher=None):
+    def __init__(self, repository, read_pipeline, authorization_provider,
+                 event_sink=None):
         self._repository = repository
         self.read_pipeline = read_pipeline
-        self.event_publisher = event_publisher
-        self.consumer = None
-
-    def attach_consumer(self, consumer):
-        self.consumer = consumer
+        self.authorization_provider = authorization_provider
+        self.event_sink = event_sink
 
     def retrieve(self, request):
         try:
             context = self.read_pipeline.execute(request)
-        except MemoryAccessDenied as error:
+        except PermissionError as error:
             self._publish("memory.read.denied", {
                 "trace_id": request.trace_id, "user_id": request.user_id,
                 "agent_id": request.agent_id, "tenant_id": request.tenant_id,
@@ -33,19 +31,17 @@ class MemoryService:
         return context
 
     def submit(self, request):
-        event = MemoryEvent(
-            trace_id=request.trace_id, task_id=request.task_id,
-            agent_id=request.agent_id, user_id=request.user_id,
-            tenant_id=request.tenant_id, department_id=request.department_id,
-            event_type=request.event_type, input=dict(request.input),
-            output=dict(request.output), tool_results=list(request.tool_results),
-            metadata=dict(request.metadata),
+        self.authorization_provider.authorize_ingest(
+            request.principal, request.scope, request.source
         )
+        event = MemoryEvent.from_submit_request(request)
         self._repository.save_event(event)
-        if self.consumer is not None:
-            self.consumer.enqueue(event.event_id)
         return MemorySubmitResponse(True, event.event_id, MemoryEventStatus.RECEIVED)
 
     def _publish(self, event_type, payload):
-        if self.event_publisher:
-            self.event_publisher(event_type, payload)
+        if self.event_sink:
+            self.event_sink.publish(MemoryDomainEvent(
+                event_type=event_type,
+                aggregate_id=payload.get("event_id", payload.get("trace_id", "")),
+                payload=dict(payload),
+            ))
