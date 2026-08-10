@@ -4,6 +4,10 @@ from hashlib import sha256
 import json
 
 from app.compiler.backend import BackendArtifact
+from app.artifacts import (
+    ArtifactBinding, ArtifactDependencySnapshot,
+    InMemoryArtifactBindingRepository, InMemoryArtifactRepository,
+)
 from app.compiler import GraphCompiler
 from app.compiler.backend.langgraph import LangGraphBackendCompiler
 from app.runtime.backends.langgraph import (
@@ -23,21 +27,50 @@ from app.runtime.selector import RuntimeSelector
 class BackendArtifactResolver:
     """Read-only runtime artifact lookup boundary."""
 
-    def __init__(self, artifacts=None):
-        self._artifacts = dict(artifacts or {})
+    def __init__(self, artifacts=None, artifact_repository=None,
+                 binding_repository=None):
+        self.artifact_repository = (
+            artifact_repository or InMemoryArtifactRepository()
+        )
+        self.binding_repository = (
+            binding_repository or InMemoryArtifactBindingRepository()
+        )
+        for artifact in dict(artifacts or {}).values():
+            self.register(artifact)
 
     def register(self, artifact):
-        key = (artifact.agent_id, artifact.agent_version, artifact.backend_type)
-        self._artifacts[key] = artifact
+        self.artifact_repository.save(artifact)
+        self.binding_repository.bind(ArtifactBinding(
+            agent_id=artifact.agent_id,
+            agent_version=artifact.agent_version,
+            backend_type=artifact.backend_type,
+            artifact_ref=artifact.artifact_id,
+            artifact_hash=artifact.artifact_hash,
+        ))
         return artifact
 
     def get(self, agent_id, version, backend_type="current"):
-        try:
-            return self._artifacts[(agent_id, version, backend_type)]
-        except KeyError as error:
+        binding = self.binding_repository.get(agent_id, version, backend_type)
+        artifact = (
+            self.artifact_repository.get(binding.artifact_ref)
+            if binding is not None else None
+        )
+        if artifact is None:
             raise KeyError(
                 f"Runtime artifact not found: {agent_id}:{version}:{backend_type}"
-            ) from error
+            )
+        if artifact.artifact_hash != binding.artifact_hash:
+            raise ValueError("Artifact binding hash mismatch")
+        return artifact
+
+    def get_by_hash(self, artifact_hash):
+        artifact = self.artifact_repository.get_by_hash(artifact_hash)
+        if artifact is None:
+            raise KeyError(f"Runtime artifact hash not found: {artifact_hash}")
+        return artifact
+
+    def bind(self, artifact):
+        return self.register(artifact)
 
 
 class AgentRuntimeStateFactory:
@@ -104,6 +137,9 @@ class RuntimeDispatcher:
         )
         artifact = self.artifact_resolver.get(agent_id, version, backend_type)
         state = self.state_factory.create(context, agent_id, version)
+        state.metadata["artifact_id"] = artifact.artifact_id
+        state.metadata["artifact_hash"] = artifact.artifact_hash
+        state.metadata["backend_type"] = artifact.backend_type
         execution_record = (
             self.execution_manager.create(state, artifact)
             if self.execution_manager is not None else None
@@ -202,7 +238,14 @@ class RuntimeDispatcher:
                 runtime_engine.tool_runner.registry,
                 agent_registry,
             )
-            resolver.register(langgraph_compiler.compile(graph_ir))
+            snapshot = cls._dependency_snapshot(definition, agent_registry)
+            langgraph_artifact = langgraph_compiler.compile(
+                graph_ir, dependency_snapshot=snapshot.to_dict()
+            )
+            resolver.register(langgraph_artifact)
+            agent_registry.attach_artifact(
+                agent.agent_id, agent.version, langgraph_artifact.artifact_id
+            )
         langgraph = LangGraphRuntimeAdapter(
             LangGraphNodeAdapterRegistry(
                 agent_registry=agent_registry,
@@ -229,7 +272,8 @@ class RuntimeDispatcher:
             execution_store.initialize_schema()
             checkpoint_store.initialize_schema()
             execution_manager = ExecutionManager(
-                execution_store, checkpoint_store=checkpoint_store
+                execution_store, checkpoint_store=checkpoint_store,
+                artifact_resolver=resolver,
             )
         return cls(
             selector,
@@ -238,6 +282,35 @@ class RuntimeDispatcher:
                 AgentContextBuilder(runtime_engine.memory_adapter)
             ),
             execution_manager=execution_manager,
+        )
+
+    @staticmethod
+    def _dependency_snapshot(definition, agent_registry):
+        prompt_hash = sha256(definition.system_prompt.encode("utf-8")).hexdigest()
+        bindings = []
+        for capability in definition.capabilities:
+            for binding in agent_registry.get_tool_bindings(capability):
+                bindings.append({
+                    "tool_id": binding.tool_name,
+                    "version": "unversioned",
+                    "permission": binding.required_permission,
+                    "capability": capability,
+                })
+        model = definition.runtime.get("model")
+        return ArtifactDependencySnapshot(
+            prompt_refs=({"ref": f"{definition.agent_id}/system", "hash": prompt_hash},),
+            tool_bindings=tuple(bindings),
+            policy_refs=(
+                ({"policy_id": definition.policy_ref, "version": "unversioned"},)
+                if definition.policy_ref else ()
+            ),
+            capabilities=tuple(definition.capabilities),
+            model_binding={"model": model, "config_version": "manifest"} if model else {},
+            memory_policy_ref=definition.memory_policy,
+            governance_refs=(
+                ({"policy_ref": definition.policy_ref},)
+                if definition.policy_ref else ()
+            ),
         )
 
 

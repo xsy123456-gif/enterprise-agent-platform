@@ -5,6 +5,7 @@ from app.artifacts.models import (
 )
 from app.artifacts.repository import ArtifactRepository
 from app.artifacts.storage import InMemoryArtifactRepository
+from app.artifacts.bindings import ArtifactBinding, InMemoryArtifactBindingRepository
 
 __all__ = [
     "AgentLifecycleStatus",
@@ -12,4 +13,6 @@ __all__ = [
     "CompiledAgentArtifact",
     "ArtifactDependencySnapshot",
     "InMemoryArtifactRepository",
+    "ArtifactBinding",
+    "InMemoryArtifactBindingRepository",
 ]

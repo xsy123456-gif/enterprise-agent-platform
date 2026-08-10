@@ -25,6 +25,8 @@ class ExecutionRecord:
     agent_id: str
     agent_version: str
     artifact_id: str
+    artifact_hash: str
+    backend_type: str
     user_id: str | None
     tenant_id: str
     status: ExecutionStatus = ExecutionStatus.CREATED

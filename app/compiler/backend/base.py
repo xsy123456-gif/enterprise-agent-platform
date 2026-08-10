@@ -10,5 +10,5 @@ class BackendCompiler(ABC):
     backend_type: str
 
     @abstractmethod
-    def compile(self, graph_ir: AgentGraphIR) -> BackendArtifact:
+    def compile(self, graph_ir: AgentGraphIR, dependency_snapshot=None) -> BackendArtifact:
         pass

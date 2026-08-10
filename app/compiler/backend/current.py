@@ -11,7 +11,14 @@ class CurrentBackendCompiler(BackendCompiler):
         self.backend_version = backend_version
         self.compiler_version = compiler_version
 
-    def compile(self, graph_ir):
+    def compile(self, graph_ir, dependency_snapshot=None):
+        dependencies = {"graph_ir_schema": graph_ir.schema_version}
+        if dependency_snapshot:
+            dependencies["snapshot"] = (
+                dependency_snapshot.to_dict()
+                if hasattr(dependency_snapshot, "to_dict")
+                else dict(dependency_snapshot)
+            )
         return BackendArtifact.create(
             agent_id=graph_ir.agent_id,
             agent_version=graph_ir.version,
@@ -25,5 +32,5 @@ class CurrentBackendCompiler(BackendCompiler):
                 "agent_version": graph_ir.version,
                 "execution_policy": dict(graph_ir.execution_policy),
             },
-            dependencies={"graph_ir_schema": graph_ir.schema_version},
+            dependencies=dependencies,
         )

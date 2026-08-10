@@ -133,6 +133,7 @@ class LangGraphRuntimeAdapter(GraphRuntime):
             raise ValueError(
                 f"LangGraph runtime cannot execute backend: {artifact.backend_type}"
             )
+        artifact.verify(backend_type="langgraph", production=True)
         if not isinstance(state, AgentRuntimeState):
             raise TypeError("LangGraph runtime requires AgentRuntimeState")
         if (

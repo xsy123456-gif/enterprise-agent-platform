@@ -138,7 +138,10 @@ class CompiledAgentArtifact:
     @classmethod
     def from_ir(cls, graph_ir, compiler_version, dependencies=None):
         graph_hash = graph_ir.stable_hash()
-        dependencies = dict(dependencies or {})
+        dependencies = (
+            dependencies.to_dict()
+            if hasattr(dependencies, "to_dict") else dict(dependencies or {})
+        )
         content = {
             "agent_id": graph_ir.agent_id, "agent_version": graph_ir.version,
             "graph_ir_hash": graph_hash,

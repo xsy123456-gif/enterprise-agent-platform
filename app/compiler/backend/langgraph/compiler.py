@@ -18,8 +18,18 @@ class LangGraphBackendCompiler(BackendCompiler):
         self.backend_version = backend_version
         self.compiler_version = compiler_version
 
-    def compile(self, graph_ir):
+    def compile(self, graph_ir, dependency_snapshot=None):
         runtime_definition = self.generator.generate(graph_ir)
+        dependencies = {
+            "graph_ir_schema": graph_ir.schema_version,
+            "langgraph": ">=1.2,<2.0",
+        }
+        if dependency_snapshot:
+            dependencies["snapshot"] = (
+                dependency_snapshot.to_dict()
+                if hasattr(dependency_snapshot, "to_dict")
+                else dict(dependency_snapshot)
+            )
         return LangGraphBackendArtifact.create(
             agent_id=graph_ir.agent_id,
             agent_version=graph_ir.version,
@@ -28,8 +38,5 @@ class LangGraphBackendCompiler(BackendCompiler):
             compiler_version=self.compiler_version,
             graph_ir_hash=graph_ir.stable_hash(),
             runtime_definition=runtime_definition,
-            dependencies={
-                "graph_ir_schema": graph_ir.schema_version,
-                "langgraph": ">=1.2,<2.0",
-            },
+            dependencies=dependencies,
         )

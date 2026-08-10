@@ -25,7 +25,10 @@ def state():
 
 
 def artifact():
-    return SimpleNamespace(artifact_id="sales:1:langgraph")
+    return SimpleNamespace(
+        artifact_id="sales:1:langgraph", artifact_hash="hash-a",
+        backend_type="langgraph",
+    )
 
 
 def test_execution_lifecycle_and_history():

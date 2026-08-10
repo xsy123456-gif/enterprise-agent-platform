@@ -64,7 +64,8 @@ class PostgresExecutionStore(ExecutionStore):
     CREATE TABLE IF NOT EXISTS executions (
       execution_id TEXT PRIMARY KEY, trace_id TEXT NOT NULL,
       agent_id TEXT NOT NULL, agent_version TEXT NOT NULL,
-      artifact_id TEXT NOT NULL, user_id TEXT, tenant_id TEXT NOT NULL,
+      artifact_id TEXT NOT NULL, artifact_hash TEXT NOT NULL,
+      backend_type TEXT NOT NULL, user_id TEXT, tenant_id TEXT NOT NULL,
       status TEXT NOT NULL, current_node TEXT,
       created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL
     );
@@ -93,10 +94,11 @@ class PostgresExecutionStore(ExecutionStore):
             with self.connection_factory() as connection:
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        "INSERT INTO executions VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                        "INSERT INTO executions VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                         (record.execution_id, record.trace_id, record.agent_id,
-                         record.agent_version, record.artifact_id, record.user_id,
-                         record.tenant_id, record.status.value, record.current_node,
+                         record.agent_version, record.artifact_id, record.artifact_hash,
+                         record.backend_type, record.user_id, record.tenant_id,
+                         record.status.value, record.current_node,
                          record.created_at, record.updated_at),
                     )
                     cursor.execute(
@@ -109,7 +111,7 @@ class PostgresExecutionStore(ExecutionStore):
 
     def get(self, execution_id):
         row = self._fetchone(
-            "SELECT execution_id,trace_id,agent_id,agent_version,artifact_id,user_id,tenant_id,status,current_node,created_at,updated_at FROM executions WHERE execution_id=%s",
+            "SELECT execution_id,trace_id,agent_id,agent_version,artifact_id,artifact_hash,backend_type,user_id,tenant_id,status,current_node,created_at,updated_at FROM executions WHERE execution_id=%s",
             (execution_id,),
         )
         return self._record(row) if row else None
@@ -146,7 +148,8 @@ class PostgresExecutionStore(ExecutionStore):
             ExecutionRecord(
                 execution_id=current.execution_id, trace_id=current.trace_id,
                 agent_id=current.agent_id, agent_version=current.agent_version,
-                artifact_id=current.artifact_id, user_id=current.user_id,
+                artifact_id=current.artifact_id, artifact_hash=current.artifact_hash,
+                backend_type=current.backend_type, user_id=current.user_id,
                 tenant_id=current.tenant_id, status=ExecutionStatus(row[0]),
                 current_node=row[1], created_at=current.created_at,
                 updated_at=row[2],
@@ -170,6 +173,6 @@ class PostgresExecutionStore(ExecutionStore):
     @staticmethod
     def _record(row):
         values = list(row)
-        if isinstance(values[7], str):
-            values[7] = ExecutionStatus(values[7])
+        if isinstance(values[9], str):
+            values[9] = ExecutionStatus(values[9])
         return ExecutionRecord(*values)
