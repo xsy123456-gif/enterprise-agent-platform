@@ -31,6 +31,15 @@ class AgentRuntimeState:
     tool_results: list[Any] = field(default_factory=list)
     response: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    execution_id: str | None = None
+    user_id: str | None = None
+    department_id: str | None = None
+    permission_context: dict[str, Any] = field(default_factory=dict)
+    policy_context: dict[str, Any] = field(default_factory=dict)
+    authorization_result: Any | None = None
+    audit_context: dict[str, Any] = field(default_factory=dict)
+    request_context: dict[str, Any] = field(default_factory=dict)
+    memory_policy: Any | None = None
 
     def __post_init__(self):
         for name in ("task_id", "trace_id", "tenant_id", "agent_id", "agent_version"):
@@ -71,6 +80,15 @@ class AgentRuntimeState:
             "tool_results": self.tool_results,
             "response": self.response,
             "metadata": self.metadata,
+            "execution_id": self.execution_id,
+            "user_id": self.user_id,
+            "department_id": self.department_id,
+            "permission_context": self.permission_context,
+            "policy_context": self.policy_context,
+            "authorization_result": self.authorization_result,
+            "audit_context": self.audit_context,
+            "request_context": self.request_context,
+            "memory_policy": self.memory_policy,
         })
 
     @classmethod

@@ -79,12 +79,12 @@ class LangGraphGraphGenerator:
         def execute(state):
             events = list(state.get("_events") or [])
             events.append(RuntimeEvent(
-                RuntimeEventType.NODE_STARTED, state["task_id"], node_id,
+                RuntimeEventType.NODE_STARTED, state["execution_id"], node_id,
             ).to_dict())
             patch = dict(adapter(state) or {})
             patch["current_node"] = node_id
             events.append(RuntimeEvent(
-                RuntimeEventType.NODE_COMPLETED, state["task_id"], node_id,
+                RuntimeEventType.NODE_COMPLETED, state["execution_id"], node_id,
             ).to_dict())
             patch["_events"] = events
             return patch

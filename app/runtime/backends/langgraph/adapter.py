@@ -43,7 +43,7 @@ class LangGraphRuntimeAdapter(GraphRuntime):
                 backend_state,
                 config={"recursion_limit": max(1, int(recursion_limit))},
             )
-            final_state = self.state_adapter.from_backend(output)
+            final_state = self.state_adapter.from_backend(output, state)
             final_state.apply_patch({"status": "completed"})
             events = self.state_adapter.events_from_backend(output)
             events.extend([

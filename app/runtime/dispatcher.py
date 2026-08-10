@@ -52,6 +52,12 @@ class AgentRuntimeStateFactory:
                 "goal": context.goal,
                 "department_id": context.department_id,
             },
+            execution_id=context.task_id,
+            user_id=context.user_id,
+            department_id=context.department_id,
+            permission_context={"role": context.role},
+            request_context={"input": context.task},
+            memory_policy=getattr(context.agent_definition, "memory_policy", None),
         )
 
 

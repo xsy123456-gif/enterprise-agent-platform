@@ -9,8 +9,11 @@ class LangGraphStateAdapter(LangGraphStateMapper):
     def to_backend(self, state: AgentRuntimeState) -> LangGraphState:
         return self.to_graph_state(state)
 
-    def from_backend(self, payload) -> AgentRuntimeState:
-        return self.from_graph_state(payload)
+    def from_backend(self, payload, runtime_state=None):
+        result = self.from_graph_state(payload)
+        if runtime_state is None:
+            return result
+        return self.apply_result(runtime_state, result)
 
     @staticmethod
     def events_from_backend(payload):

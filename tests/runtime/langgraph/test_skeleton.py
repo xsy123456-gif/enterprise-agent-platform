@@ -44,7 +44,8 @@ class LangGraphRuntimeSkeletonTest(unittest.TestCase):
         mapper = LangGraphStateMapper()
 
         graph_state = mapper.to_graph_state(runtime_state)
-        restored = mapper.from_graph_state(graph_state)
+        result = mapper.from_graph_state(graph_state)
+        restored = mapper.apply_result(runtime_state, result)
 
         self.assertEqual("execution", graph_state["execution_id"])
         self.assertEqual("input", graph_state["input"])
