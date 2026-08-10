@@ -1,4 +1,4 @@
-from app.compiler.models.ir import AgentGraphIR, EdgeIR, NodeIR, NodeType
+from app.compiler.models.ir import AgentGraphIR, EdgeIR, EdgeType, NodeIR, NodeType
 
 
 class AgentGraphIRBuilder:
@@ -14,11 +14,18 @@ class AgentGraphIRBuilder:
 
     def build(self, compile_input):
         definition = compile_input.agent_definition
+        graph_execution_policy = {
+            "timeout": definition.runtime.get("timeout"),
+            "max_steps": definition.runtime.get("max_steps", 10),
+            "retry": dict(definition.runtime.get("retry") or {}),
+            "concurrency": definition.runtime.get("concurrency", 1),
+        }
         nodes = [
             NodeIR("start", NodeType.START),
             NodeIR(
                 "governance", NodeType.GOVERNANCE,
                 bindings={"policy_ref": definition.policy_ref},
+                governance={"policy_ref": definition.policy_ref},
             ),
         ]
         edges = [EdgeIR("start", "governance")]
@@ -43,6 +50,9 @@ class AgentGraphIRBuilder:
                 "version": definition.version,
                 "capabilities": list(definition.capabilities),
             },
+            execution_policy=dict(graph_execution_policy),
+            governance={"policy_ref": definition.policy_ref},
+            retry_policy=dict(graph_execution_policy["retry"]),
         ))
         edges.append(EdgeIR(previous, "agent"))
 
@@ -53,13 +63,14 @@ class AgentGraphIRBuilder:
             ))
             edges.append(EdgeIR(
                 "agent", node_id, condition=f"action.tool == '{tool_name}'",
-                edge_type="conditional",
+                edge_type=EdgeType.CONDITIONAL,
             ))
             edges.append(EdgeIR(node_id, "agent"))
 
         nodes.append(NodeIR("end", NodeType.END))
         edges.append(EdgeIR(
-            "agent", "end", condition="action == 'finish'", edge_type="conditional"
+            "agent", "end", condition="action == 'finish'",
+            edge_type=EdgeType.CONDITIONAL,
         ))
         return AgentGraphIR(
             agent_id=definition.agent_id,
@@ -73,4 +84,5 @@ class AgentGraphIRBuilder:
                 "capabilities": list(definition.capabilities),
                 "tools": list(definition.allowed_tools),
             },
+            execution_policy=graph_execution_policy,
         )

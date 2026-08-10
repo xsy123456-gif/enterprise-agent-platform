@@ -5,7 +5,7 @@ from app.capabilities.catalog import CapabilityCatalog
 from app.capabilities.models import CapabilityDefinition
 from app.capabilities.repository import InMemoryCapabilityRepository
 from app.compiler import GraphCompiler
-from app.compiler.models import NodeType
+from app.compiler.models import EdgeType, NodeType
 from app.compiler.validator import CompilerValidationError
 from app.registry.models import Policy
 from app.registry.service import AgentRegistry
@@ -54,7 +54,7 @@ class GraphCompilerTest(unittest.TestCase):
             node.type for node in graph.nodes if node.id == "agent"
         ))
         self.assertIn(
-            ("agent", "tool:crm_query", "conditional"),
+            ("agent", "tool:crm_query", EdgeType.CONDITIONAL),
             [(edge.source, edge.target, edge.edge_type) for edge in graph.edges],
         )
 

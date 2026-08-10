@@ -1,7 +1,5 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import hashlib
-import json
 from typing import Any
 
 
@@ -68,10 +66,7 @@ class CompiledAgentArtifact:
 
     @classmethod
     def from_ir(cls, graph_ir, compiler_version, dependencies=None):
-        encoded = json.dumps(
-            graph_ir.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":"),
-        ).encode("utf-8")
-        graph_hash = hashlib.sha256(encoded).hexdigest()
+        graph_hash = graph_ir.stable_hash()
         return cls(
             artifact_id=f"{graph_ir.agent_id}:{graph_ir.version}:{graph_hash[:12]}",
             agent_id=graph_ir.agent_id,
