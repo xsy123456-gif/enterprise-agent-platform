@@ -16,6 +16,9 @@ class GraphState(TypedDict, total=False):
     metadata: dict[str, Any]
 
     # Backend-private execution fields; never contain platform governance state.
+    reasoning_output: Any
+    tool_call_request: dict[str, Any] | None
+    observation: Any
     status: str
     response: str | None
     _action: dict[str, Any] | None
