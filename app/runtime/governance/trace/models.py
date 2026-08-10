@@ -29,6 +29,10 @@ class ExecutionTrace:
     agent_execution_id: str | None = None
     invocation_id: str | None = None
     message_id: str | None = None
+    parent_agent_execution_id: str | None = None
+    child_agent_execution_id: str | None = None
+    graph_node_id: str | None = None
+    parallel_group_id: str | None = None
 
     def __post_init__(self):
         for name in (
@@ -55,6 +59,10 @@ class ExecutionTrace:
             "agent_execution_id": self.agent_execution_id,
             "invocation_id": self.invocation_id,
             "message_id": self.message_id,
+            "parent_agent_execution_id": self.parent_agent_execution_id,
+            "child_agent_execution_id": self.child_agent_execution_id,
+            "graph_node_id": self.graph_node_id,
+            "parallel_group_id": self.parallel_group_id,
         }
 
     @classmethod
@@ -91,6 +99,10 @@ class NodeSpan:
     agent_execution_id: str | None = None
     invocation_id: str | None = None
     message_id: str | None = None
+    parent_agent_execution_id: str | None = None
+    child_agent_execution_id: str | None = None
+    graph_node_id: str | None = None
+    parallel_group_id: str | None = None
 
     def __post_init__(self):
         for name in ("span_id", "trace_id", "node_id", "node_type", "status"):
@@ -135,6 +147,10 @@ class NodeSpan:
             "agent_execution_id": self.agent_execution_id,
             "invocation_id": self.invocation_id,
             "message_id": self.message_id,
+            "parent_agent_execution_id": self.parent_agent_execution_id,
+            "child_agent_execution_id": self.child_agent_execution_id,
+            "graph_node_id": self.graph_node_id,
+            "parallel_group_id": self.parallel_group_id,
             "duration_ms": self.duration_ms,
         }
 

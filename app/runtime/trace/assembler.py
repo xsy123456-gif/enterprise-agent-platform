@@ -79,6 +79,10 @@ class TraceAssembler:
                 agent_execution_id=event.agent_execution_id,
                 invocation_id=event.invocation_id,
                 message_id=event.message_id,
+                parent_agent_execution_id=event.parent_agent_execution_id,
+                child_agent_execution_id=event.child_agent_execution_id,
+                graph_node_id=event.graph_node_id,
+                parallel_group_id=event.parallel_group_id,
             )
             self.repository.append(trace)
             self.repository.append_span(NodeSpan(
@@ -92,6 +96,10 @@ class TraceAssembler:
                 agent_execution_id=event.agent_execution_id,
                 invocation_id=event.invocation_id,
                 message_id=event.message_id,
+                parent_agent_execution_id=event.parent_agent_execution_id,
+                child_agent_execution_id=event.child_agent_execution_id,
+                graph_node_id=event.graph_node_id,
+                parallel_group_id=event.parallel_group_id,
             ))
             return trace
 
@@ -111,6 +119,10 @@ class TraceAssembler:
             agent_execution_id=event.agent_execution_id,
             invocation_id=event.invocation_id,
             message_id=event.message_id,
+            parent_agent_execution_id=event.parent_agent_execution_id,
+            child_agent_execution_id=event.child_agent_execution_id,
+            graph_node_id=event.graph_node_id,
+            parallel_group_id=event.parallel_group_id,
         )
         self.repository.append_span(span)
         if category == "NODE":

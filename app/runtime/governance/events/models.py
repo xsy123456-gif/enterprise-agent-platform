@@ -85,6 +85,10 @@ class RuntimeEvent:
     agent_execution_id: str | None = None
     invocation_id: str | None = None
     message_id: str | None = None
+    parent_agent_execution_id: str | None = None
+    child_agent_execution_id: str | None = None
+    graph_node_id: str | None = None
+    parallel_group_id: str | None = None
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = field(default_factory=utc_now)
 
@@ -129,6 +133,10 @@ class RuntimeEvent:
             "agent_execution_id": self.agent_execution_id,
             "invocation_id": self.invocation_id,
             "message_id": self.message_id,
+            "parent_agent_execution_id": self.parent_agent_execution_id,
+            "child_agent_execution_id": self.child_agent_execution_id,
+            "graph_node_id": self.graph_node_id,
+            "parallel_group_id": self.parallel_group_id,
         }
 
     @classmethod

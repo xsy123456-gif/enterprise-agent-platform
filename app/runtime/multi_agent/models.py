@@ -63,6 +63,26 @@ class AgentMessageStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class AgentTaskStatus(str, Enum):
+    PENDING = "pending"
+    READY = "ready"
+    RUNNING = "running"
+    WAITING = "waiting"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class AgentGraphExecutionStatus(str, Enum):
+    CREATED = "created"
+    WAITING_CHILDREN = "waiting_children"
+    RUNNING_CHILDREN = "running_children"
+    AGGREGATING = "aggregating"
+    COMPLETED = "completed"
+    PARTIAL_FAILED = "partial_failed"
+    FAILED = "failed"
+
+
 @dataclass(frozen=True)
 class EvidenceReference:
     type: str
@@ -146,6 +166,78 @@ class ContextCorrelation:
 
     def to_dict(self):
         return dict(self.__dict__)
+
+    @classmethod
+    def from_dict(cls, payload):
+        return cls(**dict(payload))
+
+
+@dataclass(frozen=True)
+class AgentTask:
+    """A schedulable unit; it contains contracts, never Runtime state."""
+
+    task_id: str
+    agent_id: str
+    artifact_hash: str
+    dependencies: tuple[str, ...] = ()
+    input_context: Any | None = None
+    status: AgentTaskStatus = AgentTaskStatus.PENDING
+    result: Any | None = None
+
+    def __post_init__(self):
+        for name in ("task_id", "agent_id", "artifact_hash"):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name):
+                raise ValueError(f"{name} is required")
+        object.__setattr__(self, "dependencies", tuple(self.dependencies))
+        object.__setattr__(self, "status", AgentTaskStatus(self.status))
+        if len(self.dependencies) != len(set(self.dependencies)):
+            raise ValueError("AgentTask dependencies must be unique")
+        if self.input_context is not None:
+            value = (
+                self.input_context.to_dict()
+                if hasattr(self.input_context, "to_dict")
+                else self.input_context
+            )
+            _json_copy(value, "input_context")
+        if self.result is not None:
+            value = self.result.to_dict() if hasattr(self.result, "to_dict") else self.result
+            _json_copy(value, "result")
+
+    def transition(self, status, result=None):
+        target = AgentTaskStatus(status)
+        allowed = {
+            AgentTaskStatus.PENDING: {AgentTaskStatus.READY, AgentTaskStatus.SKIPPED},
+            AgentTaskStatus.READY: {AgentTaskStatus.RUNNING, AgentTaskStatus.SKIPPED},
+            AgentTaskStatus.RUNNING: {
+                AgentTaskStatus.COMPLETED, AgentTaskStatus.FAILED,
+                AgentTaskStatus.SKIPPED,
+            },
+            AgentTaskStatus.WAITING: {AgentTaskStatus.RUNNING, AgentTaskStatus.SKIPPED},
+            AgentTaskStatus.COMPLETED: set(),
+            AgentTaskStatus.FAILED: set(),
+            AgentTaskStatus.SKIPPED: set(),
+        }
+        if target not in allowed[self.status]:
+            raise ValueError(
+                f"Invalid Agent task transition: {self.status.value} -> {target.value}"
+            )
+        return replace(self, status=target, result=result if result is not None else self.result)
+
+    def to_dict(self):
+        return {
+            "task_id": self.task_id,
+            "agent_id": self.agent_id,
+            "artifact_hash": self.artifact_hash,
+            "dependencies": list(self.dependencies),
+            "input_context": (
+                self.input_context.to_dict()
+                if hasattr(self.input_context, "to_dict") else self.input_context
+            ),
+            "status": self.status.value,
+            "result": (
+                self.result.to_dict() if hasattr(self.result, "to_dict") else self.result
+            ),
+        }
 
     @classmethod
     def from_dict(cls, payload):

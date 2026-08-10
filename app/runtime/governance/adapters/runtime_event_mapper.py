@@ -20,6 +20,10 @@ class RuntimeEventContext:
     agent_execution_id: str | None = None
     invocation_id: str | None = None
     message_id: str | None = None
+    parent_agent_execution_id: str | None = None
+    child_agent_execution_id: str | None = None
+    graph_node_id: str | None = None
+    parallel_group_id: str | None = None
     backend_metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):
@@ -86,4 +90,8 @@ class RuntimeEventMapper:
             agent_execution_id=context.agent_execution_id,
             invocation_id=context.invocation_id,
             message_id=context.message_id,
+            parent_agent_execution_id=context.parent_agent_execution_id,
+            child_agent_execution_id=context.child_agent_execution_id,
+            graph_node_id=context.graph_node_id,
+            parallel_group_id=context.parallel_group_id,
         )
