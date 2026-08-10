@@ -15,6 +15,8 @@ class GraphState(TypedDict, total=False):
     current_node: str | None
     intermediate_results: dict[str, Any]
     metadata: dict[str, Any]
+    guard_result: dict[str, Any]
+    governance_decision: dict[str, Any]
 
     # Backend-private execution fields; never contain platform governance state.
     reasoning_output: Any

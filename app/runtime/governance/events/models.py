@@ -24,6 +24,10 @@ class RuntimeEventType:
     MEMORY_RETRIEVED = "memory.retrieved"
     MEMORY_SUBMITTED = "memory.submitted"
     GOVERNANCE_CHECKED = "governance.checked"
+    GUARD_CHECKED = "guard.checked"
+    APPROVAL_REQUESTED = "approval.requested"
+    APPROVAL_COMPLETED = "approval.completed"
+    EXECUTION_RESUMED = "execution.resumed"
 
     ALL = {
         GRAPH_STARTED, GRAPH_COMPLETED, GRAPH_FAILED,
@@ -31,6 +35,8 @@ class RuntimeEventType:
         WORKER_STARTED, WORKER_COMPLETED, WORKER_FAILED,
         TOOL_CALLED, TOOL_COMPLETED, TOOL_FAILED,
         MEMORY_RETRIEVED, MEMORY_SUBMITTED, GOVERNANCE_CHECKED,
+        GUARD_CHECKED, APPROVAL_REQUESTED, APPROVAL_COMPLETED,
+        EXECUTION_RESUMED,
     }
 
 
