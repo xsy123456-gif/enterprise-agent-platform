@@ -18,6 +18,8 @@ class RuntimeEventContext:
     worker_id: str | None = None
     parent_agent_id: str | None = None
     agent_execution_id: str | None = None
+    invocation_id: str | None = None
+    message_id: str | None = None
     backend_metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):
@@ -82,4 +84,6 @@ class RuntimeEventMapper:
             parent_span_id=event.parent_span_id,
             parent_agent_id=context.parent_agent_id,
             agent_execution_id=context.agent_execution_id,
+            invocation_id=context.invocation_id,
+            message_id=context.message_id,
         )

@@ -42,6 +42,9 @@ class RuntimeEventType:
     CHECKPOINT_RESTORED = "checkpoint.restored"
     EXECUTION_RETRY_REQUESTED = "execution.retry_requested"
     EXECUTION_CANCELLED = "execution.cancelled"
+    AGENT_MESSAGE_CREATED = "agent.message.created"
+    AGENT_MESSAGE_DELIVERED = "agent.message.delivered"
+    AGENT_MESSAGE_REJECTED = "agent.message.rejected"
 
     ALL = {
         GRAPH_STARTED, GRAPH_COMPLETED, GRAPH_FAILED,
@@ -56,6 +59,7 @@ class RuntimeEventType:
         EXECUTION_CREATED, EXECUTION_STARTED, EXECUTION_WAITING,
         EXECUTION_COMPLETED, EXECUTION_FAILED, CHECKPOINT_CREATED,
         CHECKPOINT_RESTORED, EXECUTION_RETRY_REQUESTED, EXECUTION_CANCELLED,
+        AGENT_MESSAGE_CREATED, AGENT_MESSAGE_DELIVERED, AGENT_MESSAGE_REJECTED,
     }
 
 
@@ -79,6 +83,8 @@ class RuntimeEvent:
     parent_span_id: str | None = None
     parent_agent_id: str | None = None
     agent_execution_id: str | None = None
+    invocation_id: str | None = None
+    message_id: str | None = None
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = field(default_factory=utc_now)
 
@@ -121,6 +127,8 @@ class RuntimeEvent:
             "parent_span_id": self.parent_span_id,
             "parent_agent_id": self.parent_agent_id,
             "agent_execution_id": self.agent_execution_id,
+            "invocation_id": self.invocation_id,
+            "message_id": self.message_id,
         }
 
     @classmethod

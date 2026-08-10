@@ -3,7 +3,12 @@ from app.runtime.multi_agent.contracts import (
     AgentExecutionResult,
     AgentInvocationRequest,
 )
-from app.runtime.multi_agent.context import AgentContextEnvelope
+from app.runtime.multi_agent.context import (
+    AgentContextEnvelope,
+    ContextProjector,
+    ContextTransferPolicy,
+)
+from app.runtime.multi_agent.mapping import AgentResultMapper
 from app.runtime.multi_agent.executor import AgentRuntimeInvoker, SupervisorGraphRuntime
 from app.runtime.multi_agent.graph import AgentExecutionGraph
 from app.runtime.multi_agent.models import (
@@ -39,6 +44,9 @@ __all__ = [
     "AgentProvenance",
     "AgentResultStatus",
     "AgentContextEnvelope",
+    "AgentResultMapper",
+    "ContextProjector",
+    "ContextTransferPolicy",
     "ContextCorrelation",
     "EvidenceReference",
     "AgentInvocationRequest",

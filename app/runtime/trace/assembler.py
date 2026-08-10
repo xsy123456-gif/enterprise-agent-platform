@@ -14,6 +14,7 @@ class TraceAssembler:
         "node_id", "node_type", "tool", "tool_name", "request_id",
         "approval_id", "memory_event_id", "accepted", "result_count",
         "model", "provider", "capability", "retry_count", "checkpoint_id",
+        "sender_agent_id", "receiver_agent_id", "message_type", "payload_size",
     }
 
     STARTS = {
@@ -53,6 +54,8 @@ class TraceAssembler:
             self._close_span(event, trace, category, fixed_name, status)
         elif event.event_type == "guard.checked":
             self._instant_span(event, trace, "GOVERNANCE", "guard.checked")
+        elif event.event_type.startswith("agent.message."):
+            self._instant_span(event, trace, "MESSAGE", event.event_type)
         if event.event_type in {
             "execution.completed", "execution.failed", "execution.cancelled",
             "graph.completed", "graph.failed",
@@ -74,6 +77,8 @@ class TraceAssembler:
                 artifact_hash=event.artifact_hash,
                 parent_agent_id=event.parent_agent_id,
                 agent_execution_id=event.agent_execution_id,
+                invocation_id=event.invocation_id,
+                message_id=event.message_id,
             )
             self.repository.append(trace)
             self.repository.append_span(NodeSpan(
@@ -85,6 +90,8 @@ class TraceAssembler:
                 artifact_hash=event.artifact_hash, backend_type=event.backend_type,
                 parent_agent_id=event.parent_agent_id,
                 agent_execution_id=event.agent_execution_id,
+                invocation_id=event.invocation_id,
+                message_id=event.message_id,
             ))
             return trace
 
@@ -102,6 +109,8 @@ class TraceAssembler:
             attributes=self._safe_attributes(event.payload),
             parent_agent_id=event.parent_agent_id,
             agent_execution_id=event.agent_execution_id,
+            invocation_id=event.invocation_id,
+            message_id=event.message_id,
         )
         self.repository.append_span(span)
         if category == "NODE":

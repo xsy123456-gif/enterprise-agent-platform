@@ -27,6 +27,8 @@ class ExecutionTrace:
     artifact_hash: str = "unknown"
     parent_agent_id: str | None = None
     agent_execution_id: str | None = None
+    invocation_id: str | None = None
+    message_id: str | None = None
 
     def __post_init__(self):
         for name in (
@@ -51,6 +53,8 @@ class ExecutionTrace:
             "artifact_hash": self.artifact_hash,
             "parent_agent_id": self.parent_agent_id,
             "agent_execution_id": self.agent_execution_id,
+            "invocation_id": self.invocation_id,
+            "message_id": self.message_id,
         }
 
     @classmethod
@@ -85,6 +89,8 @@ class NodeSpan:
     attributes: dict[str, Any] = field(default_factory=dict)
     parent_agent_id: str | None = None
     agent_execution_id: str | None = None
+    invocation_id: str | None = None
+    message_id: str | None = None
 
     def __post_init__(self):
         for name in ("span_id", "trace_id", "node_id", "node_type", "status"):
@@ -127,6 +133,8 @@ class NodeSpan:
             "attributes": dict(self.attributes),
             "parent_agent_id": self.parent_agent_id,
             "agent_execution_id": self.agent_execution_id,
+            "invocation_id": self.invocation_id,
+            "message_id": self.message_id,
             "duration_ms": self.duration_ms,
         }
 

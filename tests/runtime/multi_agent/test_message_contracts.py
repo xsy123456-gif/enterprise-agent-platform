@@ -114,3 +114,12 @@ def test_agent_error_is_structured_and_has_no_stack_field():
     assert payload["retryable"] is True
     assert "stack" not in payload
     assert "traceback" not in payload
+
+
+def test_graph_state_shape_is_not_accepted_as_a_transfer_envelope():
+    graph_state = GraphState(
+        trace_id="trace", execution_id="execution", agent_id="sales_agent",
+        current_node="reasoning", tool_results=[], metadata={},
+    )
+    with pytest.raises(AgentContractValidationError, match="Runtime context"):
+        message({"graph_state": graph_state})

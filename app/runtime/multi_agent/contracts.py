@@ -203,6 +203,20 @@ class AgentExecutionResult:
             raise ValueError("confidence must be between 0 and 1")
         if not isinstance(self.metadata, dict):
             raise TypeError("metadata must be a dict")
+        if self.provenance is not None:
+            expected = (
+                self.agent_id, self.agent_version, self.artifact_id,
+                self.artifact_hash, self.agent_execution_id,
+            )
+            actual = (
+                self.provenance.source_agent_id,
+                self.provenance.source_agent_version,
+                self.provenance.source_artifact_id,
+                self.provenance.source_artifact_hash,
+                self.provenance.source_agent_execution_id,
+            )
+            if actual != expected:
+                raise ValueError("Result provenance must match platform identity")
         validate_transfer_value(self.output, "AgentExecutionResult.output")
         validate_transfer_value(self.findings, "AgentExecutionResult.findings")
         validate_transfer_value(self.artifacts, "AgentExecutionResult.artifacts")
