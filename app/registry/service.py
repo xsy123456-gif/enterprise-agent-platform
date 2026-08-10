@@ -1,6 +1,7 @@
 import re
 
 from app.registry.models import AgentStatus
+from app.artifacts.models import AgentLifecycleStatus
 
 
 class AgentRegistry:
@@ -86,6 +87,21 @@ class AgentRegistry:
             raise ValueError(f"Unsupported agent status: {status}")
         agent = self.get(agent_id, version, require_active=False)
         agent.status = status
+        self.repository.update_agent(agent)
+        return agent
+
+    def transition(self, agent_id, version, target):
+        """Transition Registry status through the compiler artifact lifecycle."""
+        agent = self.get(agent_id, version, require_active=False)
+        agent.status = AgentLifecycleStatus.transition(agent.status, target)
+        self.repository.update_agent(agent)
+        return agent
+
+    def attach_artifact(self, agent_id, version, artifact_ref):
+        if not isinstance(artifact_ref, str) or not artifact_ref.strip():
+            raise ValueError("artifact_ref is required")
+        agent = self.get(agent_id, version, require_active=False)
+        agent.artifact_ref = artifact_ref.strip()
         self.repository.update_agent(agent)
         return agent
 

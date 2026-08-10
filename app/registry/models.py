@@ -7,8 +7,11 @@ from app.agents.definition import AgentDefinition
 class AgentStatus:
     DRAFT = "draft"
     VALIDATING = "validating"
+    COMPILING = "compiling"
+    COMPILED = "compiled"
     REVIEWING = "reviewing"
     APPROVED = "approved"
+    PUBLISHED = "published"
     ACTIVE = "active"
     SUSPENDED = "suspended"
     DEPRECATED = "deprecated"
@@ -18,8 +21,11 @@ class AgentStatus:
     ALL = {
         DRAFT,
         VALIDATING,
+        COMPILING,
+        COMPILED,
         REVIEWING,
         APPROVED,
+        PUBLISHED,
         ACTIVE,
         SUSPENDED,
         DEPRECATED,
@@ -62,6 +68,7 @@ class Agent:
     instance: Any
     policy_id: Optional[str] = None
     definition: Optional[AgentDefinition] = None
+    artifact_ref: Optional[str] = None
 
     @property
     def registry_key(self):
