@@ -4,7 +4,15 @@ from hashlib import sha256
 import json
 
 from app.compiler.backend import BackendArtifact
+from app.compiler import GraphCompiler
+from app.compiler.backend.langgraph import LangGraphBackendCompiler
+from app.runtime.backends.langgraph import (
+    LangGraphNodeAdapterRegistry,
+    LangGraphResponseEventHook,
+    LangGraphRuntimeAdapter,
+)
 from app.runtime.contracts import AgentRuntimeState
+from app.runtime.context_builder import AgentContextBuilder
 from app.runtime.governance.adapters import RuntimeEventContext, RuntimeEventMapper
 from app.runtime.ports import CurrentRuntimeAdapter
 from app.runtime.selector import RuntimeSelector
@@ -33,14 +41,23 @@ class BackendArtifactResolver:
 class AgentRuntimeStateFactory:
     """Maps orchestration AgentContext to the backend-neutral state contract."""
 
+    def __init__(self, context_builder=None):
+        self.context_builder = context_builder
+
     def create(self, context, agent_id, version):
+        definition = context.agent_definition
+        messages = (
+            self.context_builder.build_messages(context, definition)
+            if self.context_builder is not None
+            else list(context.messages)
+        )
         return AgentRuntimeState(
             task_id=context.task_id,
             trace_id=context.trace_id,
             tenant_id=context.tenant_id,
             agent_id=agent_id,
             agent_version=version,
-            messages=list(context.messages),
+            messages=messages,
             memory_context=context.memory_context,
             tool_results=list(context.tool_results),
             metadata={
@@ -51,6 +68,9 @@ class AgentRuntimeStateFactory:
                 "capability": context.capability,
                 "goal": context.goal,
                 "department_id": context.department_id,
+                "allowed_tools": list(
+                    getattr(definition, "allowed_tools", []) or []
+                ),
             },
             execution_id=context.task_id,
             user_id=context.user_id,
@@ -85,6 +105,13 @@ class RuntimeDispatcher:
             version=version,
             agent_definition=definition,
         )
+        if (
+            artifact.backend_type == "langgraph"
+            and hasattr(backend, "response_event_hook")
+        ):
+            backend.response_event_hook = LangGraphResponseEventHook(
+                self.event_bus, self.event_store
+            )
         result = backend.execute(artifact, state)
         self._publish_governance_events(result.events, state, artifact)
         return result
@@ -112,6 +139,10 @@ class RuntimeDispatcher:
     @classmethod
     def from_runtime_engine(cls, runtime_engine, agent_registry):
         resolver = BackendArtifactResolver()
+        graph_compiler = GraphCompiler(compiler_version="v0.8.6")
+        langgraph_compiler = LangGraphBackendCompiler(
+            compiler_version="v0.8.6"
+        )
         for agent in agent_registry.list_agents():
             definition = agent.definition or getattr(agent.instance, "definition", None)
             runtime = getattr(definition, "runtime", {}) if definition else {}
@@ -140,11 +171,34 @@ class RuntimeDispatcher:
                     ),
                 },
             ))
-        selector = RuntimeSelector(
-            {"current": CurrentRuntimeAdapter(runtime_engine)},
-            default_backend="current",
+            graph_ir = graph_compiler.compile(
+                definition,
+                agent_registry.capability_catalog,
+                runtime_engine.tool_runner.registry,
+                agent_registry,
+            )
+            resolver.register(langgraph_compiler.compile(graph_ir))
+        langgraph = LangGraphRuntimeAdapter(
+            LangGraphNodeAdapterRegistry(
+                agent_registry=agent_registry,
+                tool_runner=runtime_engine.tool_runner,
+                memory_adapter=runtime_engine.memory_adapter,
+            )
         )
-        return cls(selector, resolver)
+        selector = RuntimeSelector(
+            {
+                "langgraph": langgraph,
+                "current": CurrentRuntimeAdapter(runtime_engine),
+            },
+            default_backend="langgraph",
+        )
+        return cls(
+            selector,
+            resolver,
+            state_factory=AgentRuntimeStateFactory(
+                AgentContextBuilder(runtime_engine.memory_adapter)
+            ),
+        )
 
 
 class LegacyRuntimeFacade:

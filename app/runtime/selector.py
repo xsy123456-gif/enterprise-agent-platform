@@ -6,7 +6,7 @@ from app.runtime.ports import GraphRuntime
 class RuntimeSelector:
     """Select a GraphRuntime without exposing backend types to Supervisor."""
 
-    def __init__(self, runtimes=None, default_backend="current"):
+    def __init__(self, runtimes=None, default_backend="langgraph"):
         self._runtimes = {}
         self.default_backend = default_backend
         for backend_type, runtime in dict(runtimes or {}).items():

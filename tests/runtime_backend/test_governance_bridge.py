@@ -29,7 +29,9 @@ class GovernanceBridgeTest(unittest.TestCase):
         )
         store = InMemoryEventStore()
         dispatcher = RuntimeDispatcher(
-            RuntimeSelector({"current": EventBackend()}),
+            RuntimeSelector(
+                {"current": EventBackend()}, default_backend="current"
+            ),
             BackendArtifactResolver({("agent", "1", "current"): artifact}),
             event_store=store,
         )

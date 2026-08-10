@@ -3,6 +3,7 @@ import uuid
 
 from app.runtime.action import AgentAction
 from app.runtime.tool_validation import ToolRequestValidator
+from app.runtime.backends.langgraph.nodes import ToolNode
 
 
 def _parse_agent_action(response):
@@ -43,7 +44,8 @@ class AgentNodeAdapter:
         messages = list(state.get("messages") or [])
         system_prompt = getattr(definition, "system_prompt", None)
         if system_prompt and not any(
-            item.get("role") == "system" and item.get("content") == system_prompt
+            item.get("role") == "system"
+            and system_prompt in str(item.get("content") or "")
             for item in messages if isinstance(item, dict)
         ):
             messages.insert(0, {"role": "system", "content": system_prompt})
@@ -157,10 +159,9 @@ class MemoryNodeAdapter:
         self.node_definition = node_definition
 
     def __call__(self, state):
-        record = self.agent_registry.get(state["agent_id"], state["agent_version"])
-        definition = record.definition or getattr(record.instance, "definition", None)
-        context = self.memory_adapter.retrieve(_MemoryState(state), definition)
-        return {"memory_context": context, "status": "running"}
+        # Memory read context is prepared at the Runtime boundary before graph
+        # execution. The IR node remains a dependency marker only.
+        return {"status": "running"}
 
 
 class GovernanceNodeAdapter:
@@ -194,9 +195,7 @@ class LangGraphNodeAdapterRegistry:
         if name == "AgentNodeAdapter":
             return AgentNodeAdapter(self.agent_registry, node_definition)
         if name == "ToolNodeAdapter":
-            return ToolNodeAdapter(
-                self.tool_runner, self.agent_registry, node_definition
-            )
+            return ToolNode(tool_runner=self.tool_runner)
         if name == "MemoryNodeAdapter":
             return MemoryNodeAdapter(
                 self.memory_adapter, self.agent_registry, node_definition

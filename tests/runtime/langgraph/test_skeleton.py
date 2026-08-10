@@ -23,7 +23,7 @@ class LangGraphRuntimeSkeletonTest(unittest.TestCase):
         selector = RuntimeSelector({"current": current, "langgraph": langgraph})
 
         self.assertIs(langgraph, selector.select("langgraph"))
-        self.assertIs(current, selector.select())
+        self.assertIs(langgraph, selector.select())
 
         with patch.dict("os.environ", {"RUNTIME_BACKEND": "langgraph"}):
             self.assertIs(langgraph, selector.select())

@@ -400,7 +400,7 @@ class OrchestrationTest(unittest.TestCase):
         self.assertEqual("visit prepared", result.output)
         self.assertEqual("crm_query", audit.logs[0]["tool"])
         self.assertIn(
-            "tool_completed",
+            "tool.completed",
             [event.event_type for event in event_bus.events],
         )
 

@@ -52,7 +52,7 @@ class RuntimeDispatcherTest(unittest.TestCase):
         )
         from app.runtime.selector import RuntimeSelector
         dispatcher = RuntimeDispatcher(
-            RuntimeSelector({"current": backend}),
+            RuntimeSelector({"current": backend}, default_backend="current"),
             BackendArtifactResolver({("agent", "1", "current"): artifact}),
             AgentRuntimeStateFactory(),
         )

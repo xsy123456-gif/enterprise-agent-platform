@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from app.agents.definition import AgentDefinition
 from app.runtime.contracts import ExecutionResult
@@ -20,8 +21,16 @@ class RuntimeSelectorTest(unittest.TestCase):
             "langgraph": self.langgraph,
         })
 
-    def test_select_current_backend(self):
-        self.assertIs(self.current, self.selector.select("agent", "1.0"))
+    def test_langgraph_is_default_and_current_is_explicit_legacy(self):
+        self.assertIs(self.langgraph, self.selector.select("agent", "1.0"))
+        self.assertIs(
+            self.current,
+            self.selector.select(
+                "agent", "1.0", feature_flags={"runtime_backend": "current"}
+            ),
+        )
+        with patch.dict("os.environ", {"RUNTIME_BACKEND": "current"}):
+            self.assertIs(self.current, self.selector.select("agent", "1.0"))
 
     def test_select_langgraph_backend(self):
         definition = AgentDefinition(

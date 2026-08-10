@@ -36,7 +36,7 @@ class CurrentBackendProductionTest(unittest.TestCase):
     def test_current_backend_is_selected_and_delegates_without_legacy_leak(self):
         engine = RecordingEngine()
         backend = CurrentRuntimeAdapter(engine)
-        selector = RuntimeSelector({"current": backend})
+        selector = RuntimeSelector({"current": backend}, default_backend="current")
 
         selected = selector.select("sales_agent", "0.2")
         result = selected.execute(artifact(), state())

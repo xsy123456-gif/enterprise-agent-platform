@@ -120,5 +120,9 @@ class ToolGovernanceTest(unittest.TestCase):
         self.assertEqual("completed", result.status)
         self.assertEqual([("sales", "crm_query")], permission.checks)
         self.assertEqual("allow", audit.records[0]["action"])
-        self.assertEqual([{"customer": "A"}], result.state.tool_results)
-        self.assertEqual("tool_completed", events.events[0].event_type)
+        self.assertEqual({"customer": "A"}, result.state.tool_results[0]["output"])
+        self.assertTrue(result.state.tool_results[0]["success"])
+        self.assertEqual(
+            ["tool.called", "tool.completed"],
+            [event.event_type for event in events.events],
+        )
