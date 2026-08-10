@@ -14,7 +14,7 @@ class LangGraphRuntimeAdapter(GraphRuntime):
     """Execute only compiled LangGraph BackendArtifacts through Runtime Contract v1."""
 
     def __init__(self, node_adapters=None, checkpoint_store=None, state_adapter=None,
-                 graph_generator=None, graph=None):
+                 graph_generator=None, graph=None, response_event_hook=None):
         self.state_adapter = state_adapter or LangGraphStateAdapter()
         self.graph = graph or (build_graph() if node_adapters is None else None)
         self.graph_generator = graph_generator or (
@@ -24,6 +24,7 @@ class LangGraphRuntimeAdapter(GraphRuntime):
         self.checkpoints = LangGraphCheckpointAdapter(
             checkpoint_store or InMemoryCheckpointStore()
         )
+        self.response_event_hook = response_event_hook
 
     def execute(self, artifact, state):
         self._validate_input(artifact, state)
@@ -51,13 +52,21 @@ class LangGraphRuntimeAdapter(GraphRuntime):
                 RuntimeEvent(RuntimeEventType.GRAPH_COMPLETED, state.task_id),
             ])
             self.checkpoints.save(final_state)
-            return ExecutionResult(
+            result = ExecutionResult(
                 task_id=final_state.task_id,
                 status="completed",
                 response=final_state.response,
                 state=final_state,
                 events=events,
             )
+            if self.response_event_hook is not None:
+                try:
+                    self.response_event_hook.emit(artifact, state, result)
+                except Exception as error:
+                    final_state.metadata.setdefault(
+                        "event_hook_errors", []
+                    ).append(str(error))
+            return result
         except Exception as error:
             failed_state = state.patched({
                 "status": "failed",

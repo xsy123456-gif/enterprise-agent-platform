@@ -28,6 +28,10 @@ class RuntimeEventType:
     APPROVAL_REQUESTED = "approval.requested"
     APPROVAL_COMPLETED = "approval.completed"
     EXECUTION_RESUMED = "execution.resumed"
+    RESPONSE_COMPLETED = "response.completed"
+    MEMORY_WRITE_REQUESTED = "memory.write.requested"
+    MEMORY_WRITE_COMPLETED = "memory.write.completed"
+    MEMORY_WRITE_FAILED = "memory.write.failed"
 
     ALL = {
         GRAPH_STARTED, GRAPH_COMPLETED, GRAPH_FAILED,
@@ -37,6 +41,8 @@ class RuntimeEventType:
         MEMORY_RETRIEVED, MEMORY_SUBMITTED, GOVERNANCE_CHECKED,
         GUARD_CHECKED, APPROVAL_REQUESTED, APPROVAL_COMPLETED,
         EXECUTION_RESUMED,
+        RESPONSE_COMPLETED, MEMORY_WRITE_REQUESTED,
+        MEMORY_WRITE_COMPLETED, MEMORY_WRITE_FAILED,
     }
 
 

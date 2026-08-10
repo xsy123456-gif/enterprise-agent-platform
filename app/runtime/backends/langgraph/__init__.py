@@ -7,6 +7,7 @@ from app.runtime.backends.langgraph.state_mapper import (
     LangGraphRuntimeResult,
     LangGraphStateMapper,
 )
+from app.runtime.backends.langgraph.response_event_hook import LangGraphResponseEventHook
 
 __all__ = [
     "GraphState",
@@ -15,5 +16,6 @@ __all__ = [
     "LangGraphRuntimeResult",
     "LangGraphStateAdapter",
     "LangGraphStateMapper",
+    "LangGraphResponseEventHook",
     "build_graph",
 ]
