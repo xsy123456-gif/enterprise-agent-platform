@@ -38,6 +38,120 @@ class AgentExecutionGraphStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class AgentResultStatus(str, Enum):
+    """Public result semantics, independent from ExecutionManager lifecycle."""
+
+    COMPLETED = "completed"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    DENIED = "denied"
+    CANCELLED = "cancelled"
+
+
+class AgentMessageType(str, Enum):
+    INPUT = "INPUT"
+    RESULT = "RESULT"
+    CONTEXT = "CONTEXT"
+    CONTROL = "CONTROL"
+    ERROR = "ERROR"
+
+
+class AgentMessageStatus(str, Enum):
+    CREATED = "created"
+    VALIDATED = "validated"
+    DELIVERED = "delivered"
+    REJECTED = "rejected"
+
+
+@dataclass(frozen=True)
+class EvidenceReference:
+    type: str
+    ref: str
+    source: str | None = None
+
+    def __post_init__(self):
+        if not self.type or not self.ref:
+            raise ValueError("EvidenceReference type and ref are required")
+
+    def to_dict(self):
+        return {"type": self.type, "ref": self.ref, "source": self.source}
+
+    @classmethod
+    def from_dict(cls, payload):
+        return cls(**dict(payload))
+
+
+@dataclass(frozen=True)
+class AgentProvenance:
+    source_agent_id: str
+    source_agent_version: str
+    source_artifact_id: str
+    source_artifact_hash: str
+    source_agent_execution_id: str
+    source_message_id: str | None = None
+
+    def __post_init__(self):
+        for name in (
+            "source_agent_id", "source_agent_version", "source_artifact_id",
+            "source_artifact_hash", "source_agent_execution_id",
+        ):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name):
+                raise ValueError(f"{name} is required")
+
+    def to_dict(self):
+        return dict(self.__dict__)
+
+    @classmethod
+    def from_dict(cls, payload):
+        return cls(**dict(payload))
+
+
+@dataclass(frozen=True)
+class AgentError:
+    code: str
+    category: str
+    message: str
+    retryable: bool = False
+    details_ref: str | None = None
+
+    def __post_init__(self):
+        if not self.code or not self.category or not self.message:
+            raise ValueError("AgentError code, category and message are required")
+        if not isinstance(self.retryable, bool):
+            raise TypeError("AgentError retryable must be bool")
+
+    def to_dict(self):
+        return dict(self.__dict__)
+
+    @classmethod
+    def from_dict(cls, payload):
+        return cls(**dict(payload))
+
+
+@dataclass(frozen=True)
+class ContextCorrelation:
+    execution_id: str
+    trace_id: str
+    parent_agent_execution_id: str
+    invocation_id: str
+    source_message_id: str | None = None
+
+    def __post_init__(self):
+        for name in (
+            "execution_id", "trace_id", "parent_agent_execution_id",
+            "invocation_id",
+        ):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name):
+                raise ValueError(f"{name} is required")
+
+    def to_dict(self):
+        return dict(self.__dict__)
+
+    @classmethod
+    def from_dict(cls, payload):
+        return cls(**dict(payload))
+
+
 @dataclass(frozen=True)
 class AgentNode:
     """One independently versioned Runtime Artifact in a Supervisor graph."""
