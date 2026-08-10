@@ -44,6 +44,14 @@ class RuntimePortTest(unittest.TestCase):
         self.assertEqual("completed", result.status)
         self.assertEqual("delegated", result.response)
         self.assertEqual(("sales_agent", "0.2"), engine.calls[0][1:])
+        self.assertEqual(
+            artifact.artifact_hash,
+            result.state.metadata["runtime"]["artifact_hash"],
+        )
+        self.assertEqual(
+            artifact.artifact_id,
+            result.events[0].payload["runtime"]["artifact_id"],
+        )
 
     def test_current_adapter_rejects_non_backend_artifact(self):
         with self.assertRaisesRegex(TypeError, "BackendArtifact"):

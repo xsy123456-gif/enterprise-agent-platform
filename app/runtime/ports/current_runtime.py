@@ -18,8 +18,21 @@ class CurrentRuntimeAdapter(GraphRuntime):
 
     def execute(self, artifact, state):
         self._validate_input(artifact, state)
-        state.apply_patch({"status": "running"})
-        events = [RuntimeEvent(RuntimeEventType.WORKER_STARTED, state.task_id)]
+        runtime_context = {
+            "artifact_id": artifact.artifact_id,
+            "artifact_hash": artifact.artifact_hash,
+            "graph_ir_hash": artifact.graph_ir_hash,
+            "backend_type": artifact.backend_type,
+        }
+        state.apply_patch({
+            "status": "running",
+            "metadata": {**state.metadata, "runtime": runtime_context},
+        })
+        events = [RuntimeEvent(
+            RuntimeEventType.WORKER_STARTED,
+            state.task_id,
+            payload={"runtime": runtime_context},
+        )]
         context = self._to_current_context(state)
         try:
             response = self.runtime_engine.run(
@@ -32,10 +45,19 @@ class CurrentRuntimeAdapter(GraphRuntime):
                 "messages": list(context.messages),
                 "tool_results": list(context.tool_results),
                 "response": response,
+                "metadata": {**state.metadata, "runtime": runtime_context},
             })
             events.extend([
-                RuntimeEvent(RuntimeEventType.WORKER_COMPLETED, state.task_id),
-                RuntimeEvent(RuntimeEventType.GRAPH_COMPLETED, state.task_id),
+                RuntimeEvent(
+                    RuntimeEventType.WORKER_COMPLETED,
+                    state.task_id,
+                    payload={"runtime": runtime_context},
+                ),
+                RuntimeEvent(
+                    RuntimeEventType.GRAPH_COMPLETED,
+                    state.task_id,
+                    payload={"runtime": runtime_context},
+                ),
             ])
             return ExecutionResult(
                 state.task_id, "completed", response, state, events,
@@ -43,11 +65,16 @@ class CurrentRuntimeAdapter(GraphRuntime):
         except Exception as error:
             state.apply_patch({
                 "status": "failed",
-                "metadata": {**state.metadata, "runtime_error": str(error)},
+                "metadata": {
+                    **state.metadata,
+                    "runtime": runtime_context,
+                    "runtime_error": str(error),
+                },
             })
             events.append(RuntimeEvent(
-                RuntimeEventType.GRAPH_FAILED, state.task_id,
-                payload={"error": str(error)},
+                RuntimeEventType.GRAPH_FAILED,
+                state.task_id,
+                payload={"error": str(error), "runtime": runtime_context},
             ))
             return ExecutionResult(state.task_id, "failed", None, state, events)
 
