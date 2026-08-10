@@ -31,6 +31,8 @@ venv/
 
 # Model cache
 models/
+!app/compiler/models/
+!app/compiler/models/*.py
 *.bin
 *.safetensors
 
