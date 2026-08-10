@@ -5,6 +5,7 @@ import json
 
 from app.compiler.backend import BackendArtifact
 from app.runtime.contracts import AgentRuntimeState
+from app.runtime.governance.adapters import RuntimeEventContext, RuntimeEventMapper
 from app.runtime.ports import CurrentRuntimeAdapter
 from app.runtime.selector import RuntimeSelector
 
@@ -57,10 +58,14 @@ class AgentRuntimeStateFactory:
 class RuntimeDispatcher:
     """Thin runtime facade; execution remains inside a GraphRuntime backend."""
 
-    def __init__(self, selector, artifact_resolver, state_factory=None):
+    def __init__(self, selector, artifact_resolver, state_factory=None,
+                 event_bus=None, event_store=None, event_mapper=None):
         self.selector = selector
         self.artifact_resolver = artifact_resolver
         self.state_factory = state_factory or AgentRuntimeStateFactory()
+        self.event_bus = event_bus
+        self.event_store = event_store
+        self.event_mapper = event_mapper or RuntimeEventMapper()
 
     def execute_step(self, context, agent_id, version):
         definition = context.agent_definition
@@ -74,7 +79,29 @@ class RuntimeDispatcher:
             version=version,
             agent_definition=definition,
         )
-        return backend.execute(artifact, state)
+        result = backend.execute(artifact, state)
+        self._publish_governance_events(result.events, state, artifact)
+        return result
+
+    def _publish_governance_events(self, events, state, artifact):
+        context = RuntimeEventContext(
+            execution_id=state.task_id,
+            trace_id=state.trace_id,
+            agent_id=state.agent_id,
+            agent_version=state.agent_version,
+            artifact_id=artifact.artifact_id,
+            artifact_hash=artifact.artifact_hash,
+            backend_type=artifact.backend_type,
+            worker_id=state.metadata.get("worker_id"),
+        )
+        for event in events:
+            mapped = self.event_mapper.map(event, context)
+            if mapped is None:
+                continue
+            if self.event_store is not None:
+                self.event_store.append(mapped)
+            if self.event_bus is not None:
+                self.event_bus.publish(mapped)
 
     @classmethod
     def from_runtime_engine(cls, runtime_engine, agent_registry):
