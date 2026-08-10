@@ -8,6 +8,7 @@ from app.orchestration.state import ExecutionState, InMemoryExecutionStateStore
 from app.orchestration.scheduler import ParallelTaskScheduler
 from app.orchestration.aggregation import ResultAggregator
 from app.runtime.context import AgentContext
+from app.runtime.dispatcher import LegacyRuntimeFacade
 
 
 class AgentResolutionError(Exception):
@@ -26,7 +27,10 @@ class Supervisor:
         aggregator=None,
     ):
         self.registry = registry
-        self.runtime = runtime
+        self.runtime = (
+            runtime if hasattr(runtime, "execute_step")
+            else LegacyRuntimeFacade(runtime)
+        )
         self.state_store = state_store or InMemoryExecutionStateStore()
         self.scheduler = scheduler or ParallelTaskScheduler()
         self.aggregator = aggregator or ResultAggregator()
@@ -65,7 +69,7 @@ class Supervisor:
                 context = self._build_context(plan, step, state, user_id, role, agent)
                 executable_steps.append(step)
                 job_calls[step.step_id] = (
-                    lambda context=context, agent=agent: self.runtime.run(
+                    lambda context=context, agent=agent: self.runtime.execute_step(
                         context, agent_id=agent.agent_id, version=agent.version,
                     )
                 )
@@ -82,7 +86,8 @@ class Supervisor:
                     step.status = StepStatus.FAILED
                     batch_failed = True
                 else:
-                    state.complete_step(step.step_id, outcome.output)
+                    output = getattr(outcome.output, "response", outcome.output)
+                    state.complete_step(step.step_id, output)
                     step.status = StepStatus.COMPLETED
             self.state_store.save(state)
 

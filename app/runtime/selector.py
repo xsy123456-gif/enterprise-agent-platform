@@ -36,3 +36,17 @@ class RuntimeSelector:
             return self._runtimes[configured]
         except KeyError as error:
             raise KeyError(f"Runtime backend is not registered: {configured}") from error
+
+    def backend_type_for(self, agent_definition=None, environment=None,
+                         feature_flags=None):
+        environment = dict(environment or {})
+        feature_flags = dict(feature_flags or {})
+        return (
+            feature_flags.get("runtime_backend")
+            or environment.get("RUNTIME_BACKEND")
+            or (
+                getattr(agent_definition, "runtime", {}).get("backend")
+                if agent_definition is not None else None
+            )
+            or self.default_backend
+        )

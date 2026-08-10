@@ -67,6 +67,7 @@ from app.registry.storage import InMemoryAgentRepository
 
 
 from app.runtime.engine import RuntimeEngine
+from app.runtime.dispatcher import RuntimeDispatcher
 
 
 from app.runtime.tool_runner import ToolRunner
@@ -278,9 +279,13 @@ def build_orchestration(
         fallback=BasicPlanner(),
     )
 
+    runtime_dispatcher = RuntimeDispatcher.from_runtime_engine(
+        runtime, runtime.agent_registry
+    )
+
     supervisor = Supervisor(
         registry=runtime.agent_registry,
-        runtime=runtime
+        runtime=runtime_dispatcher,
     )
 
     return (
