@@ -48,4 +48,4 @@ class GraphExecutionTest(unittest.TestCase):
 
         self.assertEqual("completed", result["response"])
         self.assertEqual(1, len(runner.calls))
-        self.assertEqual({"customer": "A"}, result["tool_results"][0])
+        self.assertEqual({"customer": "A"}, result["tool_results"][0]["output"])

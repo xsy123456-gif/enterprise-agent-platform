@@ -15,12 +15,13 @@ class RecordingToolRunner:
     def __init__(self):
         self.calls = []
 
-    def run(self, action, state):
-        self.calls.append((action, state))
-        call_id = state.add_tool_call(action.tool, action.input)
-        result = {"customer": action.input["customer"]}
-        state.add_tool_result(call_id, result)
-        return result
+    def execute(self, request):
+        self.calls.append(request)
+        from app.tools.models import ToolResult
+        return ToolResult(
+            request.tool_name, True,
+            output={"customer": request.arguments["customer"]},
+        )
 
 
 class ToolObservationNodeTest(unittest.TestCase):
@@ -36,9 +37,9 @@ class ToolObservationNodeTest(unittest.TestCase):
             },
         })
 
-        self.assertEqual(1, len(validator.calls))
+        self.assertEqual(0, len(validator.calls))
         self.assertEqual(1, len(runner.calls))
-        self.assertEqual({"customer": "A"}, patch["observation"])
+        self.assertEqual({"customer": "A"}, patch["observation"]["output"])
 
     def test_tool_node_has_no_direct_tool_dependency(self):
         node = ToolNode(RecordingToolRunner())

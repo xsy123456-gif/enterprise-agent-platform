@@ -10,6 +10,10 @@ class ToolDecisionNode:
         if decision["type"] == "tool":
             return {
                 "_action": decision,
+                "pending_tool_call": {
+                    "tool": decision["tool"],
+                    "arguments": decision.get("input"),
+                },
                 "tool_call_request": {
                     "tool": decision["tool"],
                     "arguments": decision.get("input"),
@@ -18,6 +22,7 @@ class ToolDecisionNode:
             }
         return {
             "_action": decision,
+            "pending_tool_call": None,
             "tool_call_request": None,
             "status": "responding",
         }

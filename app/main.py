@@ -197,7 +197,8 @@ def build_runtime(
 
         audit,
 
-        event_bus
+        event_bus,
+        agent_registry=agent_registry,
 
     )
 

@@ -13,7 +13,7 @@ class DecisionResponseNodeTest(unittest.TestCase):
         })
 
         self.assertEqual("tool", patch["_action"]["type"])
-        self.assertEqual("crm_query", patch["tool_call_request"]["tool"])
+        self.assertEqual("crm_query", patch["pending_tool_call"]["tool"])
 
     def test_finish_decision_routes_to_response(self):
         patch = ToolDecisionNode()({

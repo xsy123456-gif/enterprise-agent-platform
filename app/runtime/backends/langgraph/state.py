@@ -11,6 +11,7 @@ class GraphState(TypedDict, total=False):
     input: str
     messages: list[Any]
     tool_results: list[Any]
+    pending_tool_call: dict[str, Any] | None
     current_node: str | None
     intermediate_results: dict[str, Any]
     metadata: dict[str, Any]

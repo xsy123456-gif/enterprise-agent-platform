@@ -10,6 +10,7 @@ class ObservationNode:
         return {
             "intermediate_results": intermediate,
             "observation": None,
+            "pending_tool_call": None,
             "_action": None,
             "tool_call_request": None,
             "status": "running",
