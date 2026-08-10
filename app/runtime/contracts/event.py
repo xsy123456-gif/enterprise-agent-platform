@@ -30,6 +30,9 @@ class RuntimeEvent:
     node_id: str | None = None
     timestamp: str = field(default_factory=utc_now)
     payload: dict[str, Any] = field(default_factory=dict)
+    operation_id: str | None = None
+    span_id: str | None = None
+    parent_span_id: str | None = None
 
     def __post_init__(self):
         if self.event_type not in RuntimeEventType.ALL:
@@ -44,6 +47,9 @@ class RuntimeEvent:
             "node_id": self.node_id,
             "timestamp": self.timestamp,
             "payload": self.payload,
+            "operation_id": self.operation_id,
+            "span_id": self.span_id,
+            "parent_span_id": self.parent_span_id,
         })
 
     @classmethod

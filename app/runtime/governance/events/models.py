@@ -73,6 +73,9 @@ class RuntimeEvent:
     worker_id: str | None = None
     payload: dict[str, Any] = field(default_factory=dict)
     backend_metadata: dict[str, Any] = field(default_factory=dict)
+    operation_id: str | None = None
+    span_id: str | None = None
+    parent_span_id: str | None = None
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = field(default_factory=utc_now)
 
@@ -110,6 +113,9 @@ class RuntimeEvent:
             "status": self.status,
             "payload": dict(self.payload),
             "backend_metadata": dict(self.backend_metadata),
+            "operation_id": self.operation_id,
+            "span_id": self.span_id,
+            "parent_span_id": self.parent_span_id,
         }
 
     @classmethod

@@ -17,3 +17,27 @@ class TraceRepository(ABC):
     @abstractmethod
     def get(self, trace_id: str) -> ExecutionTrace:
         raise NotImplementedError
+
+    @abstractmethod
+    def update_trace(self, trace: ExecutionTrace) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def append_span(self, span) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def update_span(self, span) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_spans(self, trace_id: str) -> tuple:
+        raise NotImplementedError
+
+    @abstractmethod
+    def append_event(self, event) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def list_events(self, trace_id: str) -> tuple:
+        raise NotImplementedError
