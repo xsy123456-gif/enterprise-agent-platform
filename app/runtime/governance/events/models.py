@@ -1,0 +1,97 @@
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+import uuid
+from typing import Any
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+
+class RuntimeEventType:
+    GRAPH_STARTED = "graph.started"
+    GRAPH_COMPLETED = "graph.completed"
+    GRAPH_FAILED = "graph.failed"
+    NODE_STARTED = "node.started"
+    NODE_COMPLETED = "node.completed"
+    NODE_FAILED = "node.failed"
+    WORKER_STARTED = "worker.started"
+    WORKER_COMPLETED = "worker.completed"
+    WORKER_FAILED = "worker.failed"
+    TOOL_CALLED = "tool.called"
+    TOOL_COMPLETED = "tool.completed"
+    TOOL_FAILED = "tool.failed"
+    MEMORY_RETRIEVED = "memory.retrieved"
+    MEMORY_SUBMITTED = "memory.submitted"
+    GOVERNANCE_CHECKED = "governance.checked"
+
+    ALL = {
+        GRAPH_STARTED, GRAPH_COMPLETED, GRAPH_FAILED,
+        NODE_STARTED, NODE_COMPLETED, NODE_FAILED,
+        WORKER_STARTED, WORKER_COMPLETED, WORKER_FAILED,
+        TOOL_CALLED, TOOL_COMPLETED, TOOL_FAILED,
+        MEMORY_RETRIEVED, MEMORY_SUBMITTED, GOVERNANCE_CHECKED,
+    }
+
+
+@dataclass(frozen=True)
+class RuntimeEvent:
+    event_type: str
+    execution_id: str
+    trace_id: str
+    agent_id: str
+    agent_version: str
+    artifact_id: str
+    artifact_hash: str
+    backend_type: str
+    status: str
+    node_id: str | None = None
+    worker_id: str | None = None
+    payload: dict[str, Any] = field(default_factory=dict)
+    backend_metadata: dict[str, Any] = field(default_factory=dict)
+    event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: datetime = field(default_factory=utc_now)
+
+    def __post_init__(self):
+        if self.event_type not in RuntimeEventType.ALL:
+            raise ValueError(f"Unsupported Runtime evidence event: {self.event_type}")
+        required = (
+            "event_id", "execution_id", "trace_id", "agent_id", "agent_version",
+            "artifact_id", "artifact_hash", "backend_type", "status",
+        )
+        for name in required:
+            if not isinstance(getattr(self, name), str) or not getattr(self, name):
+                raise ValueError(f"{name} is required")
+        if not isinstance(self.payload, dict):
+            raise TypeError("payload must be a dict")
+        if not isinstance(self.backend_metadata, dict):
+            raise TypeError("backend_metadata must be an opaque dict")
+        if not isinstance(self.timestamp, datetime):
+            raise TypeError("timestamp must be datetime")
+
+    def to_dict(self):
+        return {
+            "event_id": self.event_id,
+            "event_type": self.event_type,
+            "timestamp": self.timestamp.isoformat(),
+            "execution_id": self.execution_id,
+            "trace_id": self.trace_id,
+            "agent_id": self.agent_id,
+            "agent_version": self.agent_version,
+            "artifact_id": self.artifact_id,
+            "artifact_hash": self.artifact_hash,
+            "backend_type": self.backend_type,
+            "node_id": self.node_id,
+            "worker_id": self.worker_id,
+            "status": self.status,
+            "payload": dict(self.payload),
+            "backend_metadata": dict(self.backend_metadata),
+        }
+
+    @classmethod
+    def from_dict(cls, payload):
+        data = dict(payload)
+        timestamp = data.get("timestamp")
+        if isinstance(timestamp, str):
+            data["timestamp"] = datetime.fromisoformat(timestamp)
+        return cls(**data)
