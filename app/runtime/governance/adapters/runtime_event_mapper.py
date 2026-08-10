@@ -41,6 +41,7 @@ class RuntimeEventMapper:
         "worker.failed": "worker.failed",
         "graph.completed": "graph.completed",
         "graph.failed": "graph.failed",
+        "graph.started": "graph.started",
     }
 
     def map(self, event: InternalRuntimeEvent, context: RuntimeEventContext):
@@ -74,4 +75,7 @@ class RuntimeEventMapper:
             status=event.event_type.rsplit(".", 1)[-1],
             payload=payload,
             backend_metadata=metadata,
+            operation_id=event.operation_id,
+            span_id=event.span_id,
+            parent_span_id=event.parent_span_id,
         )

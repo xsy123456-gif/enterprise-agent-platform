@@ -1,4 +1,5 @@
 import re
+import uuid
 
 from langgraph.graph import END, START, StateGraph
 
@@ -77,14 +78,29 @@ class LangGraphGraphGenerator:
     @staticmethod
     def _instrument(node_id, adapter):
         def execute(state):
+            operation_id = str(uuid.uuid4())
+            span_id = str(uuid.uuid4())
             events = list(state.get("_events") or [])
             events.append(RuntimeEvent(
                 RuntimeEventType.NODE_STARTED, state["execution_id"], node_id,
+                operation_id=operation_id, span_id=span_id,
+                parent_span_id=state.get("_graph_span_id"),
             ).to_dict())
-            patch = dict(adapter(state) or {})
+            try:
+                patch = dict(adapter(state) or {})
+            except Exception as error:
+                events.append(RuntimeEvent(
+                    RuntimeEventType.NODE_FAILED, state["execution_id"], node_id,
+                    payload={"error": str(error)}, operation_id=operation_id,
+                    span_id=span_id, parent_span_id=state.get("_graph_span_id"),
+                ).to_dict())
+                state["_events"] = events
+                raise
             patch["current_node"] = node_id
             events.append(RuntimeEvent(
                 RuntimeEventType.NODE_COMPLETED, state["execution_id"], node_id,
+                operation_id=operation_id, span_id=span_id,
+                parent_span_id=state.get("_graph_span_id"),
             ).to_dict())
             patch["_events"] = events
             return patch

@@ -54,7 +54,8 @@ class TraceAssembler:
         elif event.event_type == "guard.checked":
             self._instant_span(event, trace, "GOVERNANCE", "guard.checked")
         if event.event_type in {
-            "execution.completed", "execution.failed", "execution.cancelled"
+            "execution.completed", "execution.failed", "execution.cancelled",
+            "graph.completed", "graph.failed",
         }:
             self._close_trace(event, trace)
         return self.repository.get(trace.trace_id)
@@ -97,6 +98,8 @@ class TraceAssembler:
             attributes=self._safe_attributes(event.payload),
         )
         self.repository.append_span(span)
+        if category == "NODE":
+            self._reparent_pending_operations(span, trace.root_span_id)
         if event.backend_metadata:
             self.repository.append_span(BackendSpan(
                 backend_type=event.backend_type,
@@ -138,7 +141,10 @@ class TraceAssembler:
         self.repository.update_span(replace(span, status=status, end_time=event.timestamp))
 
     def _close_trace(self, event, trace):
-        status = "OK" if event.event_type == "execution.completed" else "ERROR"
+        status = (
+            "OK" if event.event_type in {"execution.completed", "graph.completed"}
+            else "ERROR"
+        )
         self.repository.update_trace(replace(
             trace, status=status, end_time=event.timestamp
         ))
@@ -164,6 +170,18 @@ class TraceAssembler:
         if graph:
             return graph[-1].span_id
         return self.repository.get(trace_id).root_span_id
+
+    def _reparent_pending_operations(self, node_span, root_span_id):
+        for span in self.repository.list_spans(node_span.trace_id):
+            if (
+                isinstance(span, NodeSpan)
+                and span.span_type in {"TOOL", "GOVERNANCE"}
+                and span.parent_span_id == root_span_id
+                and span.start_time >= node_span.start_time
+            ):
+                self.repository.update_span(replace(
+                    span, parent_span_id=node_span.span_id
+                ))
 
     @staticmethod
     def _operation_id(event):

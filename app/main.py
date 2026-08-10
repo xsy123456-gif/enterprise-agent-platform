@@ -68,7 +68,8 @@ from app.registry.storage import InMemoryAgentRepository
 
 from app.runtime.engine import RuntimeEngine
 from app.runtime.dispatcher import RuntimeDispatcher
-from app.storage.providers.memory import InMemoryEventStore
+from app.storage.providers.memory import InMemoryEventStore, InMemoryTraceRepository
+from app.runtime.trace import AsyncTraceConsumer, TraceAssembler, TraceQueryService
 
 
 from app.runtime.tool_runner import ToolRunner
@@ -286,6 +287,12 @@ def build_orchestration(
     )
     runtime_dispatcher.event_bus = event_bus
     runtime_dispatcher.event_store = InMemoryEventStore()
+    trace_repository = InMemoryTraceRepository()
+    trace_consumer = AsyncTraceConsumer(TraceAssembler(trace_repository))
+    event_bus.subscribe(trace_consumer)
+    runtime_dispatcher.trace_repository = trace_repository
+    runtime_dispatcher.trace_query = TraceQueryService(trace_repository)
+    runtime_dispatcher.trace_consumer = trace_consumer
 
     supervisor = Supervisor(
         registry=runtime.agent_registry,

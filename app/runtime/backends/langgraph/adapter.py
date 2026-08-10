@@ -31,8 +31,14 @@ class LangGraphRuntimeAdapter(GraphRuntime):
         self._validate_input(artifact, state)
         state.apply_patch({"status": "running"})
         started = RuntimeEvent(RuntimeEventType.WORKER_STARTED, state.task_id)
+        graph_span_id = f"{state.execution_id or state.task_id}:graph"
+        graph_started = RuntimeEvent(
+            RuntimeEventType.GRAPH_STARTED, state.task_id,
+            operation_id=graph_span_id, span_id=graph_span_id,
+        )
         backend_state = self.state_adapter.to_backend(state)
-        backend_state["_events"] = [started.to_dict()]
+        backend_state["_events"] = [started.to_dict(), graph_started.to_dict()]
+        backend_state["_graph_span_id"] = graph_span_id
         self.checkpoints.save(state)
         try:
             graph = self.graph or self.graph_generator.generate(

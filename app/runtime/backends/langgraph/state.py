@@ -26,3 +26,4 @@ class GraphState(TypedDict, total=False):
     response: str | None
     _action: dict[str, Any] | None
     _events: list[dict[str, Any]]
+    _graph_span_id: str | None

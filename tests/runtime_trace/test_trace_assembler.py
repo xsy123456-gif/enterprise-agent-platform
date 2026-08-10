@@ -93,3 +93,23 @@ def test_trace_failure_is_isolated_and_does_not_block_independent_audit():
     assert trace.errors == ["trace unavailable"]
     assert audit.events == ["execution.started"]
     trace.close()
+
+
+def test_backend_metadata_is_preserved_as_opaque_data_and_resume_keeps_trace():
+    repository = InMemoryTraceRepository()
+    assembler = TraceAssembler(repository)
+    assembler.consume(event(
+        "node.started", node_id="reasoning", operation_id="node-1",
+        backend_metadata={"langgraph_internal_x": {"opaque": "abc"}},
+    ))
+    assembler.consume(event("execution.waiting", 1))
+    assembler.consume(event("execution.resumed", 2))
+    backend = next(
+        span for span in repository.list_spans("trace-1")
+        if hasattr(span, "backend_metadata")
+    )
+    assert backend.backend_metadata == {
+        "langgraph_internal_x": {"opaque": "abc"}
+    }
+    assert repository.get("trace-1").execution_id == "exec-1"
+    assert len(repository.query("exec-1")) == 1

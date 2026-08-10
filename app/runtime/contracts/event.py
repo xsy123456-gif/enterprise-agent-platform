@@ -16,10 +16,12 @@ class RuntimeEventType:
     WORKER_COMPLETED = "worker.completed"
     GRAPH_COMPLETED = "graph.completed"
     GRAPH_FAILED = "graph.failed"
+    GRAPH_STARTED = "graph.started"
+    NODE_FAILED = "node.failed"
 
     ALL = {
         NODE_STARTED, NODE_COMPLETED, WORKER_STARTED, WORKER_COMPLETED,
-        GRAPH_COMPLETED, GRAPH_FAILED,
+        GRAPH_STARTED, GRAPH_COMPLETED, GRAPH_FAILED, NODE_FAILED,
     }
 
 
