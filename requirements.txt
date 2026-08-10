@@ -2,3 +2,4 @@ PyYAML>=6.0,<7.0
 pgvector>=0.3,<1.0
 psycopg[binary]>=3.2,<4.0
 langgraph>=1.2,<2.0
+langchain-core>=1.5,<2.0

@@ -1,3 +1,5 @@
+import os
+
 from app.runtime.ports import GraphRuntime
 
 
@@ -20,8 +22,17 @@ class RuntimeSelector:
 
     def select(self, agent=None, version=None, agent_definition=None,
                environment=None, feature_flags=None):
+        if (
+            isinstance(agent, str)
+            and agent in self._runtimes
+            and version is None
+            and agent_definition is None
+            and environment is None
+            and feature_flags is None
+        ):
+            return self._runtimes[agent]
         del agent, version  # Identity is an input for future policy selectors.
-        environment = dict(environment or {})
+        environment = dict(os.environ if environment is None else environment)
         feature_flags = dict(feature_flags or {})
         configured = (
             feature_flags.get("runtime_backend")
@@ -39,7 +50,7 @@ class RuntimeSelector:
 
     def backend_type_for(self, agent_definition=None, environment=None,
                          feature_flags=None):
-        environment = dict(environment or {})
+        environment = dict(os.environ if environment is None else environment)
         feature_flags = dict(feature_flags or {})
         return (
             feature_flags.get("runtime_backend")

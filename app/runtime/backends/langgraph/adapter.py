@@ -1,5 +1,6 @@
 from app.compiler.backend.models import BackendArtifact
 from app.runtime.backends.langgraph.checkpoint import LangGraphCheckpointAdapter
+from app.runtime.backends.langgraph.graph import build_graph
 from app.runtime.backends.langgraph.generator import LangGraphGraphGenerator
 from app.runtime.backends.langgraph.state_adapter import LangGraphStateAdapter
 from app.runtime.checkpoint import InMemoryCheckpointStore
@@ -12,10 +13,14 @@ from app.runtime.ports import GraphRuntime
 class LangGraphRuntimeAdapter(GraphRuntime):
     """Execute only compiled LangGraph BackendArtifacts through Runtime Contract v1."""
 
-    def __init__(self, node_adapters, checkpoint_store=None, state_adapter=None,
-                 graph_generator=None):
+    def __init__(self, node_adapters=None, checkpoint_store=None, state_adapter=None,
+                 graph_generator=None, graph=None):
         self.state_adapter = state_adapter or LangGraphStateAdapter()
-        self.graph_generator = graph_generator or LangGraphGraphGenerator(node_adapters)
+        self.graph = graph or (build_graph() if node_adapters is None else None)
+        self.graph_generator = graph_generator or (
+            LangGraphGraphGenerator(node_adapters)
+            if node_adapters is not None else None
+        )
         self.checkpoints = LangGraphCheckpointAdapter(
             checkpoint_store or InMemoryCheckpointStore()
         )
@@ -28,7 +33,9 @@ class LangGraphRuntimeAdapter(GraphRuntime):
         backend_state["_events"] = [started.to_dict()]
         self.checkpoints.save(state)
         try:
-            graph = self.graph_generator.generate(artifact.runtime_definition)
+            graph = self.graph or self.graph_generator.generate(
+                artifact.runtime_definition
+            )
             recursion_limit = artifact.runtime_definition.get(
                 "execution_policy", {}
             ).get("max_steps", 25)
