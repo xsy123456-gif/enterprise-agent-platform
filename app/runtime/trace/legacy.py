@@ -3,14 +3,10 @@ import time
 
 
 class RuntimeTrace:
-    def __init__(
-        self,
-        trace_id=None,
-        task_id=None,
-        step_id=None,
-        agent_id=None,
-        capability=None,
-    ):
+    """Frozen CurrentRuntime trace collector retained for legacy compatibility."""
+
+    def __init__(self, trace_id=None, task_id=None, step_id=None,
+                 agent_id=None, capability=None):
         self.trace_id = trace_id
         self.task_id = task_id
         self.step_id = step_id
@@ -23,15 +19,10 @@ class RuntimeTrace:
         self._started_monotonic = time.monotonic()
 
     def record(self, step, action, status, detail=None):
-        self.steps.append(
-            {
-                "step": step,
-                "action": action,
-                "status": status,
-                "detail": detail,
-                "time": self._now(),
-            }
-        )
+        self.steps.append({
+            "step": step, "action": action, "status": status,
+            "detail": detail, "time": self._now(),
+        })
         if action == "llm_call":
             self.llm_calls += 1
         if action == "tool_call":
@@ -42,12 +33,9 @@ class RuntimeTrace:
 
     def to_dict(self):
         return {
-            "trace_id": self.trace_id,
-            "task_id": self.task_id,
-            "step_id": self.step_id,
-            "agent_id": self.agent_id,
-            "capability": self.capability,
-            "llm_calls": self.llm_calls,
+            "trace_id": self.trace_id, "task_id": self.task_id,
+            "step_id": self.step_id, "agent_id": self.agent_id,
+            "capability": self.capability, "llm_calls": self.llm_calls,
             "tool_calls": self.tool_calls,
             "duration": time.monotonic() - self._started_monotonic,
             "steps": list(self.steps),
