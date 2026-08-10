@@ -13,6 +13,8 @@ from app.runtime.backends.langgraph import (
 )
 from app.runtime.contracts import AgentRuntimeState
 from app.runtime.context_builder import AgentContextBuilder
+from app.runtime.execution import ExecutionManager, PostgresExecutionStore
+from app.governance.adapters.checkpoint import PersistentCheckpointStore
 from app.runtime.governance.adapters import RuntimeEventContext, RuntimeEventMapper
 from app.runtime.ports import CurrentRuntimeAdapter
 from app.runtime.selector import RuntimeSelector
@@ -215,12 +217,27 @@ class RuntimeDispatcher:
             },
             default_backend="langgraph",
         )
+        execution_manager = None
+        memory_adapter = getattr(runtime_engine, "memory_adapter", None)
+        memory_system = getattr(memory_adapter, "memory_system", None)
+        service = getattr(memory_system, "_service", None)
+        repository = getattr(service, "repository", None)
+        connection_factory = getattr(repository, "connection_factory", None)
+        if connection_factory is not None:
+            execution_store = PostgresExecutionStore(connection_factory)
+            checkpoint_store = PersistentCheckpointStore(connection_factory)
+            execution_store.initialize_schema()
+            checkpoint_store.initialize_schema()
+            execution_manager = ExecutionManager(
+                execution_store, checkpoint_store=checkpoint_store
+            )
         return cls(
             selector,
             resolver,
             state_factory=AgentRuntimeStateFactory(
                 AgentContextBuilder(runtime_engine.memory_adapter)
             ),
+            execution_manager=execution_manager,
         )
 
 
