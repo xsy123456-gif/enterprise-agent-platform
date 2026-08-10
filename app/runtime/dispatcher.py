@@ -85,13 +85,15 @@ class RuntimeDispatcher:
     """Thin runtime facade; execution remains inside a GraphRuntime backend."""
 
     def __init__(self, selector, artifact_resolver, state_factory=None,
-                 event_bus=None, event_store=None, event_mapper=None):
+                 event_bus=None, event_store=None, event_mapper=None,
+                 execution_manager=None):
         self.selector = selector
         self.artifact_resolver = artifact_resolver
         self.state_factory = state_factory or AgentRuntimeStateFactory()
         self.event_bus = event_bus
         self.event_store = event_store
         self.event_mapper = event_mapper or RuntimeEventMapper()
+        self.execution_manager = execution_manager
 
     def execute_step(self, context, agent_id, version):
         definition = context.agent_definition
@@ -100,6 +102,10 @@ class RuntimeDispatcher:
         )
         artifact = self.artifact_resolver.get(agent_id, version, backend_type)
         state = self.state_factory.create(context, agent_id, version)
+        execution_record = (
+            self.execution_manager.create(state, artifact)
+            if self.execution_manager is not None else None
+        )
         backend = self.selector.select(
             agent=agent_id,
             version=version,
@@ -112,7 +118,24 @@ class RuntimeDispatcher:
             backend.response_event_hook = LangGraphResponseEventHook(
                 self.event_bus, self.event_store
             )
-        result = backend.execute(artifact, state)
+        if execution_record is not None:
+            self.execution_manager.transition(
+                execution_record.execution_id, "running", state.current_node
+            )
+        try:
+            result = backend.execute(artifact, state)
+        except Exception:
+            if execution_record is not None:
+                self.execution_manager.transition(
+                    execution_record.execution_id, "failed", state.current_node
+                )
+            raise
+        if execution_record is not None:
+            self.execution_manager.transition(
+                execution_record.execution_id,
+                "completed" if result.status == "completed" else "failed",
+                result.state.current_node,
+            )
         self._publish_governance_events(result.events, state, artifact)
         return result
 

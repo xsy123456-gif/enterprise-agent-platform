@@ -3,6 +3,7 @@ from app.runtime.backends.langgraph.checkpoint import LangGraphCheckpointAdapter
 from app.runtime.backends.langgraph.graph import build_graph
 from app.runtime.backends.langgraph.generator import LangGraphGraphGenerator
 from app.runtime.backends.langgraph.state_adapter import LangGraphStateAdapter
+from langgraph.types import Command
 from app.runtime.checkpoint import InMemoryCheckpointStore
 from app.runtime.contracts import (
     AgentRuntimeState, ExecutionResult, RuntimeEvent, RuntimeEventType,
@@ -42,8 +43,21 @@ class LangGraphRuntimeAdapter(GraphRuntime):
             ).get("max_steps", 25)
             output = graph.invoke(
                 backend_state,
-                config={"recursion_limit": max(1, int(recursion_limit))},
+                config={
+                    "recursion_limit": max(1, int(recursion_limit)),
+                    "configurable": {"thread_id": state.execution_id or state.task_id},
+                },
             )
+            if "__interrupt__" in output:
+                waiting_state = state.patched({"status": "waiting_approval"})
+                self.checkpoints.save(waiting_state)
+                return ExecutionResult(
+                    task_id=waiting_state.task_id,
+                    status="waiting_approval",
+                    response=None,
+                    state=waiting_state,
+                    events=self.state_adapter.events_from_backend(output),
+                )
             final_state = self.state_adapter.from_backend(output, state)
             final_state.apply_patch({"status": "completed"})
             events = self.state_adapter.events_from_backend(output)
@@ -85,6 +99,31 @@ class LangGraphRuntimeAdapter(GraphRuntime):
                 state=failed_state,
                 events=events,
             )
+
+    def resume_execution(self, execution_id, approval_result, state=None):
+        """Resume a checkpointed LangGraph execution by its stable thread id."""
+        if self.graph is None:
+            raise RuntimeError("Resume requires an injected checkpointed graph")
+        output = self.graph.invoke(
+            Command(resume=approval_result),
+            config={"configurable": {"thread_id": execution_id}},
+        )
+        if state is None:
+            state = self.checkpoints.load(execution_id)
+        if state is None:
+            raise KeyError(f"Checkpoint not found: {execution_id}")
+        final_state = self.state_adapter.from_backend(output, state)
+        final_state.apply_patch({
+            "status": "completed" if final_state.response is not None else "failed"
+        })
+        self.checkpoints.save(final_state)
+        return ExecutionResult(
+            task_id=final_state.task_id,
+            status=final_state.status,
+            response=final_state.response,
+            state=final_state,
+            events=self.state_adapter.events_from_backend(output),
+        )
 
     @staticmethod
     def _validate_input(artifact, state):

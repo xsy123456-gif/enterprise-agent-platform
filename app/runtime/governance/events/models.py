@@ -32,6 +32,15 @@ class RuntimeEventType:
     MEMORY_WRITE_REQUESTED = "memory.write.requested"
     MEMORY_WRITE_COMPLETED = "memory.write.completed"
     MEMORY_WRITE_FAILED = "memory.write.failed"
+    EXECUTION_CREATED = "execution.created"
+    EXECUTION_STARTED = "execution.started"
+    EXECUTION_WAITING = "execution.waiting"
+    EXECUTION_COMPLETED = "execution.completed"
+    EXECUTION_FAILED = "execution.failed"
+    CHECKPOINT_CREATED = "checkpoint.created"
+    CHECKPOINT_RESTORED = "checkpoint.restored"
+    EXECUTION_RETRY_REQUESTED = "execution.retry_requested"
+    EXECUTION_CANCELLED = "execution.cancelled"
 
     ALL = {
         GRAPH_STARTED, GRAPH_COMPLETED, GRAPH_FAILED,
@@ -43,6 +52,9 @@ class RuntimeEventType:
         EXECUTION_RESUMED,
         RESPONSE_COMPLETED, MEMORY_WRITE_REQUESTED,
         MEMORY_WRITE_COMPLETED, MEMORY_WRITE_FAILED,
+        EXECUTION_CREATED, EXECUTION_STARTED, EXECUTION_WAITING,
+        EXECUTION_COMPLETED, EXECUTION_FAILED, CHECKPOINT_CREATED,
+        CHECKPOINT_RESTORED, EXECUTION_RETRY_REQUESTED, EXECUTION_CANCELLED,
     }
 
 
