@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from typing import Any
+from app.artifacts.models import AgentLifecycleStatus, reject_sensitive_data
 
 
 def utc_now():
@@ -31,6 +32,7 @@ class BackendArtifact:
     runtime_definition: dict[str, Any]
     dependencies: dict[str, str] = field(default_factory=dict)
     created_at: str = field(default_factory=utc_now)
+    status: str = AgentLifecycleStatus.ACTIVE
 
     def __post_init__(self):
         required = (
@@ -44,6 +46,46 @@ class BackendArtifact:
             raise ValueError("runtime_definition must be a mapping")
         canonical_json(self.runtime_definition)
         canonical_json(self.dependencies)
+        reject_sensitive_data(self.runtime_definition)
+        reject_sensitive_data(self.dependencies)
+        if self.status not in AgentLifecycleStatus.ALL:
+            raise ValueError(f"Unsupported artifact status: {self.status}")
+        if self.artifact_hash != self.calculate_hash():
+            raise ValueError("Backend artifact hash does not match content")
+
+    def hash_content(self):
+        return {
+            "agent_id": self.agent_id,
+            "agent_version": self.agent_version,
+            "backend_type": self.backend_type,
+            "backend_version": self.backend_version,
+            "compiler_version": self.compiler_version,
+            "graph_ir_hash": self.graph_ir_hash,
+            "runtime_definition": self.runtime_definition,
+            "dependencies": self.dependencies,
+        }
+
+    def calculate_hash(self):
+        return hashlib.sha256(
+            canonical_json(self.hash_content()).encode("utf-8")
+        ).hexdigest()
+
+    def verify(self, backend_type=None, production=True):
+        if backend_type is not None and self.backend_type != backend_type:
+            raise ValueError(
+                f"Artifact backend mismatch: {self.backend_type} != {backend_type}"
+            )
+        if self.artifact_hash != self.calculate_hash():
+            raise ValueError("Backend artifact hash verification failed")
+        executable = (
+            {AgentLifecycleStatus.ACTIVE}
+            if production else
+            {AgentLifecycleStatus.COMPILED, AgentLifecycleStatus.PUBLISHED,
+             AgentLifecycleStatus.ACTIVE}
+        )
+        if self.status not in executable:
+            raise ValueError(f"Artifact is not executable: {self.status}")
+        return True
 
     @classmethod
     def create(cls, *, agent_id, agent_version, backend_type, backend_version,
@@ -89,6 +131,7 @@ class BackendArtifact:
             "runtime_definition": dict(self.runtime_definition),
             "dependencies": dict(self.dependencies),
             "created_at": self.created_at,
+            "status": self.status,
         }
 
     @classmethod
