@@ -72,6 +72,8 @@ class TraceAssembler:
                 root_span_id=root_id, start_time=event.timestamp,
                 agent_version=event.agent_version,
                 artifact_hash=event.artifact_hash,
+                parent_agent_id=event.parent_agent_id,
+                agent_execution_id=event.agent_execution_id,
             )
             self.repository.append(trace)
             self.repository.append_span(NodeSpan(
@@ -81,6 +83,8 @@ class TraceAssembler:
                 output_summary="", span_id=root_id, start_time=event.timestamp,
                 agent_id=event.agent_id, agent_version=event.agent_version,
                 artifact_hash=event.artifact_hash, backend_type=event.backend_type,
+                parent_agent_id=event.parent_agent_id,
+                agent_execution_id=event.agent_execution_id,
             ))
             return trace
 
@@ -96,6 +100,8 @@ class TraceAssembler:
             agent_id=event.agent_id, agent_version=event.agent_version,
             artifact_hash=event.artifact_hash, backend_type=event.backend_type,
             attributes=self._safe_attributes(event.payload),
+            parent_agent_id=event.parent_agent_id,
+            agent_execution_id=event.agent_execution_id,
         )
         self.repository.append_span(span)
         if category == "NODE":

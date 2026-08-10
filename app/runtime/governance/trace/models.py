@@ -25,6 +25,8 @@ class ExecutionTrace:
     end_time: datetime | None = None
     agent_version: str = "unknown"
     artifact_hash: str = "unknown"
+    parent_agent_id: str | None = None
+    agent_execution_id: str | None = None
 
     def __post_init__(self):
         for name in (
@@ -47,6 +49,8 @@ class ExecutionTrace:
             "root_span_id": self.root_span_id,
             "agent_version": self.agent_version,
             "artifact_hash": self.artifact_hash,
+            "parent_agent_id": self.parent_agent_id,
+            "agent_execution_id": self.agent_execution_id,
         }
 
     @classmethod
@@ -79,6 +83,8 @@ class NodeSpan:
     artifact_hash: str | None = None
     backend_type: str | None = None
     attributes: dict[str, Any] = field(default_factory=dict)
+    parent_agent_id: str | None = None
+    agent_execution_id: str | None = None
 
     def __post_init__(self):
         for name in ("span_id", "trace_id", "node_id", "node_type", "status"):
@@ -119,6 +125,8 @@ class NodeSpan:
             "artifact_hash": self.artifact_hash,
             "backend_type": self.backend_type,
             "attributes": dict(self.attributes),
+            "parent_agent_id": self.parent_agent_id,
+            "agent_execution_id": self.agent_execution_id,
             "duration_ms": self.duration_ms,
         }
 

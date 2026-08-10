@@ -16,6 +16,8 @@ class RuntimeEventContext:
     artifact_hash: str
     backend_type: str
     worker_id: str | None = None
+    parent_agent_id: str | None = None
+    agent_execution_id: str | None = None
     backend_metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):
@@ -78,4 +80,6 @@ class RuntimeEventMapper:
             operation_id=event.operation_id,
             span_id=event.span_id,
             parent_span_id=event.parent_span_id,
+            parent_agent_id=context.parent_agent_id,
+            agent_execution_id=context.agent_execution_id,
         )

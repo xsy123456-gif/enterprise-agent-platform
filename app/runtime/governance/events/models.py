@@ -77,6 +77,8 @@ class RuntimeEvent:
     operation_id: str | None = None
     span_id: str | None = None
     parent_span_id: str | None = None
+    parent_agent_id: str | None = None
+    agent_execution_id: str | None = None
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = field(default_factory=utc_now)
 
@@ -117,6 +119,8 @@ class RuntimeEvent:
             "operation_id": self.operation_id,
             "span_id": self.span_id,
             "parent_span_id": self.parent_span_id,
+            "parent_agent_id": self.parent_agent_id,
+            "agent_execution_id": self.agent_execution_id,
         }
 
     @classmethod
