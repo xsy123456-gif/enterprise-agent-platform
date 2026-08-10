@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Any
+
+from app.compiler.backend.models import BackendArtifact
+from app.runtime.contracts import AgentRuntimeState, ExecutionResult
 
 
 class GraphRuntime(ABC):
@@ -10,5 +12,9 @@ class GraphRuntime(ABC):
     """
 
     @abstractmethod
-    def execute(self, graph: Any, input: Any):
+    def execute(
+        self,
+        artifact: BackendArtifact,
+        state: AgentRuntimeState,
+    ) -> ExecutionResult:
         pass
