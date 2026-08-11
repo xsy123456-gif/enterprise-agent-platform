@@ -24,6 +24,10 @@ class RuntimeEventContext:
     child_agent_execution_id: str | None = None
     graph_node_id: str | None = None
     parallel_group_id: str | None = None
+    attempt_id: str | None = None
+    failure_id: str | None = None
+    retry_number: int | None = None
+    recovery_action: str | None = None
     backend_metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):
@@ -94,4 +98,8 @@ class RuntimeEventMapper:
             child_agent_execution_id=context.child_agent_execution_id,
             graph_node_id=context.graph_node_id,
             parallel_group_id=context.parallel_group_id,
+            attempt_id=context.attempt_id,
+            failure_id=context.failure_id,
+            retry_number=context.retry_number,
+            recovery_action=context.recovery_action,
         )

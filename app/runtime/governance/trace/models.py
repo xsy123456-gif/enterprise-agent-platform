@@ -33,6 +33,10 @@ class ExecutionTrace:
     child_agent_execution_id: str | None = None
     graph_node_id: str | None = None
     parallel_group_id: str | None = None
+    attempt_id: str | None = None
+    failure_id: str | None = None
+    retry_number: int | None = None
+    recovery_action: str | None = None
 
     def __post_init__(self):
         for name in (
@@ -63,6 +67,10 @@ class ExecutionTrace:
             "child_agent_execution_id": self.child_agent_execution_id,
             "graph_node_id": self.graph_node_id,
             "parallel_group_id": self.parallel_group_id,
+            "attempt_id": self.attempt_id,
+            "failure_id": self.failure_id,
+            "retry_number": self.retry_number,
+            "recovery_action": self.recovery_action,
         }
 
     @classmethod
@@ -103,6 +111,10 @@ class NodeSpan:
     child_agent_execution_id: str | None = None
     graph_node_id: str | None = None
     parallel_group_id: str | None = None
+    attempt_id: str | None = None
+    failure_id: str | None = None
+    retry_number: int | None = None
+    recovery_action: str | None = None
 
     def __post_init__(self):
         for name in ("span_id", "trace_id", "node_id", "node_type", "status"):
@@ -151,6 +163,10 @@ class NodeSpan:
             "child_agent_execution_id": self.child_agent_execution_id,
             "graph_node_id": self.graph_node_id,
             "parallel_group_id": self.parallel_group_id,
+            "attempt_id": self.attempt_id,
+            "failure_id": self.failure_id,
+            "retry_number": self.retry_number,
+            "recovery_action": self.recovery_action,
             "duration_ms": self.duration_ms,
         }
 

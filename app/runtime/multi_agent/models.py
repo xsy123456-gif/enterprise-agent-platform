@@ -70,6 +70,9 @@ class AgentTaskStatus(str, Enum):
     WAITING = "waiting"
     COMPLETED = "completed"
     FAILED = "failed"
+    RETRY_PENDING = "retry_pending"
+    RECOVERING = "recovering"
+    ESCALATED = "escalated"
     SKIPPED = "skipped"
 
 
@@ -210,11 +213,21 @@ class AgentTask:
             AgentTaskStatus.READY: {AgentTaskStatus.RUNNING, AgentTaskStatus.SKIPPED},
             AgentTaskStatus.RUNNING: {
                 AgentTaskStatus.COMPLETED, AgentTaskStatus.FAILED,
+                AgentTaskStatus.RETRY_PENDING, AgentTaskStatus.ESCALATED,
                 AgentTaskStatus.SKIPPED,
             },
             AgentTaskStatus.WAITING: {AgentTaskStatus.RUNNING, AgentTaskStatus.SKIPPED},
+            AgentTaskStatus.RETRY_PENDING: {
+                AgentTaskStatus.RECOVERING, AgentTaskStatus.ESCALATED,
+                AgentTaskStatus.SKIPPED,
+            },
+            AgentTaskStatus.RECOVERING: {
+                AgentTaskStatus.RUNNING, AgentTaskStatus.COMPLETED,
+                AgentTaskStatus.FAILED, AgentTaskStatus.ESCALATED,
+            },
             AgentTaskStatus.COMPLETED: set(),
             AgentTaskStatus.FAILED: set(),
+            AgentTaskStatus.ESCALATED: set(),
             AgentTaskStatus.SKIPPED: set(),
         }
         if target not in allowed[self.status]:

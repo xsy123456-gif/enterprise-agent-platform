@@ -56,6 +56,10 @@ class TraceAssembler:
             self._instant_span(event, trace, "GOVERNANCE", "guard.checked")
         elif event.event_type.startswith("agent.message."):
             self._instant_span(event, trace, "MESSAGE", event.event_type)
+        elif event.event_type.startswith("agent.retry.") or event.event_type in {
+            "agent.failure.detected", "agent.escalation.required",
+        }:
+            self._instant_span(event, trace, "RECOVERY", event.event_type)
         if event.event_type in {
             "execution.completed", "execution.failed", "execution.cancelled",
             "graph.completed", "graph.failed",
@@ -83,6 +87,10 @@ class TraceAssembler:
                 child_agent_execution_id=event.child_agent_execution_id,
                 graph_node_id=event.graph_node_id,
                 parallel_group_id=event.parallel_group_id,
+                attempt_id=event.attempt_id,
+                failure_id=event.failure_id,
+                retry_number=event.retry_number,
+                recovery_action=event.recovery_action,
             )
             self.repository.append(trace)
             self.repository.append_span(NodeSpan(
@@ -100,6 +108,10 @@ class TraceAssembler:
                 child_agent_execution_id=event.child_agent_execution_id,
                 graph_node_id=event.graph_node_id,
                 parallel_group_id=event.parallel_group_id,
+                attempt_id=event.attempt_id,
+                failure_id=event.failure_id,
+                retry_number=event.retry_number,
+                recovery_action=event.recovery_action,
             ))
             return trace
 
@@ -123,6 +135,10 @@ class TraceAssembler:
             child_agent_execution_id=event.child_agent_execution_id,
             graph_node_id=event.graph_node_id,
             parallel_group_id=event.parallel_group_id,
+            attempt_id=event.attempt_id,
+            failure_id=event.failure_id,
+            retry_number=event.retry_number,
+            recovery_action=event.recovery_action,
         )
         self.repository.append_span(span)
         if category == "NODE":
@@ -164,7 +180,12 @@ class TraceAssembler:
         spans = self.repository.list_spans(trace.trace_id)
         span = next(span for span in reversed(spans) if isinstance(span, NodeSpan) and span.name == name)
         action = event.payload.get("action") or event.payload.get("status")
-        status = "DENIED" if action == "deny" else "OK"
+        if event.event_type == "agent.failure.detected":
+            status = "ERROR"
+        elif event.event_type == "agent.escalation.required":
+            status = "ESCALATED"
+        else:
+            status = "DENIED" if action == "deny" else "OK"
         self.repository.update_span(replace(span, status=status, end_time=event.timestamp))
 
     def _close_trace(self, event, trace):

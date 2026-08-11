@@ -45,6 +45,11 @@ class RuntimeEventType:
     AGENT_MESSAGE_CREATED = "agent.message.created"
     AGENT_MESSAGE_DELIVERED = "agent.message.delivered"
     AGENT_MESSAGE_REJECTED = "agent.message.rejected"
+    AGENT_FAILURE_DETECTED = "agent.failure.detected"
+    AGENT_RETRY_REQUESTED = "agent.retry.requested"
+    AGENT_RETRY_STARTED = "agent.retry.started"
+    AGENT_RETRY_COMPLETED = "agent.retry.completed"
+    AGENT_ESCALATION_REQUIRED = "agent.escalation.required"
 
     ALL = {
         GRAPH_STARTED, GRAPH_COMPLETED, GRAPH_FAILED,
@@ -60,6 +65,8 @@ class RuntimeEventType:
         EXECUTION_COMPLETED, EXECUTION_FAILED, CHECKPOINT_CREATED,
         CHECKPOINT_RESTORED, EXECUTION_RETRY_REQUESTED, EXECUTION_CANCELLED,
         AGENT_MESSAGE_CREATED, AGENT_MESSAGE_DELIVERED, AGENT_MESSAGE_REJECTED,
+        AGENT_FAILURE_DETECTED, AGENT_RETRY_REQUESTED, AGENT_RETRY_STARTED,
+        AGENT_RETRY_COMPLETED, AGENT_ESCALATION_REQUIRED,
     }
 
 
@@ -89,6 +96,10 @@ class RuntimeEvent:
     child_agent_execution_id: str | None = None
     graph_node_id: str | None = None
     parallel_group_id: str | None = None
+    attempt_id: str | None = None
+    failure_id: str | None = None
+    retry_number: int | None = None
+    recovery_action: str | None = None
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = field(default_factory=utc_now)
 
@@ -137,6 +148,10 @@ class RuntimeEvent:
             "child_agent_execution_id": self.child_agent_execution_id,
             "graph_node_id": self.graph_node_id,
             "parallel_group_id": self.parallel_group_id,
+            "attempt_id": self.attempt_id,
+            "failure_id": self.failure_id,
+            "retry_number": self.retry_number,
+            "recovery_action": self.recovery_action,
         }
 
     @classmethod

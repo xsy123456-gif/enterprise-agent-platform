@@ -13,6 +13,9 @@ class ExecutionCheckpoint:
     pending_action: dict | None = None
     approval_id: str | None = None
     artifact_hash: str | None = None
+    failed_agent_execution_id: str | None = None
+    failed_node: str | None = None
+    retry_attempt: int | None = None
 
 
 class InMemoryExecutionCheckpointStore:
@@ -25,13 +28,18 @@ class InMemoryExecutionCheckpointStore:
         self._items[checkpoint.execution_id] = deepcopy(checkpoint)
 
     def save_checkpoint(self, execution_id, graph_state, current_node=None,
-                        pending_action=None, artifact_hash=None):
+                        pending_action=None, artifact_hash=None,
+                        failed_agent_execution_id=None, failed_node=None,
+                        retry_attempt=None):
         checkpoint = ExecutionCheckpoint(
             execution_id=execution_id,
             graph_state=(graph_state.to_dict() if hasattr(graph_state, "to_dict") else dict(graph_state)),
             current_node=current_node,
             pending_action=pending_action,
             artifact_hash=artifact_hash,
+            failed_agent_execution_id=failed_agent_execution_id,
+            failed_node=failed_node,
+            retry_attempt=retry_attempt,
         )
         self.save(checkpoint)
         return deepcopy(checkpoint)
@@ -64,6 +72,12 @@ class PersistentCheckpointStore:
       ON execution_checkpoints(execution_id, created_at DESC);
     ALTER TABLE execution_checkpoints
       ADD COLUMN IF NOT EXISTS artifact_hash TEXT;
+    ALTER TABLE execution_checkpoints
+      ADD COLUMN IF NOT EXISTS failed_agent_execution_id TEXT;
+    ALTER TABLE execution_checkpoints
+      ADD COLUMN IF NOT EXISTS failed_node TEXT;
+    ALTER TABLE execution_checkpoints
+      ADD COLUMN IF NOT EXISTS retry_attempt INTEGER;
     """
 
     def __init__(self, connection_factory):
@@ -80,7 +94,9 @@ class PersistentCheckpointStore:
             raise PersistenceError(str(error)) from error
 
     def save_checkpoint(self, execution_id, graph_state, current_node=None,
-                        pending_action=None, artifact_hash=None):
+                        pending_action=None, artifact_hash=None,
+                        failed_agent_execution_id=None, failed_node=None,
+                        retry_attempt=None):
         if not execution_id:
             raise ValueError("execution_id is required")
         if not artifact_hash:
@@ -90,16 +106,20 @@ class PersistentCheckpointStore:
             with self.connection_factory() as connection:
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        "INSERT INTO execution_checkpoints(execution_id,checkpoint_data,node,pending_action,artifact_hash) VALUES (%s,%s,%s,%s,%s) RETURNING id,created_at",
+                        "INSERT INTO execution_checkpoints(execution_id,checkpoint_data,node,pending_action,artifact_hash,failed_agent_execution_id,failed_node,retry_attempt) VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id,created_at",
                         (execution_id, json.dumps(payload), current_node,
                          json.dumps(pending_action) if pending_action is not None else None,
-                         artifact_hash),
+                         artifact_hash, failed_agent_execution_id, failed_node,
+                         retry_attempt),
                     )
                     row = cursor.fetchone()
             return {"id": row[0], "execution_id": execution_id,
                     "graph_state": payload, "current_node": current_node,
                     "pending_action": pending_action,
-                    "artifact_hash": artifact_hash, "created_at": row[1]}
+                    "artifact_hash": artifact_hash,
+                    "failed_agent_execution_id": failed_agent_execution_id,
+                    "failed_node": failed_node, "retry_attempt": retry_attempt,
+                    "created_at": row[1]}
         except Exception as error:
             raise PersistenceError(str(error)) from error
 
@@ -108,7 +128,7 @@ class PersistentCheckpointStore:
             with self.connection_factory() as connection:
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        "SELECT id,execution_id,checkpoint_data,node,pending_action,artifact_hash,created_at FROM execution_checkpoints WHERE execution_id=%s ORDER BY created_at DESC LIMIT 1",
+                        "SELECT id,execution_id,checkpoint_data,node,pending_action,artifact_hash,failed_agent_execution_id,failed_node,retry_attempt,created_at FROM execution_checkpoints WHERE execution_id=%s ORDER BY created_at DESC LIMIT 1",
                         (execution_id,),
                     )
                     row = cursor.fetchone()
@@ -118,7 +138,9 @@ class PersistentCheckpointStore:
             action = row[4] if isinstance(row[4], dict) or row[4] is None else json.loads(row[4])
             return {"id": row[0], "execution_id": row[1], "graph_state": data,
                     "current_node": row[3], "pending_action": action,
-                    "artifact_hash": row[5], "created_at": row[6]}
+                    "artifact_hash": row[5],
+                    "failed_agent_execution_id": row[6], "failed_node": row[7],
+                    "retry_attempt": row[8], "created_at": row[9]}
         except Exception as error:
             raise PersistenceError(str(error)) from error
 
