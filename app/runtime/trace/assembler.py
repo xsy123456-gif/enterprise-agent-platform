@@ -17,6 +17,7 @@ class TraceAssembler:
         "sender_agent_id", "receiver_agent_id", "message_type", "payload_size",
         "decision", "risk_level", "removed_field_count", "trust_level",
         "issue_count",
+        "deployment_version", "quota_decision", "runtime_health",
     }
 
     STARTS = {
@@ -67,6 +68,10 @@ class TraceAssembler:
         elif event.event_type in {
             "agent.authorization.checked", "agent.authorization.denied",
             "agent.context.projected", "agent.result.validated",
+            "agent.lifecycle.changed", "agent.deployment.started",
+            "agent.deployment.completed", "agent.rollback.executed",
+            "agent.quota.checked", "agent.execution.rejected.quota",
+            "agent.health.changed",
         }:
             self._instant_span(event, trace, "GOVERNANCE", event.event_type)
         if event.event_type in {
@@ -103,6 +108,9 @@ class TraceAssembler:
                 target_agent_id=event.target_agent_id,
                 authorization_id=event.authorization_id,
                 context_projection_id=event.context_projection_id,
+                deployment_version=event.deployment_version,
+                quota_decision=event.quota_decision,
+                runtime_health=event.runtime_health,
             )
             self.repository.append(trace)
             self.repository.append_span(NodeSpan(
@@ -127,6 +135,9 @@ class TraceAssembler:
                 target_agent_id=event.target_agent_id,
                 authorization_id=event.authorization_id,
                 context_projection_id=event.context_projection_id,
+                deployment_version=event.deployment_version,
+                quota_decision=event.quota_decision,
+                runtime_health=event.runtime_health,
             ))
             return trace
 
@@ -157,6 +168,9 @@ class TraceAssembler:
             target_agent_id=event.target_agent_id,
             authorization_id=event.authorization_id,
             context_projection_id=event.context_projection_id,
+            deployment_version=event.deployment_version,
+            quota_decision=event.quota_decision,
+            runtime_health=event.runtime_health,
         )
         self.repository.append_span(span)
         if category == "NODE":

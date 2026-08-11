@@ -40,6 +40,9 @@ class ExecutionTrace:
     target_agent_id: str | None = None
     authorization_id: str | None = None
     context_projection_id: str | None = None
+    deployment_version: str | None = None
+    quota_decision: str | None = None
+    runtime_health: str | None = None
 
     def __post_init__(self):
         for name in (
@@ -77,6 +80,9 @@ class ExecutionTrace:
             "target_agent_id": self.target_agent_id,
             "authorization_id": self.authorization_id,
             "context_projection_id": self.context_projection_id,
+            "deployment_version": self.deployment_version,
+            "quota_decision": self.quota_decision,
+            "runtime_health": self.runtime_health,
         }
 
     @classmethod
@@ -124,6 +130,9 @@ class NodeSpan:
     target_agent_id: str | None = None
     authorization_id: str | None = None
     context_projection_id: str | None = None
+    deployment_version: str | None = None
+    quota_decision: str | None = None
+    runtime_health: str | None = None
 
     def __post_init__(self):
         for name in ("span_id", "trace_id", "node_id", "node_type", "status"):
@@ -179,6 +188,9 @@ class NodeSpan:
             "target_agent_id": self.target_agent_id,
             "authorization_id": self.authorization_id,
             "context_projection_id": self.context_projection_id,
+            "deployment_version": self.deployment_version,
+            "quota_decision": self.quota_decision,
+            "runtime_health": self.runtime_health,
             "duration_ms": self.duration_ms,
         }
 

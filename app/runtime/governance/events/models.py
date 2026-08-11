@@ -56,6 +56,13 @@ class RuntimeEventType:
     AGENT_INVOCATION_STARTED = "agent.invocation.started"
     AGENT_INVOCATION_COMPLETED = "agent.invocation.completed"
     AGENT_RESULT_VALIDATED = "agent.result.validated"
+    AGENT_LIFECYCLE_CHANGED = "agent.lifecycle.changed"
+    AGENT_DEPLOYMENT_STARTED = "agent.deployment.started"
+    AGENT_DEPLOYMENT_COMPLETED = "agent.deployment.completed"
+    AGENT_ROLLBACK_EXECUTED = "agent.rollback.executed"
+    AGENT_QUOTA_CHECKED = "agent.quota.checked"
+    AGENT_EXECUTION_REJECTED_QUOTA = "agent.execution.rejected.quota"
+    AGENT_HEALTH_CHANGED = "agent.health.changed"
 
     ALL = {
         GRAPH_STARTED, GRAPH_COMPLETED, GRAPH_FAILED,
@@ -76,6 +83,10 @@ class RuntimeEventType:
         AGENT_AUTHORIZATION_CHECKED, AGENT_AUTHORIZATION_DENIED,
         AGENT_CONTEXT_PROJECTED, AGENT_INVOCATION_STARTED,
         AGENT_INVOCATION_COMPLETED, AGENT_RESULT_VALIDATED,
+        AGENT_LIFECYCLE_CHANGED, AGENT_DEPLOYMENT_STARTED,
+        AGENT_DEPLOYMENT_COMPLETED, AGENT_ROLLBACK_EXECUTED,
+        AGENT_QUOTA_CHECKED, AGENT_EXECUTION_REJECTED_QUOTA,
+        AGENT_HEALTH_CHANGED,
     }
 
 
@@ -112,6 +123,10 @@ class RuntimeEvent:
     target_agent_id: str | None = None
     authorization_id: str | None = None
     context_projection_id: str | None = None
+    deployment_version: str | None = None
+    runtime_policy_version: str | None = None
+    quota_decision: str | None = None
+    runtime_health: str | None = None
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = field(default_factory=utc_now)
 
@@ -167,6 +182,10 @@ class RuntimeEvent:
             "target_agent_id": self.target_agent_id,
             "authorization_id": self.authorization_id,
             "context_projection_id": self.context_projection_id,
+            "deployment_version": self.deployment_version,
+            "runtime_policy_version": self.runtime_policy_version,
+            "quota_decision": self.quota_decision,
+            "runtime_health": self.runtime_health,
         }
 
     @classmethod

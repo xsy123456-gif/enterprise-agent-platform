@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Any
 
 
 def utc_now():
@@ -33,8 +34,16 @@ class ExecutionRecord:
     status: ExecutionStatus = ExecutionStatus.CREATED
     current_node: str | None = None
     authorization_id: str | None = None
+    deployment_version: str = "unmanaged"
+    runtime_policy_version: str = "unmanaged"
+    quota_snapshot: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
+
+    def __post_init__(self):
+        if not isinstance(self.quota_snapshot, dict):
+            raise TypeError("quota_snapshot must be a dict")
+        object.__setattr__(self, "quota_snapshot", dict(self.quota_snapshot))
 
     def transition(self, status, current_node=None, authorization_id=None):
         target = ExecutionStatus(status)
@@ -73,6 +82,7 @@ class ExecutionRecord:
         return {
             **self.__dict__,
             "status": self.status.value,
+            "quota_snapshot": dict(self.quota_snapshot),
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
         }

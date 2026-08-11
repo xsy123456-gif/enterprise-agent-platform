@@ -18,6 +18,11 @@ class ExecutionManager:
             agent_version=state.agent_version, artifact_id=artifact.artifact_id,
             artifact_hash=artifact.artifact_hash, backend_type=artifact.backend_type,
             user_id=state.user_id, tenant_id=state.tenant_id,
+            deployment_version=getattr(state, "deployment_version", "unmanaged"),
+            runtime_policy_version=getattr(
+                state, "runtime_policy_version", "unmanaged"
+            ),
+            quota_snapshot=dict(getattr(state, "quota_snapshot", {})),
         )
         self.store.create(record)
         self._emit(record, "execution.created", "created")
@@ -100,6 +105,10 @@ class ExecutionManager:
             artifact_hash=record.artifact_hash, backend_type=record.backend_type,
             status=status, payload=dict(payload or {}),
             authorization_id=record.authorization_id,
+            deployment_version=record.deployment_version,
+            runtime_policy_version=record.runtime_policy_version,
+            quota_decision=record.quota_snapshot.get("decision"),
+            runtime_health=record.quota_snapshot.get("runtime_health"),
         )
         if self.event_store is not None:
             self.event_store.append(event)

@@ -56,7 +56,9 @@ class AgentGovernanceAuditSubscriber:
 
     EVENT_PREFIXES = (
         "agent.authorization.", "agent.context.", "agent.invocation.",
-        "agent.result.",
+        "agent.result.", "agent.lifecycle.", "agent.deployment.",
+        "agent.rollback.", "agent.quota.", "agent.health.",
+        "agent.execution.rejected.",
     )
 
     def __init__(self, repository):
