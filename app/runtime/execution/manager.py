@@ -23,12 +23,16 @@ class ExecutionManager:
         self._emit(record, "execution.created", "created")
         return record
 
-    def transition(self, execution_id, status, current_node=None):
-        record = self.store.update_status(execution_id, status, current_node)
+    def transition(self, execution_id, status, current_node=None,
+                   authorization_id=None):
+        record = self.store.update_status(
+            execution_id, status, current_node, authorization_id
+        )
         event_name = {
             ExecutionStatus.RUNNING: "execution.started",
             ExecutionStatus.WAITING_APPROVAL: "execution.waiting",
             ExecutionStatus.WAITING_TOOL: "execution.waiting",
+            ExecutionStatus.WAITING_GOVERNANCE: "execution.waiting",
             ExecutionStatus.RESUMING: "execution.resumed",
             ExecutionStatus.COMPLETED: "execution.completed",
             ExecutionStatus.FAILED: "execution.failed",
@@ -55,7 +59,11 @@ class ExecutionManager:
         record = self.store.get(execution_id)
         if record is None:
             raise KeyError(execution_id)
-        if record.status not in {ExecutionStatus.WAITING_APPROVAL, ExecutionStatus.FAILED}:
+        if record.status not in {
+            ExecutionStatus.WAITING_APPROVAL,
+            ExecutionStatus.WAITING_GOVERNANCE,
+            ExecutionStatus.FAILED,
+        }:
             raise ValueError(f"Execution is not resumable: {record.status.value}")
         self.transition(execution_id, ExecutionStatus.RESUMING)
         if self.checkpoint_store is not None:
@@ -91,6 +99,7 @@ class ExecutionManager:
             agent_version=record.agent_version, artifact_id=record.artifact_id,
             artifact_hash=record.artifact_hash, backend_type=record.backend_type,
             status=status, payload=dict(payload or {}),
+            authorization_id=record.authorization_id,
         )
         if self.event_store is not None:
             self.event_store.append(event)

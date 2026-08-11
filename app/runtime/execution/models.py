@@ -12,6 +12,7 @@ class ExecutionStatus(str, Enum):
     RUNNING = "running"
     WAITING_APPROVAL = "waiting_approval"
     WAITING_TOOL = "waiting_tool"
+    WAITING_GOVERNANCE = "waiting_governance"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -31,19 +32,26 @@ class ExecutionRecord:
     tenant_id: str
     status: ExecutionStatus = ExecutionStatus.CREATED
     current_node: str | None = None
+    authorization_id: str | None = None
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
 
-    def transition(self, status, current_node=None):
+    def transition(self, status, current_node=None, authorization_id=None):
         target = ExecutionStatus(status)
         allowed = {
             ExecutionStatus.CREATED: {ExecutionStatus.RUNNING, ExecutionStatus.CANCELLED},
             ExecutionStatus.RUNNING: {
                 ExecutionStatus.WAITING_APPROVAL, ExecutionStatus.WAITING_TOOL,
+                ExecutionStatus.WAITING_GOVERNANCE,
                 ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED,
             },
             ExecutionStatus.WAITING_APPROVAL: {ExecutionStatus.RESUMING, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED},
             ExecutionStatus.WAITING_TOOL: {ExecutionStatus.RUNNING, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED},
+            ExecutionStatus.WAITING_GOVERNANCE: {
+                ExecutionStatus.RUNNING, ExecutionStatus.RESUMING,
+                ExecutionStatus.FAILED,
+                ExecutionStatus.CANCELLED,
+            },
             ExecutionStatus.RESUMING: {ExecutionStatus.RUNNING, ExecutionStatus.COMPLETED, ExecutionStatus.FAILED},
             ExecutionStatus.COMPLETED: set(),
             ExecutionStatus.FAILED: {ExecutionStatus.RESUMING},
@@ -54,6 +62,10 @@ class ExecutionRecord:
         return ExecutionRecord(
             **{**self.__dict__, "status": target,
                "current_node": current_node if current_node is not None else self.current_node,
+               "authorization_id": (
+                   authorization_id if authorization_id is not None
+                   else self.authorization_id
+               ),
                "updated_at": utc_now()}
         )
 

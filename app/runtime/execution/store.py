@@ -15,7 +15,8 @@ class ExecutionStore(ABC):
     def get(self, execution_id): ...
 
     @abstractmethod
-    def update_status(self, execution_id, status, current_node=None): ...
+    def update_status(self, execution_id, status, current_node=None,
+                      authorization_id=None): ...
 
     @abstractmethod
     def list_history(self, execution_id): ...
@@ -42,12 +43,13 @@ class InMemoryExecutionStore(ExecutionStore):
             record = self._records.get(execution_id)
             return deepcopy(record) if record is not None else None
 
-    def update_status(self, execution_id, status, current_node=None):
+    def update_status(self, execution_id, status, current_node=None,
+                      authorization_id=None):
         with self._lock:
             record = self._records.get(execution_id)
             if record is None:
                 raise NotFoundError(execution_id)
-            updated = record.transition(status, current_node)
+            updated = record.transition(status, current_node, authorization_id)
             self._records[execution_id] = updated
             self._history[execution_id].append(deepcopy(updated))
             return deepcopy(updated)
@@ -67,13 +69,17 @@ class PostgresExecutionStore(ExecutionStore):
       artifact_id TEXT NOT NULL, artifact_hash TEXT NOT NULL,
       backend_type TEXT NOT NULL, user_id TEXT, tenant_id TEXT NOT NULL,
       status TEXT NOT NULL, current_node TEXT,
+      authorization_id TEXT,
       created_at TIMESTAMPTZ NOT NULL, updated_at TIMESTAMPTZ NOT NULL
     );
     CREATE TABLE IF NOT EXISTS execution_history (
       id BIGSERIAL PRIMARY KEY, execution_id TEXT NOT NULL,
       status TEXT NOT NULL, current_node TEXT,
+      authorization_id TEXT,
       recorded_at TIMESTAMPTZ NOT NULL
     );
+    ALTER TABLE executions ADD COLUMN IF NOT EXISTS authorization_id TEXT;
+    ALTER TABLE execution_history ADD COLUMN IF NOT EXISTS authorization_id TEXT;
     """
 
     def __init__(self, connection_factory):
@@ -94,16 +100,18 @@ class PostgresExecutionStore(ExecutionStore):
             with self.connection_factory() as connection:
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        "INSERT INTO executions VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                        "INSERT INTO executions(execution_id,trace_id,agent_id,agent_version,artifact_id,artifact_hash,backend_type,user_id,tenant_id,status,current_node,authorization_id,created_at,updated_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                         (record.execution_id, record.trace_id, record.agent_id,
                          record.agent_version, record.artifact_id, record.artifact_hash,
                          record.backend_type, record.user_id, record.tenant_id,
                          record.status.value, record.current_node,
+                         record.authorization_id,
                          record.created_at, record.updated_at),
                     )
                     cursor.execute(
-                        "INSERT INTO execution_history(execution_id,status,current_node,recorded_at) VALUES (%s,%s,%s,%s)",
-                        (record.execution_id, record.status.value, record.current_node, record.updated_at),
+                        "INSERT INTO execution_history(execution_id,status,current_node,authorization_id,recorded_at) VALUES (%s,%s,%s,%s,%s)",
+                        (record.execution_id, record.status.value, record.current_node,
+                         record.authorization_id, record.updated_at),
                     )
             return record
         except Exception as error:
@@ -111,26 +119,29 @@ class PostgresExecutionStore(ExecutionStore):
 
     def get(self, execution_id):
         row = self._fetchone(
-            "SELECT execution_id,trace_id,agent_id,agent_version,artifact_id,artifact_hash,backend_type,user_id,tenant_id,status,current_node,created_at,updated_at FROM executions WHERE execution_id=%s",
+            "SELECT execution_id,trace_id,agent_id,agent_version,artifact_id,artifact_hash,backend_type,user_id,tenant_id,status,current_node,authorization_id,created_at,updated_at FROM executions WHERE execution_id=%s",
             (execution_id,),
         )
         return self._record(row) if row else None
 
-    def update_status(self, execution_id, status, current_node=None):
+    def update_status(self, execution_id, status, current_node=None,
+                      authorization_id=None):
         current = self.get(execution_id)
         if current is None:
             raise NotFoundError(execution_id)
-        updated = current.transition(status, current_node)
+        updated = current.transition(status, current_node, authorization_id)
         try:
             with self.connection_factory() as connection:
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        "UPDATE executions SET status=%s,current_node=%s,updated_at=%s WHERE execution_id=%s",
-                        (updated.status.value, updated.current_node, updated.updated_at, execution_id),
+                        "UPDATE executions SET status=%s,current_node=%s,authorization_id=%s,updated_at=%s WHERE execution_id=%s",
+                        (updated.status.value, updated.current_node,
+                         updated.authorization_id, updated.updated_at, execution_id),
                     )
                     cursor.execute(
-                        "INSERT INTO execution_history(execution_id,status,current_node,recorded_at) VALUES (%s,%s,%s,%s)",
-                        (execution_id, updated.status.value, updated.current_node, updated.updated_at),
+                        "INSERT INTO execution_history(execution_id,status,current_node,authorization_id,recorded_at) VALUES (%s,%s,%s,%s,%s)",
+                        (execution_id, updated.status.value, updated.current_node,
+                         updated.authorization_id, updated.updated_at),
                     )
             return updated
         except Exception as error:
@@ -141,7 +152,7 @@ class PostgresExecutionStore(ExecutionStore):
         if current is None:
             return ()
         rows = self._fetchall(
-            "SELECT status,current_node,recorded_at FROM execution_history WHERE execution_id=%s ORDER BY recorded_at",
+            "SELECT status,current_node,authorization_id,recorded_at FROM execution_history WHERE execution_id=%s ORDER BY recorded_at",
             (execution_id,),
         )
         return tuple(
@@ -152,7 +163,7 @@ class PostgresExecutionStore(ExecutionStore):
                 backend_type=current.backend_type, user_id=current.user_id,
                 tenant_id=current.tenant_id, status=ExecutionStatus(row[0]),
                 current_node=row[1], created_at=current.created_at,
-                updated_at=row[2],
+                authorization_id=row[2], updated_at=row[3],
             )
             for row in rows
         )

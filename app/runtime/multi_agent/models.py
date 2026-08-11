@@ -68,6 +68,7 @@ class AgentTaskStatus(str, Enum):
     READY = "ready"
     RUNNING = "running"
     WAITING = "waiting"
+    WAITING_GOVERNANCE = "waiting_governance"
     COMPLETED = "completed"
     FAILED = "failed"
     RETRY_PENDING = "retry_pending"
@@ -214,9 +215,14 @@ class AgentTask:
             AgentTaskStatus.RUNNING: {
                 AgentTaskStatus.COMPLETED, AgentTaskStatus.FAILED,
                 AgentTaskStatus.RETRY_PENDING, AgentTaskStatus.ESCALATED,
+                AgentTaskStatus.WAITING_GOVERNANCE,
                 AgentTaskStatus.SKIPPED,
             },
             AgentTaskStatus.WAITING: {AgentTaskStatus.RUNNING, AgentTaskStatus.SKIPPED},
+            AgentTaskStatus.WAITING_GOVERNANCE: {
+                AgentTaskStatus.RUNNING, AgentTaskStatus.FAILED,
+                AgentTaskStatus.ESCALATED, AgentTaskStatus.SKIPPED,
+            },
             AgentTaskStatus.RETRY_PENDING: {
                 AgentTaskStatus.RECOVERING, AgentTaskStatus.ESCALATED,
                 AgentTaskStatus.SKIPPED,

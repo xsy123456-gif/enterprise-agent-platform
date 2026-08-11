@@ -37,6 +37,9 @@ class ExecutionTrace:
     failure_id: str | None = None
     retry_number: int | None = None
     recovery_action: str | None = None
+    target_agent_id: str | None = None
+    authorization_id: str | None = None
+    context_projection_id: str | None = None
 
     def __post_init__(self):
         for name in (
@@ -71,6 +74,9 @@ class ExecutionTrace:
             "failure_id": self.failure_id,
             "retry_number": self.retry_number,
             "recovery_action": self.recovery_action,
+            "target_agent_id": self.target_agent_id,
+            "authorization_id": self.authorization_id,
+            "context_projection_id": self.context_projection_id,
         }
 
     @classmethod
@@ -115,6 +121,9 @@ class NodeSpan:
     failure_id: str | None = None
     retry_number: int | None = None
     recovery_action: str | None = None
+    target_agent_id: str | None = None
+    authorization_id: str | None = None
+    context_projection_id: str | None = None
 
     def __post_init__(self):
         for name in ("span_id", "trace_id", "node_id", "node_type", "status"):
@@ -167,6 +176,9 @@ class NodeSpan:
             "failure_id": self.failure_id,
             "retry_number": self.retry_number,
             "recovery_action": self.recovery_action,
+            "target_agent_id": self.target_agent_id,
+            "authorization_id": self.authorization_id,
+            "context_projection_id": self.context_projection_id,
             "duration_ms": self.duration_ms,
         }
 

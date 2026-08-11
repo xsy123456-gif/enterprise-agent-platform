@@ -28,6 +28,9 @@ class RuntimeEventContext:
     failure_id: str | None = None
     retry_number: int | None = None
     recovery_action: str | None = None
+    target_agent_id: str | None = None
+    authorization_id: str | None = None
+    context_projection_id: str | None = None
     backend_metadata: dict = field(default_factory=dict)
 
     def __post_init__(self):
@@ -102,4 +105,7 @@ class RuntimeEventMapper:
             failure_id=context.failure_id,
             retry_number=context.retry_number,
             recovery_action=context.recovery_action,
+            target_agent_id=context.target_agent_id,
+            authorization_id=context.authorization_id,
+            context_projection_id=context.context_projection_id,
         )

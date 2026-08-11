@@ -50,6 +50,12 @@ class RuntimeEventType:
     AGENT_RETRY_STARTED = "agent.retry.started"
     AGENT_RETRY_COMPLETED = "agent.retry.completed"
     AGENT_ESCALATION_REQUIRED = "agent.escalation.required"
+    AGENT_AUTHORIZATION_CHECKED = "agent.authorization.checked"
+    AGENT_AUTHORIZATION_DENIED = "agent.authorization.denied"
+    AGENT_CONTEXT_PROJECTED = "agent.context.projected"
+    AGENT_INVOCATION_STARTED = "agent.invocation.started"
+    AGENT_INVOCATION_COMPLETED = "agent.invocation.completed"
+    AGENT_RESULT_VALIDATED = "agent.result.validated"
 
     ALL = {
         GRAPH_STARTED, GRAPH_COMPLETED, GRAPH_FAILED,
@@ -67,6 +73,9 @@ class RuntimeEventType:
         AGENT_MESSAGE_CREATED, AGENT_MESSAGE_DELIVERED, AGENT_MESSAGE_REJECTED,
         AGENT_FAILURE_DETECTED, AGENT_RETRY_REQUESTED, AGENT_RETRY_STARTED,
         AGENT_RETRY_COMPLETED, AGENT_ESCALATION_REQUIRED,
+        AGENT_AUTHORIZATION_CHECKED, AGENT_AUTHORIZATION_DENIED,
+        AGENT_CONTEXT_PROJECTED, AGENT_INVOCATION_STARTED,
+        AGENT_INVOCATION_COMPLETED, AGENT_RESULT_VALIDATED,
     }
 
 
@@ -100,6 +109,9 @@ class RuntimeEvent:
     failure_id: str | None = None
     retry_number: int | None = None
     recovery_action: str | None = None
+    target_agent_id: str | None = None
+    authorization_id: str | None = None
+    context_projection_id: str | None = None
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = field(default_factory=utc_now)
 
@@ -152,6 +164,9 @@ class RuntimeEvent:
             "failure_id": self.failure_id,
             "retry_number": self.retry_number,
             "recovery_action": self.recovery_action,
+            "target_agent_id": self.target_agent_id,
+            "authorization_id": self.authorization_id,
+            "context_projection_id": self.context_projection_id,
         }
 
     @classmethod

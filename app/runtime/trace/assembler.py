@@ -15,6 +15,8 @@ class TraceAssembler:
         "approval_id", "memory_event_id", "accepted", "result_count",
         "model", "provider", "capability", "retry_count", "checkpoint_id",
         "sender_agent_id", "receiver_agent_id", "message_type", "payload_size",
+        "decision", "risk_level", "removed_field_count", "trust_level",
+        "issue_count",
     }
 
     STARTS = {
@@ -23,6 +25,7 @@ class TraceAssembler:
         "tool.called": ("TOOL", None),
         "approval.requested": ("GOVERNANCE", "approval"),
         "memory.write.requested": ("MEMORY", "memory.write"),
+        "agent.invocation.started": ("AGENT", "agent.invocation"),
     }
     ENDS = {
         "graph.completed": ("GRAPH", "graph", "OK"),
@@ -35,6 +38,7 @@ class TraceAssembler:
         "approval.completed": ("GOVERNANCE", "approval", "OK"),
         "memory.write.completed": ("MEMORY", "memory.write", "OK"),
         "memory.write.failed": ("MEMORY", "memory.write", "ERROR"),
+        "agent.invocation.completed": ("AGENT", "agent.invocation", "OK"),
     }
 
     def __init__(self, repository):
@@ -60,6 +64,11 @@ class TraceAssembler:
             "agent.failure.detected", "agent.escalation.required",
         }:
             self._instant_span(event, trace, "RECOVERY", event.event_type)
+        elif event.event_type in {
+            "agent.authorization.checked", "agent.authorization.denied",
+            "agent.context.projected", "agent.result.validated",
+        }:
+            self._instant_span(event, trace, "GOVERNANCE", event.event_type)
         if event.event_type in {
             "execution.completed", "execution.failed", "execution.cancelled",
             "graph.completed", "graph.failed",
@@ -91,6 +100,9 @@ class TraceAssembler:
                 failure_id=event.failure_id,
                 retry_number=event.retry_number,
                 recovery_action=event.recovery_action,
+                target_agent_id=event.target_agent_id,
+                authorization_id=event.authorization_id,
+                context_projection_id=event.context_projection_id,
             )
             self.repository.append(trace)
             self.repository.append_span(NodeSpan(
@@ -112,6 +124,9 @@ class TraceAssembler:
                 failure_id=event.failure_id,
                 retry_number=event.retry_number,
                 recovery_action=event.recovery_action,
+                target_agent_id=event.target_agent_id,
+                authorization_id=event.authorization_id,
+                context_projection_id=event.context_projection_id,
             ))
             return trace
 
@@ -139,6 +154,9 @@ class TraceAssembler:
             failure_id=event.failure_id,
             retry_number=event.retry_number,
             recovery_action=event.recovery_action,
+            target_agent_id=event.target_agent_id,
+            authorization_id=event.authorization_id,
+            context_projection_id=event.context_projection_id,
         )
         self.repository.append_span(span)
         if category == "NODE":
@@ -184,6 +202,8 @@ class TraceAssembler:
             status = "ERROR"
         elif event.event_type == "agent.escalation.required":
             status = "ESCALATED"
+        elif event.event_type == "agent.authorization.denied":
+            status = "DENIED"
         else:
             status = "DENIED" if action == "deny" else "OK"
         self.repository.update_span(replace(span, status=status, end_time=event.timestamp))
