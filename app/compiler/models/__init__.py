@@ -1,4 +1,3 @@
-from app.compiler.models.artifact import GraphArtifactMetadata
 from app.compiler.models.input import CompileInput
 from app.compiler.models.ir import AgentGraphIR, EdgeIR, EdgeType, NodeIR, NodeType
 
@@ -7,7 +6,6 @@ __all__ = [
     "CompileInput",
     "EdgeIR",
     "EdgeType",
-    "GraphArtifactMetadata",
     "NodeIR",
     "NodeType",
 ]

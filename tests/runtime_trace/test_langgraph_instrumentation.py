@@ -3,7 +3,7 @@ from io import StringIO
 from unittest.mock import patch
 
 from app.main import build_orchestration
-from app.memory.test_repository import TestEmbeddingService, TestMemoryRepository
+from tests.memory.repository import TestEmbeddingService, TestMemoryRepository
 from app.orchestration.task import Task
 from tests.test_orchestration import PlannerAndAgentStubLLM
 

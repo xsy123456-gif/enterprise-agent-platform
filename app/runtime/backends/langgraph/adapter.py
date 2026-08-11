@@ -1,8 +1,7 @@
 from app.compiler.backend.models import BackendArtifact
 from app.runtime.backends.langgraph.checkpoint import LangGraphCheckpointAdapter
-from app.runtime.backends.langgraph.graph import build_graph
 from app.runtime.backends.langgraph.generator import LangGraphGraphGenerator
-from app.runtime.backends.langgraph.state_adapter import LangGraphStateAdapter
+from app.runtime.backends.langgraph.state_mapper import LangGraphStateMapper
 from langgraph.types import Command
 from app.runtime.checkpoint import InMemoryCheckpointStore
 from app.runtime.contracts import (
@@ -14,10 +13,14 @@ from app.runtime.ports import GraphRuntime
 class LangGraphRuntimeAdapter(GraphRuntime):
     """Execute only compiled LangGraph BackendArtifacts through Runtime Contract v1."""
 
-    def __init__(self, node_adapters=None, checkpoint_store=None, state_adapter=None,
+    def __init__(self, node_adapters=None, checkpoint_store=None, state_mapper=None,
                  graph_generator=None, graph=None, response_event_hook=None):
-        self.state_adapter = state_adapter or LangGraphStateAdapter()
-        self.graph = graph or (build_graph() if node_adapters is None else None)
+        self.state_mapper = state_mapper or LangGraphStateMapper()
+        if graph is None and node_adapters is None:
+            raise ValueError(
+                "LangGraph Runtime requires Backend node adapters or an injected graph"
+            )
+        self.graph = graph
         self.graph_generator = graph_generator or (
             LangGraphGraphGenerator(node_adapters)
             if node_adapters is not None else None
@@ -36,7 +39,7 @@ class LangGraphRuntimeAdapter(GraphRuntime):
             RuntimeEventType.GRAPH_STARTED, state.task_id,
             operation_id=graph_span_id, span_id=graph_span_id,
         )
-        backend_state = self.state_adapter.to_backend(state)
+        backend_state = self.state_mapper.to_graph_state(state)
         backend_state["_events"] = [started.to_dict(), graph_started.to_dict()]
         backend_state["_graph_span_id"] = graph_span_id
         self.checkpoints.save(state)
@@ -62,11 +65,12 @@ class LangGraphRuntimeAdapter(GraphRuntime):
                     status="waiting_approval",
                     response=None,
                     state=waiting_state,
-                    events=self.state_adapter.events_from_backend(output),
+                    events=self.state_mapper.events_from_graph_state(output),
                 )
-            final_state = self.state_adapter.from_backend(output, state)
+            mapped = self.state_mapper.from_graph_state(output)
+            final_state = self.state_mapper.apply_result(state, mapped)
             final_state.apply_patch({"status": "completed"})
-            events = self.state_adapter.events_from_backend(output)
+            events = self.state_mapper.events_from_graph_state(output)
             events.extend([
                 RuntimeEvent(RuntimeEventType.WORKER_COMPLETED, state.task_id),
                 RuntimeEvent(RuntimeEventType.GRAPH_COMPLETED, state.task_id),
@@ -92,7 +96,7 @@ class LangGraphRuntimeAdapter(GraphRuntime):
                 "status": "failed",
                 "metadata": {**state.metadata, "runtime_error": str(error)},
             })
-            events = self.state_adapter.events_from_backend(backend_state)
+            events = self.state_mapper.events_from_graph_state(backend_state)
             events.append(RuntimeEvent(
                 RuntimeEventType.GRAPH_FAILED, state.task_id,
                 payload={"error": str(error)},
@@ -118,7 +122,8 @@ class LangGraphRuntimeAdapter(GraphRuntime):
             state = self.checkpoints.load(execution_id)
         if state is None:
             raise KeyError(f"Checkpoint not found: {execution_id}")
-        final_state = self.state_adapter.from_backend(output, state)
+        mapped = self.state_mapper.from_graph_state(output)
+        final_state = self.state_mapper.apply_result(state, mapped)
         final_state.apply_patch({
             "status": "completed" if final_state.response is not None else "failed"
         })
@@ -128,7 +133,7 @@ class LangGraphRuntimeAdapter(GraphRuntime):
             status=final_state.status,
             response=final_state.response,
             state=final_state,
-            events=self.state_adapter.events_from_backend(output),
+            events=self.state_mapper.events_from_graph_state(output),
         )
 
     @staticmethod

@@ -4,7 +4,6 @@ from app.registry.repository import AgentRepository
 class InMemoryAgentRepository(AgentRepository):
     def __init__(self):
         self._agents = {}
-        self._capabilities = {}
         self._policies = {}
         self._tool_bindings = []
 
@@ -28,19 +27,6 @@ class InMemoryAgentRepository(AgentRepository):
         if key not in self._agents:
             raise KeyError(f"Agent not found: {agent.registry_key}")
         self._agents[key] = agent
-
-    def add_capability(self, capability):
-        if capability.capability_id in self._capabilities:
-            raise ValueError(
-                f"Capability already registered: {capability.capability_id}"
-            )
-        self._capabilities[capability.capability_id] = capability
-
-    def get_capability(self, capability_id):
-        return self._capabilities.get(capability_id)
-
-    def list_capabilities(self):
-        return list(self._capabilities.values())
 
     def add_policy(self, policy):
         if policy.policy_id in self._policies:

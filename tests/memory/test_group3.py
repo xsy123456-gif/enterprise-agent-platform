@@ -20,7 +20,7 @@ from app.memory import (
     MemoryWriteRequest,
 )
 from app.memory import MemoryScope
-from app.memory.tests.testing import (
+from tests.memory.testing import (
     build_test_memory,
     build_test_memory_with_spies,
     SpyCounters,

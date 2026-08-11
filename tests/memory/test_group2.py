@@ -27,7 +27,7 @@ from app.memory.pipeline.write.extractor import MemoryCandidate, StructuredMemor
 from app.memory.pipeline.write.resolver import Resolution
 from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
 
-from app.memory.memory_test import _InMemoryRepository, _InMemoryEmbeddingService, StubLLM
+from tests.memory.test_support import _InMemoryRepository, _InMemoryEmbeddingService, StubLLM
 
 
 def make_request(key, obs="fact", content="x",
@@ -103,7 +103,6 @@ class ObservationCountTest(unittest.TestCase):
             repository=self.repo, embedding_service=_InMemoryEmbeddingService(),
             extractor=StructuredMemoryExtractor(), text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
 
     def _submit_and_process(self, key, content="工程师", type_id="person",
@@ -111,7 +110,7 @@ class ObservationCountTest(unittest.TestCase):
         req = make_request(key, obs="fact", content=content,
                            type_id=type_id, entity_id=entity_id, attribute=attribute)
         resp = self.system.write(req)
-        self.system._worker.process_once()
+        self.system.runtime._worker.process_once()
         return resp
 
     def test_create_sets_observation_count_to_one(self):
@@ -165,7 +164,7 @@ class ObservationCountTest(unittest.TestCase):
             }]},
         )
         self.system.write(req)
-        self.system._worker.process_once()
+        self.system.runtime._worker.process_once()
         self.assertEqual(2, len(self.repo.items))
         self.assertEqual(1, self.repo.items[old.id].observation_count)
 
@@ -188,7 +187,7 @@ class ObservationCountTest(unittest.TestCase):
             }]},
         )
         self.system.write(req)
-        self.system._worker.process_once()
+        self.system.runtime._worker.process_once()
         self.assertEqual(1, self.repo.items[old.id].observation_count)
 
     def test_retry_rollback_does_not_double_count(self):
@@ -207,20 +206,19 @@ class ObservationCountTest(unittest.TestCase):
             repository=repo, embedding_service=_InMemoryEmbeddingService(),
             extractor=StructuredMemoryExtractor(), text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
         req = make_request("oc-rb", content="工程师",
                            entity_id="张三", type_id="person", attribute="职业")
         resp = system.write(req)
 
         # First attempt: commit fails → retry_wait
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = repo.get_event(resp.event_id)
         self.assertEqual("retry_wait", ev.status)
 
         # Second attempt: retry succeeds
         ev.next_attempt_at = datetime.now(timezone.utc) - timedelta(seconds=1)
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = repo.get_event(resp.event_id)
         self.assertEqual("processed", ev.status)
 
@@ -241,7 +239,6 @@ class AccessCountTest(unittest.TestCase):
             repository=self.repo, embedding_service=_InMemoryEmbeddingService(),
             extractor=StructuredMemoryExtractor(), text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
 
     def _submit_process(self, key="ak-1", content="工程师", type_id="person",
@@ -249,7 +246,7 @@ class AccessCountTest(unittest.TestCase):
         req = make_request(key, obs="fact", content=content,
                            type_id=type_id, entity_id=entity_id, attribute=attribute)
         self.system.write(req)
-        self.system._worker.process_once()
+        self.system.runtime._worker.process_once()
 
     def _read(self, query="工程师", types=None):
         principal = MemoryPrincipal("u", "tn", "u", "ag")
@@ -291,7 +288,6 @@ class IdempotentSubmitTest(unittest.TestCase):
             repository=self.repo, embedding_service=_InMemoryEmbeddingService(),
             extractor=StructuredMemoryExtractor(), text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
 
     def test_duplicate_key_returns_same_event_id(self):
@@ -304,7 +300,7 @@ class IdempotentSubmitTest(unittest.TestCase):
     def test_duplicate_returns_processed_status(self):
         req = make_request("idem-2")
         self.system.write(req)
-        self.system._worker.process_once()
+        self.system.runtime._worker.process_once()
         r2 = self.system.write(req)
         self.assertEqual("processed", r2.status)
 
@@ -328,7 +324,6 @@ class ErrorClassificationTest(unittest.TestCase):
             extractor=extractor or StructuredMemoryExtractor(),
             text_model=StubLLM(),
             authorization_provider=auth or AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
 
     def test_authorization_error_gets_authorization_denied(self):
@@ -337,7 +332,7 @@ class ErrorClassificationTest(unittest.TestCase):
                 raise PermissionError("no-write")
         system = self._build(auth=Deny())
         resp = system.write(make_request("err-auth"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = self.repo.get_event(resp.event_id)
         self.assertEqual(MemoryEventStatus.REJECTED, ev.status)
         self.assertEqual("authorization_denied", ev.error_code)
@@ -350,7 +345,7 @@ class ErrorClassificationTest(unittest.TestCase):
                 raise MemoryValidationError("bad input")
         system = self._build(extractor=BadExtractor())
         resp = system.write(make_request("err-val"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = self.repo.get_event(resp.event_id)
         self.assertEqual(MemoryEventStatus.REJECTED, ev.status)
         self.assertEqual("validation_failed", ev.error_code)
@@ -361,7 +356,7 @@ class ErrorClassificationTest(unittest.TestCase):
                 raise MemoryInvariantViolation("two active heads")
         system = self._build(extractor=BadExtractor())
         resp = system.write(make_request("err-inv"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = self.repo.get_event(resp.event_id)
         self.assertEqual(MemoryEventStatus.DEAD_LETTER, ev.status)
         self.assertEqual("invariant_violation", ev.error_code)
@@ -372,7 +367,7 @@ class ErrorClassificationTest(unittest.TestCase):
                 raise MemoryProviderError("embedding timeout")
         system = self._build(extractor=BadExtractor())
         resp = system.write(make_request("err-prov"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = self.repo.get_event(resp.event_id)
         self.assertEqual(MemoryEventStatus.RETRY_WAIT, ev.status)
         self.assertEqual("provider_error", ev.error_code)
@@ -385,7 +380,7 @@ class ErrorClassificationTest(unittest.TestCase):
                 raise MemoryStorageError("connection reset")
         system = self._build(extractor=BadExtractor())
         resp = system.write(make_request("err-stor"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = self.repo.get_event(resp.event_id)
         self.assertEqual(MemoryEventStatus.RETRY_WAIT, ev.status)
         self.assertEqual("storage_error", ev.error_code)
@@ -396,7 +391,7 @@ class ErrorClassificationTest(unittest.TestCase):
                 raise MemoryConcurrencyError("unstable write")
         system = self._build(extractor=BadExtractor())
         resp = system.write(make_request("err-conc"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = self.repo.get_event(resp.event_id)
         self.assertEqual(MemoryEventStatus.RETRY_WAIT, ev.status)
         self.assertEqual("concurrency_error", ev.error_code)
@@ -407,7 +402,7 @@ class ErrorClassificationTest(unittest.TestCase):
                 raise RuntimeError("something weird")
         system = self._build(extractor=BadExtractor())
         resp = system.write(make_request("err-unk"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = self.repo.get_event(resp.event_id)
         self.assertEqual(MemoryEventStatus.RETRY_WAIT, ev.status)
         self.assertEqual("unknown_error", ev.error_code)
@@ -415,7 +410,7 @@ class ErrorClassificationTest(unittest.TestCase):
     def test_processed_clears_error(self):
         system = self._build()
         resp = system.write(make_request("err-clr"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = self.repo.get_event(resp.event_id)
         self.assertEqual(MemoryEventStatus.PROCESSED, ev.status)
         self.assertIsNone(ev.error)
@@ -426,9 +421,9 @@ class ErrorClassificationTest(unittest.TestCase):
             def extract(self, ev):
                 raise MemoryProviderError("timeout")
         system = self._build(extractor=BadExtractor())
-        system._worker.max_attempts = 1
+        system.runtime._worker.max_attempts = 1
         resp = system.write(make_request("err-exh"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = self.repo.get_event(resp.event_id)
         self.assertEqual(MemoryEventStatus.DEAD_LETTER, ev.status)
         self.assertEqual("provider_error", ev.error_code,
@@ -446,10 +441,9 @@ class ErrorClassificationTest(unittest.TestCase):
             embedding_service=_InMemoryEmbeddingService(),
             extractor=llm_extractor, text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
         resp = system.write(make_request("err-llm"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = repo.get_event(resp.event_id)
         self.assertEqual(MemoryEventStatus.RETRY_WAIT, ev.status)
         self.assertEqual("provider_error", ev.error_code)
@@ -466,10 +460,9 @@ class ErrorClassificationTest(unittest.TestCase):
             embedding_service=_InMemoryEmbeddingService(),
             extractor=StructuredMemoryExtractor(), text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
         resp = system.write(make_request("err-storage"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = repo.get_event(resp.event_id)
         self.assertEqual(MemoryEventStatus.RETRY_WAIT, ev.status)
         self.assertEqual("storage_error", ev.error_code)
@@ -486,10 +479,9 @@ class ErrorClassificationTest(unittest.TestCase):
             embedding_service=_InMemoryEmbeddingService(),
             extractor=StructuredMemoryExtractor(), text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
         resp = system.write(make_request("err-fah"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = repo.get_event(resp.event_id)
         self.assertEqual(MemoryEventStatus.DEAD_LETTER, ev.status)
         self.assertEqual("invariant_violation", ev.error_code,
@@ -506,10 +498,9 @@ class ErrorClassificationTest(unittest.TestCase):
             embedding_service=_InMemoryEmbeddingService(),
             extractor=StructuredMemoryExtractor(), text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
         resp = system.write(make_request("err-cc"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = repo.get_event(resp.event_id)
         self.assertIn(ev.status, [MemoryEventStatus.RETRY_WAIT, MemoryEventStatus.DEAD_LETTER])
         self.assertEqual("concurrency_error", ev.error_code)
@@ -526,7 +517,6 @@ class PreDedupTest(unittest.TestCase):
             extractor=extractor or StructuredMemoryExtractor(),
             text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
 
     def test_same_event_duplicate_candidates_filtered(self):
@@ -538,7 +528,7 @@ class PreDedupTest(unittest.TestCase):
                 return [base[0], dup, base[0]]
         system = self._build(extractor=DupExtractor())
         resp = system.write(make_request("pd-1"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         self.assertEqual("processed", self.repo.get_event(resp.event_id).status)
         self.assertEqual(1, len(self.repo.items))
 
@@ -554,10 +544,10 @@ class PreDedupTest(unittest.TestCase):
 
         system.write(make_request("pd-2", content="工程师",
                                   entity_id="张三", type_id="person", attribute="职业"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         system.write(make_request("pd-3", content="工程师",
                                   entity_id="张三", type_id="person", attribute="职业"))
-        system._worker.process_once()
+        system.runtime._worker.process_once()
 
         self.assertGreaterEqual(obs_calls[0], 1,
                                 "second event must reach observation update")

@@ -51,19 +51,6 @@ class MemoryClient:
         response = self._service.submit(internal)
         return from_submit_response(response)
 
-    # ── deprecated backward-compat aliases ──
-
-    def retrieve(self, request):
-        import warnings
-        warnings.warn("retrieve() is internal; use read()", DeprecationWarning, stacklevel=2)
-        return self._service.retrieve(request)
-
-    def submit(self, request):
-        import warnings
-        warnings.warn("submit() is internal; use write()", DeprecationWarning, stacklevel=2)
-        return self._service.submit(request)
-
-
 class MemoryRuntime:
     """Lifecycle controller — start, stop, health. NOT part of the Agent API."""
 
@@ -88,6 +75,10 @@ class MemoryRuntime:
     def health(self):
         return self._worker.health()
 
+    @property
+    def connection_factory(self):
+        return getattr(self._worker.repository, "connection_factory", None)
+
 
 @dataclass(frozen=True)
 class MemorySystem:
@@ -95,26 +86,11 @@ class MemorySystem:
     client: MemoryClient
     runtime: MemoryRuntime
 
-    # ── proxy to client (backward-compat) ──
-    @property
-    def _worker(self):
-        return self.runtime._worker
-
-    @property
-    def _service(self):
-        return self.client._service
-
     def read(self, request):
         return self.client.read(request)
 
     def write(self, request):
         return self.client.write(request)
-
-    def retrieve(self, request):
-        return self.client.retrieve(request)
-
-    def submit(self, request):
-        return self.client.submit(request)
 
 
 Memory = MemoryClient  # convenience alias
@@ -124,7 +100,6 @@ def build_memory_system(
     repository=None, embedding_service=None, extractor=None, compressor=None,
     duplicate_judge=None, authorization_provider: MemoryAuthorizationProvider = None,
     event_sink: MemoryEventSink = None, config=None, text_model=None,
-    async_mode=False,
 ):
     """Build Memory. Returns MemorySystem(client, runtime).
 

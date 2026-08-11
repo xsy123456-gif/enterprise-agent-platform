@@ -1,4 +1,5 @@
-from app.memory.api.models import MemoryPrincipal, MemoryRetrieveRequest
+from app.memory.api.models import MemoryPrincipal
+from app.memory.api.public_models import MemoryReadRequest
 from app.memory.models.scope import MemoryScope
 
 
@@ -19,7 +20,7 @@ class RuntimeMemoryAdapter:
             tenant_id=tenant_id, user_id=state.user_id,
             agent_id=state.agent_name,
         )
-        request = MemoryRetrieveRequest(
+        request = MemoryReadRequest(
             principal=principal,
             scope=MemoryScope(
                 tenant_id=tenant_id, user_id=state.user_id,
@@ -29,6 +30,6 @@ class RuntimeMemoryAdapter:
             query=state.task, types=list(getattr(definition, "memory_read", []) or []),
             trace_id=state.trace_id,
         )
-        context = self.memory_system.retrieve(request)
+        context = self.memory_system.read(request)
         state.retrieved_memory_context = context
         return context

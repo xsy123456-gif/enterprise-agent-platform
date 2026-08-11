@@ -22,10 +22,8 @@ class PlanValidator:
     ALLOWED_PLAN_FIELDS = {"goal", "steps"}
     ALLOWED_STEP_FIELDS = {"step_id", "capability", "dependencies"}
 
-    def __init__(self, catalog=None, registry=None):
-        # ``registry`` is retained as a compatibility alias for v0.4 callers;
-        # new orchestration paths must provide the CapabilityCatalog.
-        self.catalog = catalog or registry
+    def __init__(self, catalog):
+        self.catalog = catalog
         if self.catalog is None:
             raise ValueError("PlanValidator requires a CapabilityCatalog")
 
@@ -94,10 +92,7 @@ class PlanValidator:
             raise PlanValidationError("dependencies must be a list of step IDs")
 
         try:
-            if hasattr(self.catalog, "get_capability"):
-                self.catalog.get_capability(capability.strip())
-            else:
-                self.catalog.get(capability.strip())
+            self.catalog.get(capability.strip())
         except KeyError as error:
             raise PlanValidationError(
                 f"Unknown capability: {capability.strip()}"

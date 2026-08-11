@@ -54,7 +54,7 @@ class AgentContextBuilder:
                         "importance": reference.importance,
                         "created_at": reference.created_at.isoformat(),
                     }
-                    for reference in getattr(long_term_memory, "references", [])
+                    for reference in getattr(long_term_memory, "records", [])
                 ],
             },
             "available_tools": getattr(state, "available_tools", []),

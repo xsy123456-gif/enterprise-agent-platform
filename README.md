@@ -20,12 +20,12 @@ To verify the real provider connection explicitly:
 
 ```bash
 EMBEDDING_INTEGRATION_TEST=true \
-python -m unittest tests.test_memory_embedding.OllamaEmbeddingIntegrationTest -v
+python -m unittest tests.memory.test_embedding.OllamaEmbeddingIntegrationTest -v
 ```
 
 Run the database integration suite against a dedicated database:
 
 ```bash
 MEMORY_TEST_DATABASE_URL=postgresql://user:password@localhost:5433/agentdb \
-python -m unittest tests.test_memory_postgres -v
+python -m unittest tests.memory.test_postgres -v
 ```

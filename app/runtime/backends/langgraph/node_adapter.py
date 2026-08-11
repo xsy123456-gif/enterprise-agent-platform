@@ -1,9 +1,7 @@
 import json
-import uuid
 
 from app.runtime.action import AgentAction
-from app.runtime.tool_validation import ToolRequestValidator
-from app.runtime.backends.langgraph.nodes import ToolNode
+from app.runtime.backends.langgraph.nodes.tool import ToolNode
 
 
 def _parse_agent_action(response):
@@ -67,87 +65,6 @@ class AgentNodeAdapter:
                 "input": action.input,
             },
         }
-
-
-class _GovernedToolState:
-    def __init__(self, graph_state, definition):
-        metadata = graph_state.get("metadata") or {}
-        self.user_id = metadata.get("user_id")
-        self.role = metadata.get("role")
-        if not self.user_id or not self.role:
-            raise ValueError("Tool execution requires metadata.user_id and metadata.role")
-        self.agent_name = graph_state["agent_id"]
-        self.capability = metadata.get("capability")
-        self.agent_definition = definition
-        self.messages = list(graph_state.get("messages") or [])
-        self.tool_results = list(graph_state.get("tool_results") or [])
-        self.last_tool_call_id = None
-
-    def add_tool_call(self, tool_name, input):
-        tool_call_id = f"call_{uuid.uuid4()}"
-        self.last_tool_call_id = tool_call_id
-        self.messages.append({
-            "role": "assistant",
-            "tool_calls": [{
-                "id": tool_call_id,
-                "type": "function",
-                "function": {"name": tool_name, "arguments": str(input)},
-            }],
-        })
-        return tool_call_id
-
-    def add_tool_result(self, tool_call_id, result):
-        self.tool_results.append(result)
-        self.messages.append({
-            "role": "tool", "tool_call_id": tool_call_id, "content": str(result),
-        })
-
-
-class ToolNodeAdapter:
-    """Mandatory governance path; never delegates to LangGraph ToolNode."""
-
-    def __init__(self, tool_runner, agent_registry, node_definition):
-        if tool_runner is None or agent_registry is None:
-            raise ValueError("ToolNodeAdapter requires ToolRunner and Agent Registry")
-        self.tool_runner = tool_runner
-        self.agent_registry = agent_registry
-        self.validator = ToolRequestValidator(tool_runner, agent_registry)
-        self.node_definition = node_definition
-
-    def __call__(self, state):
-        action_data = state.get("_action") or {}
-        tool_name = action_data.get("tool")
-        bound_tool = (self.node_definition.get("bindings") or {}).get("tool_name")
-        if tool_name != bound_tool:
-            raise ValueError(
-                f"Tool route does not match node binding: {tool_name} != {bound_tool}"
-            )
-        action = AgentAction.tool_action(tool_name, action_data.get("input"))
-        record = self.agent_registry.get(state["agent_id"], state["agent_version"])
-        definition = record.definition or getattr(record.instance, "definition", None)
-        governed_state = _GovernedToolState(state, definition)
-        self.validator.validate(action, governed_state)
-        self.tool_runner.run(action, governed_state)
-        return {
-            "messages": governed_state.messages,
-            "tool_results": governed_state.tool_results,
-            "status": "running",
-            "_action": None,
-        }
-
-
-class _MemoryState:
-    def __init__(self, graph_state):
-        metadata = graph_state.get("metadata") or {}
-        self.tenant_id = graph_state["tenant_id"]
-        self.user_id = metadata.get("user_id")
-        if not self.user_id:
-            raise ValueError("Memory execution requires metadata.user_id")
-        self.subject_id = metadata.get("subject_id") or self.user_id
-        self.agent_name = graph_state["agent_id"]
-        self.department_id = metadata.get("department_id")
-        self.task = metadata.get("task") or ""
-        self.trace_id = graph_state["trace_id"]
 
 
 class MemoryNodeAdapter:

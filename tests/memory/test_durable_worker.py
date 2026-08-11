@@ -9,7 +9,7 @@ from app.memory.pipeline.write.extractor import MemoryExtractor, StructuredMemor
 from app.memory.models.event import MemoryEventStatus
 from app.memory.models.scope import MemoryScope
 from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
-from app.memory.test_repository import TestEmbeddingService, TestMemoryRepository
+from tests.memory.repository import TestEmbeddingService, TestMemoryRepository
 
 
 def request(key="source-1"):
@@ -36,33 +36,33 @@ class DurableWorkerTest(unittest.TestCase):
             repository=repository, embedding_service=TestEmbeddingService(),
             extractor=extractor or StructuredMemoryExtractor(), text_model=TextModel(),
             authorization_provider=authorization or AllowAllMemoryAuthorizationProvider(),
-            event_sink=sink, async_mode=False,
+            event_sink=sink,
         )
 
     def test_duplicate_submit_returns_one_durable_event(self):
         repository = TestMemoryRepository()
         system = self.build(repository)
-        first = system.submit(request())
-        second = system.submit(request())
+        first = system.write(request())
+        second = system.write(request())
         self.assertEqual(first.event_id, second.event_id)
         self.assertEqual(1, len(repository.events))
 
     def test_restart_recovery_claims_durable_received_event(self):
         repository = TestMemoryRepository()
         first = self.build(repository)
-        response = first.submit(request())
+        response = first.write(request())
         second = self.build(repository)
-        second._worker.process_once()
+        second.runtime._worker.process_once()
         self.assertEqual(MemoryEventStatus.PROCESSED, repository.get_event(response.event_id).status)
 
     def test_expired_processing_lease_is_reclaimed(self):
         repository = TestMemoryRepository()
         system = self.build(repository)
-        response = system.submit(request())
+        response = system.write(request())
         event = repository.get_event(response.event_id)
         event.status = MemoryEventStatus.PROCESSING
         event.lease_until = datetime.now(timezone.utc) - timedelta(seconds=1)
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         self.assertEqual(MemoryEventStatus.PROCESSED, event.status)
         self.assertEqual(1, event.attempt_count)
 
@@ -77,12 +77,12 @@ class DurableWorkerTest(unittest.TestCase):
 
         repository = TestMemoryRepository()
         system = self.build(repository, extractor=FlakyExtractor())
-        response = system.submit(request())
-        system._worker.process_once()
+        response = system.write(request())
+        system.runtime._worker.process_once()
         event = repository.get_event(response.event_id)
         self.assertEqual(MemoryEventStatus.RETRY_WAIT, event.status)
         event.next_attempt_at = datetime.now(timezone.utc) - timedelta(seconds=1)
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         self.assertEqual(MemoryEventStatus.PROCESSED, event.status)
 
     def test_write_authorization_denial_is_rejected(self):
@@ -92,8 +92,8 @@ class DurableWorkerTest(unittest.TestCase):
 
         repository = TestMemoryRepository()
         system = self.build(repository, authorization=DenyWrite())
-        response = system.submit(request())
-        system._worker.process_once()
+        response = system.write(request())
+        system.runtime._worker.process_once()
         self.assertEqual(MemoryEventStatus.REJECTED, repository.get_event(response.event_id).status)
 
     def test_max_attempts_moves_event_to_dead_letter(self):
@@ -103,9 +103,9 @@ class DurableWorkerTest(unittest.TestCase):
 
         repository = TestMemoryRepository()
         system = self.build(repository, extractor=AlwaysFails())
-        system._worker.max_attempts = 1
-        response = system.submit(request())
-        system._worker.process_once()
+        system.runtime._worker.max_attempts = 1
+        response = system.write(request())
+        system.runtime._worker.process_once()
         self.assertEqual(MemoryEventStatus.DEAD_LETTER, repository.get_event(response.event_id).status)
 
     def test_outbox_failure_does_not_change_processed_source_event(self):
@@ -115,8 +115,8 @@ class DurableWorkerTest(unittest.TestCase):
 
         repository = TestMemoryRepository()
         system = self.build(repository, sink=FailingSink())
-        response = system.submit(request())
-        system._worker.process_once()
+        response = system.write(request())
+        system.runtime._worker.process_once()
         self.assertEqual(MemoryEventStatus.PROCESSED, repository.get_event(response.event_id).status)
         self.assertGreaterEqual(len(repository.outbox), 1)
         self.assertTrue(all(
@@ -126,10 +126,10 @@ class DurableWorkerTest(unittest.TestCase):
     def test_worker_lifecycle_can_start_and_stop_cleanly(self):
         repository = TestMemoryRepository()
         system = self.build(repository)
-        system._worker.start()
-        self.assertTrue(system._worker.health()["running"])
-        self.assertTrue(system._worker.stop(timeout=2))
-        self.assertFalse(system._worker.health()["running"])
+        system.runtime._worker.start()
+        self.assertTrue(system.runtime._worker.health()["running"])
+        self.assertTrue(system.runtime._worker.stop(timeout=2))
+        self.assertFalse(system.runtime._worker.health()["running"])
 
     def test_multi_candidate_failure_rolls_back_memory_items(self):
         class FailingRepository(TestMemoryRepository):
@@ -153,8 +153,8 @@ class DurableWorkerTest(unittest.TestCase):
 
         repository = FailingRepository()
         system = self.build(repository, extractor=TwoCandidates())
-        response = system.submit(request())
-        system._worker.process_once()
+        response = system.write(request())
+        system.runtime._worker.process_once()
         self.assertEqual(MemoryEventStatus.RETRY_WAIT, repository.get_event(response.event_id).status)
         self.assertEqual({}, repository.items)
 

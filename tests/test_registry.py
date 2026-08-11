@@ -7,13 +7,13 @@ from app.main import build_runtime
 from app.sources.base import AgentSource
 from app.agents.manifest import ManifestAgent
 from app.sources.builtin import BuiltinAgentSource
-from app.registry.models import Agent, AgentStatus, Capability, Policy, ToolBinding
+from app.registry.models import Agent, AgentStatus, Policy, ToolBinding
 from app.registry.service import AgentRegistry
 from app.registry.storage import InMemoryAgentRepository
 from app.runtime.action import AgentAction
 from app.runtime.context import AgentContext
 from app.runtime.engine import RuntimeEngine
-from app.memory.test_repository import TestEmbeddingService, TestMemoryRepository
+from tests.memory.repository import TestEmbeddingService, TestMemoryRepository
 
 
 class StubAgent:
@@ -93,8 +93,7 @@ class AgentRegistryTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "not active"):
             self.registry.get_agent("sales_agent", "1.0")
 
-    def test_capability_policy_and_tool_binding_are_managed(self):
-        capability = Capability("customer_analysis", "Analyze customers")
+    def test_policy_and_tool_binding_are_managed(self):
         policy = Policy(
             policy_id="sales_policy",
             permission_rules=["crm.customer.read"],
@@ -102,17 +101,15 @@ class AgentRegistryTest(unittest.TestCase):
             audit_level="full",
         )
         binding = ToolBinding(
-            capability_id=capability.capability_id,
+            capability_id="customer_analysis",
             tool_name="crm_query",
             required_permission="crm.customer.read",
             risk_level="low",
         )
 
-        self.registry.register_capability(capability)
         self.registry.register_policy(policy)
         self.registry.bind_tool(binding)
 
-        self.assertIs(capability, self.registry.get_capability("customer_analysis"))
         self.assertIs(policy, self.registry.get_policy("sales_policy"))
         self.assertEqual(
             [binding],

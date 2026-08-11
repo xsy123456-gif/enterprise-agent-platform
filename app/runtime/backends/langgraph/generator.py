@@ -3,7 +3,7 @@ import uuid
 
 from langgraph.graph import END, START, StateGraph
 
-from app.runtime.backends.langgraph.state_adapter import LangGraphState
+from app.runtime.backends.langgraph.state import GraphState
 from app.runtime.contracts import RuntimeEvent, RuntimeEventType
 
 
@@ -16,7 +16,7 @@ class LangGraphGraphGenerator:
     def generate(self, runtime_definition):
         if runtime_definition.get("schema_version") != "langgraph.backend/v1":
             raise ValueError("Unsupported LangGraph backend artifact schema")
-        builder = StateGraph(LangGraphState)
+        builder = StateGraph(GraphState)
         node_ids = {
             node["id"]: self._backend_node_id(position, node["id"])
             for position, node in enumerate(runtime_definition["nodes"])

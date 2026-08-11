@@ -27,7 +27,7 @@ from app.memory.models.scope import MemoryScope
 from app.memory.pipeline.write.extractor import StructuredMemoryExtractor
 from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
 from app.memory.storage.postgres import create_postgres_repository
-from app.memory.test_repository import TestEmbeddingService
+from tests.memory.repository import TestEmbeddingService
 
 
 @unittest.skipUnless(
@@ -203,7 +203,6 @@ class MemoryIntegrationTest(unittest.TestCase):
             embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
             text_model=type("L", (), {"chat": lambda s, m, **kw: "compressed"})(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
         scope = self.scope()
         identity = MemoryIdentity("customer", f"{self.suffix}-rb", "name")
@@ -224,7 +223,7 @@ class MemoryIntegrationTest(unittest.TestCase):
             ]},
         )
         response = system.write(request)
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = self.repository.get_event(response.event_id)
         self.assertEqual(MemoryEventStatus.RETRY_WAIT, ev.status)
         items = self.repository.list_versions(scope, identity)
@@ -239,7 +238,6 @@ class MemoryIntegrationTest(unittest.TestCase):
             embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
             text_model=type("L", (), {"chat": lambda s, m, **kw: "compressed"})(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
         scope = self.scope()
         request = MemorySubmitRequest(
@@ -255,7 +253,7 @@ class MemoryIntegrationTest(unittest.TestCase):
             }]},
         )
         response = system.write(request)
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = self.repository.get_event(response.event_id)
         self.assertEqual(MemoryEventStatus.PROCESSED, ev.status)
 

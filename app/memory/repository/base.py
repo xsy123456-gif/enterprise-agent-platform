@@ -9,10 +9,6 @@ class MemoryRepository(ABC):
     def get_event(self, event_id): pass
 
     @abstractmethod
-    def update_event(self, event):  # deprecated — use commit_event_result
-        pass
-
-    @abstractmethod
     def claim_events(self, worker_id, limit, lease_seconds): pass
 
     @abstractmethod
@@ -35,10 +31,6 @@ class MemoryRepository(ABC):
 
     @abstractmethod
     def dead_letter_outbox(self, outbox_id, error, worker_id, lock_token): pass
-
-    @abstractmethod
-    def finalize_event(self, event, domain_events):  # deprecated — use commit_event_result
-        pass
 
     @abstractmethod
     def create_item(self, item, relations=None): pass

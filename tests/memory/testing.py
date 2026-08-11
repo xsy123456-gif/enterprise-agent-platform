@@ -18,7 +18,7 @@ class SpyCounters:
 
 def build_test_memory():
     """Return a MemorySystem wired with in-memory doubles."""
-    from app.memory.memory_test import _InMemoryEmbeddingService, _InMemoryRepository, StubLLM
+    from tests.memory.test_support import _InMemoryEmbeddingService, _InMemoryRepository, StubLLM
     from app.memory.factory import build_memory_system
     from app.memory.pipeline.write.extractor import StructuredMemoryExtractor
     from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
@@ -40,7 +40,7 @@ def build_test_memory_with_spies():
     boundary tests can verify side-effect isolation without importing
     internal modules directly.
     """
-    from app.memory.memory_test import _InMemoryEmbeddingService, _InMemoryRepository, StubLLM
+    from tests.memory.test_support import _InMemoryEmbeddingService, _InMemoryRepository, StubLLM
     from app.memory.factory import build_memory_system
     from app.memory.pipeline.write.extractor import StructuredMemoryExtractor
     from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider

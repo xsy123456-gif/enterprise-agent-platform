@@ -8,7 +8,6 @@ from app.orchestration.state import ExecutionState, InMemoryExecutionStateStore
 from app.orchestration.scheduler import ParallelTaskScheduler
 from app.orchestration.aggregation import ResultAggregator
 from app.runtime.context import AgentContext
-from app.runtime.dispatcher import LegacyRuntimeFacade
 
 
 class AgentResolutionError(Exception):
@@ -27,10 +26,9 @@ class Supervisor:
         aggregator=None,
     ):
         self.registry = registry
-        self.runtime = (
-            runtime if hasattr(runtime, "execute_step")
-            else LegacyRuntimeFacade(runtime)
-        )
+        if not callable(getattr(runtime, "execute_step", None)):
+            raise TypeError("Supervisor runtime must provide execute_step()")
+        self.runtime = runtime
         self.state_store = state_store or InMemoryExecutionStateStore()
         self.scheduler = scheduler or ParallelTaskScheduler()
         self.aggregator = aggregator or ResultAggregator()

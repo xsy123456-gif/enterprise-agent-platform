@@ -20,7 +20,7 @@ class MemoryBoundaryArchitectureTest(unittest.TestCase):
             "app.runtime", "app.agents", "app.orchestration", "app.manifest",
             "app.events", "app.audit", "app.main",
         )
-        root = Path(__file__).parent
+        root = Path(__file__).parents[2] / "app" / "memory"
         imports = []
         for path in root.rglob("*.py"):
             if path.name.startswith("test_"):
@@ -61,8 +61,10 @@ class MemoryBoundaryArchitectureTest(unittest.TestCase):
         self.assertFalse(hasattr(MemorySystem, "client"))
         self.assertFalse(hasattr(MemorySystem, "control"))
         self.assertFalse(hasattr(MemorySystem, "drain"))
-        self.assertTrue(callable(MemorySystem.retrieve))
-        self.assertTrue(callable(MemorySystem.submit))
+        self.assertTrue(callable(MemorySystem.read))
+        self.assertTrue(callable(MemorySystem.write))
+        self.assertFalse(hasattr(MemorySystem, "retrieve"))
+        self.assertFalse(hasattr(MemorySystem, "submit"))
 
     def test_authorization_is_not_implicitly_allow_all(self):
         provider = DenyByDefaultMemoryAuthorizationProvider()

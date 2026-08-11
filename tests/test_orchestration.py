@@ -23,7 +23,7 @@ from app.runtime.loop import AgentExecutionLoop
 from app.runtime.context import AgentContext
 from app.runtime.context_builder import AgentContextBuilder
 from app.agents.definition import AgentDefinition
-from app.memory.test_repository import TestEmbeddingService, TestMemoryRepository
+from tests.memory.repository import TestEmbeddingService, TestMemoryRepository
 
 
 class StubAgent:
@@ -36,10 +36,10 @@ class RecordingRuntime:
         self.calls = []
         self.fail = fail
 
-    def run(self, state, agent_id=None, version=None):
+    def execute_step(self, context, agent_id=None, version=None):
         self.calls.append(
             {
-                "state": state,
+                "state": context,
                 "agent_id": agent_id,
                 "version": version,
             }
@@ -58,7 +58,7 @@ class ConcurrentRecordingRuntime:
         self.lock = threading.Lock()
         self.ready = threading.Event()
 
-    def run(self, state, agent_id=None, version=None):
+    def execute_step(self, state, agent_id=None, version=None):
         with self.lock:
             self.active += 1
             self.max_active = max(self.max_active, self.active)
@@ -219,7 +219,9 @@ class OrchestrationTest(unittest.TestCase):
         self.assertNotIn("crm_query", prompt)
 
     def test_validator_rejects_unknown_capability_and_agent_fields(self):
-        validator = PlanValidator(self.registry)
+        validator = PlanValidator(
+            CapabilityCatalog(InMemoryCapabilityRepository())
+        )
         task = Task(user_query="unknown")
 
         with self.assertRaises(PlanValidationError):

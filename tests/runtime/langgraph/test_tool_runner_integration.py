@@ -3,9 +3,6 @@ import unittest
 from app.audit.logger import AuditLogger
 from app.events.bus import EventBus
 from app.permission.rbac import PermissionManager
-from app.runtime.backends.langgraph import build_graph
-from app.runtime.backends.langgraph.nodes import ReasoningNode, ToolNode
-from app.runtime.contracts import AgentRuntimeState
 from app.runtime.tool_runner import ToolRunner
 from app.tools.models import ToolCallRequest, ToolResult
 from app.tools.registry import ToolRegistry
@@ -70,31 +67,3 @@ class ToolRunnerIntegrationTest(unittest.TestCase):
             ["tool.called", "tool.completed"],
             [event.event_type for event in events.events],
         )
-
-    def test_graph_tool_result_round_trip(self):
-        runner, _, _ = self.runner()
-
-        class Reasoner:
-            def __init__(self):
-                self.responses = iter([
-                    {"action": "tool_call", "tool": "crm_query",
-                     "arguments": {"customer": "customer_A"}},
-                    {"action": "finish", "output": "customer found"},
-                ])
-
-            def __call__(self, messages):
-                return next(self.responses)
-
-        graph = build_graph(
-            reasoning_node=ReasoningNode(Reasoner()),
-            tool_node=ToolNode(runner),
-        )
-        result = graph.invoke({
-            "trace_id": "trace", "execution_id": "execution",
-            "agent_id": "agent", "agent_version": "1", "input": "find",
-            "messages": [], "tool_results": [], "intermediate_results": {},
-            "metadata": {"user_id": "user", "role": "sales"},
-        })
-
-        self.assertEqual("customer found", result["response"])
-        self.assertEqual("found", result["tool_results"][0]["output"]["status"])

@@ -71,12 +71,6 @@ class TestMemoryRepository(MemoryRepository):
     def get_event(self, event_id):
         return self.events.get(event_id)
 
-    def update_event(self, event):
-        self.events[event.event_id] = event
-        st = self._es(event.event_id)
-        st["status"] = event.status
-        return event
-
     def claim_events(self, worker_id, limit, lease_seconds):
         import uuid
         now = datetime.now(timezone.utc)
@@ -145,12 +139,10 @@ class TestMemoryRepository(MemoryRepository):
         event.locked_by = None
         event.lease_until = None
         event.lock_token = None
-        return self.finalize_event(event, domain_events)
-
-    def finalize_event(self, event, domain_events):
-        self.update_event(event)
+        self.events[event.event_id] = event
         for domain_event in domain_events:
             self.add_outbox(domain_event)
+        return event
 
     def add_outbox(self, event):
         self.outbox.setdefault(event.event_id, {

@@ -78,12 +78,6 @@ class _InMemoryRepository:
     def get_event(self, event_id):
         return self.events.get(event_id)
 
-    def update_event(self, event):
-        self.events[event.event_id] = event
-        st = self._es(event.event_id)
-        st["status"] = event.status
-        return event
-
     def claim_events(self, worker_id, limit, lease_seconds):
         import uuid
         now = datetime.now(timezone.utc)
@@ -152,12 +146,10 @@ class _InMemoryRepository:
         event.locked_by = None
         event.lease_until = None
         event.lock_token = None
-        return self.finalize_event(event, domain_events)
-
-    def finalize_event(self, event, domain_events):
-        self.update_event(event)
+        self.events[event.event_id] = event
         for de in domain_events:
             self.add_outbox(de)
+        return event
 
     def add_outbox(self, event):
         self.outbox.setdefault(event.event_id, {
@@ -360,7 +352,6 @@ class MemorySealTest(unittest.TestCase):
             extractor=StructuredMemoryExtractor(),
             text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
         principal = MemoryPrincipal("user-1", "tenant-1", "user-1", "agent-1")
         scope = MemoryScope("tenant-1", "user-1", "agent-1")
@@ -380,7 +371,7 @@ class MemorySealTest(unittest.TestCase):
         response = system.write(write_request)
         self.assertTrue(response.accepted)
 
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         event = repo.get_event(response.event_id)
         self.assertEqual("processed", event.status)
         self.assertIsNotNone(event.processed_at)
@@ -404,7 +395,7 @@ class MemorySealTest(unittest.TestCase):
             principal=principal, scope=scope,
             query="张三的职业是什么？", types=["person"],
         )
-        context = system.read(read_request) if hasattr(system, "read") else system.retrieve(read_request)
+        context = system.read(read_request) if hasattr(system, "read") else system.read(read_request)
         self.assertIsNotNone(context.summary)
         records = getattr(context, "records", getattr(context, "references", []))
         self.assertGreaterEqual(len(records), 1,
@@ -424,7 +415,6 @@ class MemorySealTest(unittest.TestCase):
             repository=repo, embedding_service=_InMemoryEmbeddingService(),
             extractor=StructuredMemoryExtractor(), text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
         principal = MemoryPrincipal("u", "t", "u", "a")
         scope = MemoryScope("t", "u", "a")
@@ -441,7 +431,7 @@ class MemorySealTest(unittest.TestCase):
             }]},
         )
         resp = system.write(request)
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = repo.get_event(resp.event_id)
         self.assertEqual("processed", ev.status)
         self.assertIsNone(ev.error)
@@ -459,7 +449,6 @@ class MemorySealTest(unittest.TestCase):
             repository=repo, embedding_service=_InMemoryEmbeddingService(),
             extractor=FailingExtractor(), text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
         principal = MemoryPrincipal("u", "t", "u", "a")
         scope = MemoryScope("t", "u", "a")
@@ -476,7 +465,7 @@ class MemorySealTest(unittest.TestCase):
             }]},
         )
         resp = system.write(request)
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = repo.get_event(resp.event_id)
         self.assertEqual("retry_wait", ev.status)
         self.assertIsNotNone(ev.next_attempt_at)
@@ -493,7 +482,7 @@ class MemorySealTest(unittest.TestCase):
         system = build_memory_system(
             repository=repo, embedding_service=_InMemoryEmbeddingService(),
             extractor=StructuredMemoryExtractor(), text_model=StubLLM(),
-            authorization_provider=DenyWriteAuth(), async_mode=False,
+            authorization_provider=DenyWriteAuth(),
         )
         principal = MemoryPrincipal("u", "t", "u", "a")
         scope = MemoryScope("t", "u", "a")
@@ -510,7 +499,7 @@ class MemorySealTest(unittest.TestCase):
             }]},
         )
         resp = system.write(request)
-        system._worker.process_once()
+        system.runtime._worker.process_once()
         ev = repo.get_event(resp.event_id)
         self.assertEqual("rejected", ev.status)
         self.assertEqual("authorization_denied", ev.error_code)
@@ -523,7 +512,6 @@ class MemorySealTest(unittest.TestCase):
             repository=repo, embedding_service=_InMemoryEmbeddingService(),
             extractor=StructuredMemoryExtractor(), text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
         principal = MemoryPrincipal("u", "t", "u", "a")
         scope = MemoryScope("t", "u", "a")

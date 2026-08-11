@@ -209,7 +209,6 @@ def build_runtime(
         authorization_provider=AllowAllMemoryAuthorizationProvider(),
         event_sink=PlatformMemoryEventSink(event_bus),
         text_model=llm,
-        async_mode=False,
     )
     memory_adapter = RuntimeMemoryAdapter(memory_system)
     memory_bridge = PlatformMemoryEventBridge(memory_system)

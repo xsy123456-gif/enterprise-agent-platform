@@ -19,18 +19,6 @@ class AgentRepository(ABC):
         pass
 
     @abstractmethod
-    def add_capability(self, capability):
-        pass
-
-    @abstractmethod
-    def get_capability(self, capability_id):
-        pass
-
-    @abstractmethod
-    def list_capabilities(self):
-        pass
-
-    @abstractmethod
     def add_policy(self, policy):
         pass
 

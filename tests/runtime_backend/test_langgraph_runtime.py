@@ -59,6 +59,10 @@ def finish_graph():
 
 
 class LangGraphRuntimeTest(unittest.TestCase):
+    def test_runtime_requires_artifact_driven_node_adapters(self):
+        with self.assertRaisesRegex(ValueError, "Backend node adapters"):
+            LangGraphRuntimeAdapter()
+
     def test_execute_artifact_and_result_conversion(self):
         registry = _Registry(_Record(_Agent([
             {"action": "finish", "output": "done"},

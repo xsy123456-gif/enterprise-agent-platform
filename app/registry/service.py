@@ -105,19 +105,6 @@ class AgentRegistry:
         self.repository.update_agent(agent)
         return agent
 
-    def register_capability(self, capability):
-        self.repository.add_capability(capability)
-        return capability
-
-    def get_capability(self, capability_id):
-        capability = self.repository.get_capability(capability_id)
-        if capability is None:
-            raise KeyError(f"Capability not found: {capability_id}")
-        return capability
-
-    def list_capabilities(self):
-        return self.repository.list_capabilities()
-
     def register_policy(self, policy):
         self.repository.add_policy(policy)
         return policy

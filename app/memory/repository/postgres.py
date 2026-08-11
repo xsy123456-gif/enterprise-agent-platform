@@ -474,22 +474,6 @@ class PostgresMemoryRepository(MemoryRepository):
             "SELECT * FROM memory_events WHERE event_id=%s", (event_id,), "event"
         )
 
-    def update_event(self, event):
-        import warnings
-        warnings.warn(
-            "update_event is deprecated without fencing; use commit_event_result",
-            DeprecationWarning, stacklevel=2,
-        )
-        self._execute(
-            "UPDATE memory_events SET status=%s,error=%s,error_code=%s,attempt_count=%s,"
-            "next_attempt_at=%s,locked_by=%s,lease_until=%s,lock_token=%s,"
-            "processed_at=%s WHERE event_id=%s",
-            (event.status, event.error, event.error_code, event.attempt_count,
-             event.next_attempt_at, event.locked_by, event.lease_until,
-             getattr(event, "lock_token", None), event.processed_at, event.event_id),
-        )
-        return event
-
     def claim_events(self, worker_id, limit, lease_seconds):
         lock_token = str(uuid.uuid4())
         sql = """WITH candidates AS (
@@ -554,41 +538,6 @@ class PostgresMemoryRepository(MemoryRepository):
                     raise ConcurrentMemoryWrite(
                         "Event result rejected: ownership lost "
                         "(lock_token mismatch, wrong worker, or lease expired)"
-                    )
-                for domain_event in domain_events:
-                    cursor.execute(
-                        "INSERT INTO memory_outbox (id,event_type,aggregate_id,payload) "
-                        "VALUES (%s,%s,%s,%s::jsonb) ON CONFLICT (id) DO NOTHING",
-                        (domain_event.event_id, domain_event.event_type,
-                         domain_event.aggregate_id, json.dumps(domain_event.payload)),
-                    )
-
-    def finalize_event(self, event, domain_events):
-        import warnings
-        warnings.warn(
-            "finalize_event is deprecated; use commit_event_result for fenced inbox writes",
-            DeprecationWarning, stacklevel=2,
-        )
-        lock_token = getattr(event, "lock_token", None)
-        with self.connection_factory() as connection:
-            with connection.cursor() as cursor:
-                if lock_token:
-                    cursor.execute(
-                        "UPDATE memory_events SET status=%s,processed_at=%s,locked_by=NULL,"
-                        "lease_until=NULL,lock_token=NULL,error=NULL,error_code=NULL "
-                        "WHERE event_id=%s AND status='processing' AND lock_token=%s",
-                        (event.status, event.processed_at, event.event_id, lock_token),
-                    )
-                    if cursor.rowcount != 1:
-                        raise ConcurrentMemoryWrite(
-                            "Event finalization rejected: lock_token mismatch"
-                        )
-                else:
-                    cursor.execute(
-                        "UPDATE memory_events SET status=%s,processed_at=%s,locked_by=NULL,"
-                        "lease_until=NULL,lock_token=NULL,error=NULL,error_code=NULL "
-                        "WHERE event_id=%s",
-                        (event.status, event.processed_at, event.event_id),
                     )
                 for domain_event in domain_events:
                     cursor.execute(

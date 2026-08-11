@@ -22,7 +22,7 @@ from app.memory.models.scope import MemoryScope
 from app.memory.pipeline.write.extractor import StructuredMemoryExtractor
 from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
 from app.memory.storage.postgres import create_postgres_repository
-from app.memory.test_repository import TestEmbeddingService
+from tests.memory.repository import TestEmbeddingService
 
 
 class StubLLM:
@@ -224,7 +224,6 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
             embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
             text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
         request = MemorySubmitRequest(
             principal=MemoryPrincipal(self.user_id, self.tenant_id, self.user_id, "sales_agent"),
@@ -232,8 +231,8 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
             source=MemorySource("postgres-test", self.suffix),
             observations=[MemoryObservation("generic", {"value": 1})],
         )
-        first = system.submit(request)
-        second = system.submit(request)
+        first = system.write(request)
+        second = system.write(request)
         self.assertEqual(first.event_id, second.event_id)
         claimed = self.repository.claim_events("worker-test", 10, 30)
         self.assertEqual([first.event_id], [event.event_id for event in claimed])
@@ -246,7 +245,6 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
             embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
             text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
         request = MemorySubmitRequest(
             principal=MemoryPrincipal(self.user_id, self.tenant_id, self.user_id, "sales_agent"),
@@ -254,7 +252,7 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
             source=MemorySource("lease-test", self.suffix),
             observations=[MemoryObservation("generic", {"value": 1})],
         )
-        response = system.submit(request)
+        response = system.write(request)
         first = self.repository.claim_events("worker-a", 1, 1)[0]
         with self.repository.connection_factory(register_types=False) as connection:
             with connection.cursor() as cursor:
@@ -266,7 +264,7 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         self.assertEqual(response.event_id, reclaimed[0].event_id)
         self.assertEqual("worker-b", reclaimed[0].locked_by)
 
-    def test_event_create_query_and_status_update(self):
+    def test_event_create_query_and_fenced_status_commit(self):
         event = MemoryEvent(
             trace_id=self.suffix, task_id=self.suffix, agent_id="sales_agent",
             user_id=self.user_id, tenant_id=self.tenant_id,
@@ -278,9 +276,12 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         self.repository.save_event(event)
         stored = self.repository.get_event(event.event_id)
         self.assertEqual(MemoryEventStatus.RECEIVED, stored.status)
-        stored.status = MemoryEventStatus.PROCESSED
-        stored.processed_at = datetime.now(timezone.utc)
-        self.repository.update_event(stored)
+        claimed = self.repository.claim_events("status-test-worker", 1, 30)[0]
+        claimed.status = MemoryEventStatus.PROCESSED
+        claimed.processed_at = datetime.now(timezone.utc)
+        self.repository.commit_event_result(
+            claimed, "status-test-worker", (), claimed.lock_token
+        )
         self.assertEqual(
             MemoryEventStatus.PROCESSED,
             self.repository.get_event(event.event_id).status,
@@ -406,13 +407,13 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
         self.repository.create_item(item)
         system = build_memory_system(
             repository=self.repository,
-            extractor=StructuredMemoryExtractor(), async_mode=False,
+            extractor=StructuredMemoryExtractor(),
             embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
             text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
         )
         with redirect_stdout(StringIO()):
-            context = system.retrieve(self.retrieve_request("industry"))
+            context = system.read(self.retrieve_request("industry"))
         self.assertEqual([item.id], [reference.memory_id for reference in context.references])
         self.assertEqual(1, self.repository.get_item(item.id).access_count)
         self.assertIsNotNone(self.repository.get_item(item.id).last_accessed_at)
@@ -426,7 +427,7 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
     def test_write_pipeline_persists_embedding_metadata(self):
         system = build_memory_system(
             repository=self.repository,
-            extractor=StructuredMemoryExtractor(), async_mode=False,
+            extractor=StructuredMemoryExtractor(),
             embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
             text_model=StubLLM(),
             authorization_provider=AllowAllMemoryAuthorizationProvider(),
@@ -446,8 +447,8 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
             }]},
         )
         with redirect_stdout(StringIO()):
-            system.submit(request)
-            system._worker.process_once()
+            system.write(request)
+            system.runtime._worker.process_once()
         stored = self.repository.find_active_head(
             self.scope(), self.identity(attribute="semantic")
         )
@@ -511,16 +512,14 @@ class PostgresMemoryIntegrationTest(unittest.TestCase):
             repository=self.repository, extractor=StructuredMemoryExtractor(),
             embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
             text_model=StubLLM(), authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
-        response = first.submit(request)
+        response = first.write(request)
         second = build_memory_system(
             repository=self.repository, extractor=StructuredMemoryExtractor(),
             embedding_service=TestEmbeddingService(dimension=self.DIMENSION),
             text_model=StubLLM(), authorization_provider=AllowAllMemoryAuthorizationProvider(),
-            async_mode=False,
         )
-        second._worker.process_once()
+        second.runtime._worker.process_once()
         self.assertEqual(MemoryEventStatus.PROCESSED, self.repository.get_event(response.event_id).status)
 
     # ── Group-1 integration: CHECK constraints, lease fencing, outbox fencing ──

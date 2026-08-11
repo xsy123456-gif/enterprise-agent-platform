@@ -1,4 +1,7 @@
-class FinancialTool:
+from app.tools.base import BaseTool
+
+
+class FinancialTool(BaseTool):
     name = "financial_query"
     description = "查询客户财务信息"
     input_schema = {

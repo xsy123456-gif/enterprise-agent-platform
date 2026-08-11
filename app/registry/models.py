@@ -35,12 +35,6 @@ class AgentStatus:
 
 
 @dataclass
-class Capability:
-    capability_id: str
-    description: str = ""
-
-
-@dataclass
 class ToolBinding:
     capability_id: str
     tool_name: str

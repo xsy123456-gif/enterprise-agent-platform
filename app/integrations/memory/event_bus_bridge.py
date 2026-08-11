@@ -1,6 +1,7 @@
 from app.memory.api.models import (
-    MemoryObservation, MemoryPrincipal, MemorySource, MemorySubmitRequest,
+    MemoryObservation, MemoryPrincipal, MemorySource,
 )
+from app.memory.api.public_models import MemoryWriteRequest
 from app.memory.models.scope import MemoryScope
 
 
@@ -38,11 +39,11 @@ class PlatformMemoryEventBridge:
             or payload.get("trace_id")
             or "runtime-event"
         )
-        request = MemorySubmitRequest(
+        request = MemoryWriteRequest(
             principal=principal, scope=scope,
             idempotency_key=source_id,
             source=MemorySource("agent_response", source_id),
             observations=observations, trace_id=payload.get("trace_id", ""),
             metadata=dict(payload.get("metadata") or {}),
         )
-        return self.memory_system.submit(request)
+        return self.memory_system.write(request)

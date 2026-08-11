@@ -263,9 +263,8 @@ class RuntimeDispatcher:
         execution_manager = None
         memory_adapter = getattr(runtime_engine, "memory_adapter", None)
         memory_system = getattr(memory_adapter, "memory_system", None)
-        service = getattr(memory_system, "_service", None)
-        repository = getattr(service, "repository", None)
-        connection_factory = getattr(repository, "connection_factory", None)
+        memory_runtime = getattr(memory_system, "runtime", None)
+        connection_factory = getattr(memory_runtime, "connection_factory", None)
         if connection_factory is not None:
             execution_store = PostgresExecutionStore(connection_factory)
             checkpoint_store = PersistentCheckpointStore(connection_factory)
@@ -312,13 +311,3 @@ class RuntimeDispatcher:
                 if definition.policy_ref else ()
             ),
         )
-
-
-class LegacyRuntimeFacade:
-    """Test/integration boundary for pre-GraphRuntime callers only."""
-
-    def __init__(self, runtime):
-        self._runtime = runtime
-
-    def execute_step(self, context, agent_id, version):
-        return self._runtime.run(context, agent_id=agent_id, version=version)

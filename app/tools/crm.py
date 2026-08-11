@@ -1,4 +1,7 @@
-class CRMTool:
+from app.tools.base import BaseTool
+
+
+class CRMTool(BaseTool):
     name = "crm_query"
     description = "查询客户信息"
     input_schema = {
