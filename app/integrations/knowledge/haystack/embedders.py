@@ -1,8 +1,7 @@
-"""Haystack embedders used by the adapter.
+"""Haystack dense embedders used by the adapter.
 
-Dense embedding is platform-owned (Ollama ``bge-m3``).  Sparse embedding uses
-the official ``fastembed-haystack`` BM25 components — a real lexical sparse
-embedder, not a placeholder.
+Dense embedding is platform-owned (Ollama ``bge-m3``).  Sparse embedding is a
+jieba-tokenized lexical sparse embedder in ``jieba_sparse.py``.
 """
 
 import dataclasses
