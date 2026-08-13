@@ -5,6 +5,7 @@ Haystack or Qdrant.  Backend exceptions are mapped to platform errors here.
 """
 
 from app.knowledge.errors import KnowledgeUnavailableError
+from app.knowledge.ports.reranker import KnowledgeRerankerPort
 from app.knowledge.ports.retriever import KnowledgeQuery, KnowledgeRetrieval, KnowledgeRetrieverPort
 from app.knowledge.reliability import CircuitBreaker
 
@@ -22,6 +23,7 @@ class HaystackRetrieverAdapter(KnowledgeRetrieverPort):
         store_manager: QdrantStoreManager | None = None,
         pipeline_factory: QueryPipelineFactory | None = None,
         circuit_breaker: CircuitBreaker | None = None,
+        reranker: KnowledgeRerankerPort | None = None,
     ):
         self.config = config or HaystackKnowledgeConfig()
         self.store_manager = store_manager or QdrantStoreManager(self.config)
@@ -29,6 +31,7 @@ class HaystackRetrieverAdapter(KnowledgeRetrieverPort):
             self.config, self.store_manager
         )
         self.circuit_breaker = circuit_breaker or CircuitBreaker()
+        self.reranker = reranker
 
     async def retrieve(self, query: KnowledgeQuery) -> KnowledgeRetrieval:
         if not self.circuit_breaker.allow():
@@ -59,6 +62,8 @@ class HaystackRetrieverAdapter(KnowledgeRetrieverPort):
         self.circuit_breaker.record_success()
         documents = result.get("retriever", {}).get("documents", [])
         hits = [document_to_hit(document) for document in documents]
+        if self.reranker is not None and hits:
+            hits = await self.reranker.rerank(query.query, hits)
         return KnowledgeRetrieval(hits=hits, timing={})
 
     def health(self):

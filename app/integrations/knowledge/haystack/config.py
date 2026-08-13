@@ -21,6 +21,7 @@ class HaystackKnowledgeConfig:
     ollama_model: str = "bge-m3"
     ollama_timeout: float = 30.0
     sparse_vocab_size: int = 1_000_000
+    reranker_enabled: bool = False
     security_levels: tuple[str, ...] = SECURITY_LEVELS
 
     @classmethod
@@ -53,6 +54,9 @@ class HaystackKnowledgeConfig:
             ollama_model=env.get("KNOWLEDGE_DENSE_MODEL", "bge-m3"),
             ollama_timeout=_float("KNOWLEDGE_EMBEDDING_TIMEOUT", 30.0),
             sparse_vocab_size=_int("KNOWLEDGE_SPARSE_VOCAB_SIZE", 1_000_000),
+            reranker_enabled=env.get(
+                "KNOWLEDGE_RERANKER_ENABLED", "false"
+            ).lower() in {"true", "1", "yes"},
         )
 
     def allowed_levels(self, clearance: str) -> list[str]:

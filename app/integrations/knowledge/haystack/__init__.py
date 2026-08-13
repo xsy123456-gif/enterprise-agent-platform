@@ -10,6 +10,7 @@ from .config import HaystackKnowledgeConfig
 from .document_store import QdrantStoreManager
 from .indexing_pipeline import IndexingPipeline
 from .ingestion_adapter import HaystackIngestionAdapter
+from .llm_reranker import LLMReranker
 from .query_pipeline import QueryPipelineFactory
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     "QdrantStoreManager",
     "IndexingPipeline",
     "QueryPipelineFactory",
+    "LLMReranker",
 ]

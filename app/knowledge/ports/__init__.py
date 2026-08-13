@@ -1,5 +1,6 @@
 from app.knowledge.ports.ingestion import KnowledgeIngestionPort
 from app.knowledge.ports.repository import KnowledgeRepositoryPort
+from app.knowledge.ports.reranker import KnowledgeRerankerPort
 from app.knowledge.ports.retriever import (
     KnowledgeQuery,
     KnowledgeRetrieval,
@@ -14,4 +15,5 @@ __all__ = [
     "RetrievalHit",
     "KnowledgeIngestionPort",
     "KnowledgeRepositoryPort",
+    "KnowledgeRerankerPort",
 ]
