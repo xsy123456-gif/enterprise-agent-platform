@@ -21,6 +21,8 @@ class ApplicationContainer:
     audit: Any = None
     planner: Any = None
     supervisor: Any = None
+    infrastructure: dict = field(default_factory=dict)
+    checkpoint: Any = None
     environment: str = "development"
     metadata: dict = field(default_factory=dict)
     _started: bool = field(default=False, init=False, repr=False)
@@ -62,3 +64,17 @@ class ApplicationContainer:
     @property
     def started(self):
         return self._started
+
+    def health(self):
+        checks = {}
+        for name, provider in self.infrastructure.items():
+            checker = getattr(provider, "health", None)
+            checks[name] = checker() if callable(checker) else {
+                "name": name, "healthy": False, "error": "health unavailable"
+            }
+        runtime_health = getattr(self.runtime, "health", None)
+        checks["runtime"] = (
+            runtime_health() if callable(runtime_health)
+            else {"name": "runtime", "healthy": self.runtime is not None}
+        )
+        return checks

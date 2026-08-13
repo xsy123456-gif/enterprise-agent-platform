@@ -1,5 +1,6 @@
 from .adapter import CheckpointerAdapter, create_postgres_checkpointer
 from .base import LangGraphCheckpointer, create_in_memory_checkpointer
+from .postgres import PostgresCheckpointAdapter
 
 
 class LangGraphCheckpointAdapter:
@@ -23,5 +24,5 @@ class LangGraphCheckpointAdapter:
 
 __all__ = [
     "LangGraphCheckpointer", "LangGraphCheckpointAdapter", "CheckpointerAdapter", "create_in_memory_checkpointer",
-    "create_postgres_checkpointer",
+    "create_postgres_checkpointer", "PostgresCheckpointAdapter",
 ]

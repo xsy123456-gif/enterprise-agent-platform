@@ -21,6 +21,11 @@ class CheckpointerAdapter(LangGraphCheckpointer):
     def list(self, config, *, filter=None, before=None, limit=None):
         return self.saver.list(config, filter=filter, before=before, limit=limit)
 
+    def __getattr__(self, name):
+        # Preserve the complete LangGraph BaseCheckpointSaver surface while
+        # keeping the platform-facing dependency at this adapter boundary.
+        return getattr(self.saver, name)
+
 
 def create_postgres_checkpointer(connection_string):
     """Create the optional postgres saver without importing it in core code."""
@@ -30,5 +35,4 @@ def create_postgres_checkpointer(connection_string):
         raise RuntimeError(
             "Postgres LangGraph checkpointer requires langgraph-checkpoint-postgres"
         ) from error
-    saver = PostgresSaver.from_conn_string(connection_string)
-    return CheckpointerAdapter(saver)
+    return CheckpointerAdapter(PostgresSaver.from_conn_string(connection_string))
