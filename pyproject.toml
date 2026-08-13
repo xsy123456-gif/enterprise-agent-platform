@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "enterprise-agent-platform"
-version = "0.8.8"
+version = "0.8.10"
 description = "Enterprise Agent Runtime Foundation"
 requires-python = ">=3.11"
 dependencies = [
