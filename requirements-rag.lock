@@ -12,6 +12,14 @@ fastembed==0.8.0
 onnxruntime==1.28.0
 jieba==0.42.1
 
+# Document ingestion / evaluation fixtures (PDF + DOCX)
+reportlab==5.0.0
+pypdf==6.15.0
+python-docx==1.2.0
+lxml==6.1.1
+defusedxml==0.7.1
+fonttools==4.63.0
+
 # Transitive dependencies (pinned for reproducibility)
 jinja2==3.1.6
 markupsafe==3.0.3
