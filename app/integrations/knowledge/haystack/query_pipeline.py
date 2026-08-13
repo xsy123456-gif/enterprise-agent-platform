@@ -4,7 +4,8 @@ Standard pipeline per the Knowledge design:
 
     Query -> Dense Embedding + Sparse Embedding -> QdrantHybridRetriever
 
-Sparse embedding uses the real fastembed BM25 embedder (not a placeholder).
+Sparse embedding uses the jieba-tokenized lexical embedder (FastEmbed BM25
+failed on Chinese in evaluation).
 """
 
 from haystack import Pipeline
