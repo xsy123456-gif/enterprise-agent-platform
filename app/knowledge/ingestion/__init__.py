@@ -5,7 +5,9 @@ from app.knowledge.ingestion.lifecycle import (
 from app.knowledge.ingestion.normalizer import SourceDocumentNormalizer
 from app.knowledge.ingestion.registry import (
     DocumentRecord,
+    DocumentRegistry,
     InMemoryDocumentRegistry,
+    PostgresDocumentRegistry,
 )
 from app.knowledge.ingestion.service import KnowledgeIngestionService
 from app.knowledge.ingestion.validator import SourceDocumentValidator
@@ -21,7 +23,9 @@ __all__ = [
     "SourceDocumentValidator",
     "KnowledgeIngestionService",
     "DocumentRecord",
+    "DocumentRegistry",
     "InMemoryDocumentRegistry",
+    "PostgresDocumentRegistry",
     "content_fingerprint",
     "stable_document_id",
 ]

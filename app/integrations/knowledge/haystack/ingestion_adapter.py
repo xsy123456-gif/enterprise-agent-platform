@@ -13,6 +13,7 @@ from app.knowledge.errors import (
 )
 from app.knowledge.ingestion.registry import (
     DocumentRecord,
+    DocumentRegistry,
     InMemoryDocumentRegistry,
 )
 from app.knowledge.ingestion.versioning import stable_document_id
@@ -36,12 +37,15 @@ class HaystackIngestionAdapter(KnowledgeIngestionPort):
         config: HaystackKnowledgeConfig | None = None,
         store_manager: QdrantStoreManager | None = None,
         indexing: IndexingPipeline | None = None,
-        registry: InMemoryDocumentRegistry | None = None,
+        registry: DocumentRegistry | None = None,
     ):
         self.config = config or HaystackKnowledgeConfig()
         self.store_manager = store_manager or QdrantStoreManager(self.config)
         self.indexing = indexing or IndexingPipeline(self.config, self.store_manager)
         self.registry = registry or InMemoryDocumentRegistry()
+        initialize = getattr(self.registry, "initialize_schema", None)
+        if callable(initialize):
+            initialize()
 
     async def ingest(self, document: SourceDocument) -> str:
         haystack_doc = self._to_haystack_document(document)
