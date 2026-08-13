@@ -7,8 +7,13 @@ adapter (the only place Haystack/Qdrant may appear) behind the
 
 from dataclasses import dataclass
 
+from app.knowledge.access.policy import KnowledgePolicy
 from app.knowledge.access.resolver import ScopeResolver
 from app.knowledge.api.service import KnowledgeService
+from app.knowledge.audit.evidence import (
+    InMemoryKnowledgeAuditSink,
+    KnowledgeAuditSink,
+)
 from app.knowledge.config import KnowledgeConfig
 from app.knowledge.ingestion.service import KnowledgeIngestionService
 from app.knowledge.ports.ingestion import KnowledgeIngestionPort
@@ -32,6 +37,8 @@ def build_knowledge(
     config: KnowledgeConfig | None = None,
     event_bus=None,
     resolver: ScopeResolver | None = None,
+    policy: KnowledgePolicy | None = None,
+    audit_sink: KnowledgeAuditSink | None = None,
 ) -> KnowledgeSystem:
     """Assemble the Knowledge subsystem.
 
@@ -44,6 +51,8 @@ def build_knowledge(
         retriever=retriever,
         config=config,
         resolver=resolver,
+        policy=policy,
+        audit_sink=audit_sink if audit_sink is not None else InMemoryKnowledgeAuditSink(),
         event_bus=event_bus,
     )
     ingestion_service = (

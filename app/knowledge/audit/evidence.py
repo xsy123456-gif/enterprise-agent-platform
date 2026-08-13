@@ -1,9 +1,10 @@
-"""Audit records for knowledge retrieval.
+"""Audit records and sinks for knowledge retrieval.
 
 Audit stores references (IDs, scope, hashes, decision) — never full chunk
 content.  Investigation follows chunk_id -> KnowledgeRepository.
 """
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -26,6 +27,8 @@ class KnowledgeRetrievalAuditRecord:
     document_ids: list[str] = field(default_factory=list)
     chunk_ids: list[str] = field(default_factory=list)
     result_count: int = 0
+    latency_ms: float = 0.0
+    status: str = "completed"
     timestamp: str = field(default_factory=utc_now)
 
     def to_dict(self):
@@ -42,5 +45,27 @@ class KnowledgeRetrievalAuditRecord:
             "chunk_ids": list(self.chunk_ids),
             "result_count": self.result_count,
             "decision": self.decision,
+            "latency_ms": self.latency_ms,
+            "status": self.status,
             "timestamp": self.timestamp,
         }
+
+
+class KnowledgeAuditSink(ABC):
+    @abstractmethod
+    def save(self, record: KnowledgeRetrievalAuditRecord) -> None:
+        raise NotImplementedError
+
+
+class InMemoryKnowledgeAuditSink(KnowledgeAuditSink):
+    def __init__(self):
+        self.records: list[KnowledgeRetrievalAuditRecord] = []
+
+    def save(self, record: KnowledgeRetrievalAuditRecord) -> None:
+        self.records.append(record)
+
+    def get(self, retrieval_id: str):
+        for record in self.records:
+            if record.retrieval_id == retrieval_id:
+                return record
+        return None

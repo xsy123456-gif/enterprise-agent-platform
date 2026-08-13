@@ -5,16 +5,30 @@ only entrypoint Agents may use.  Haystack/Qdrant are implementation details
 behind ``KnowledgeRetrieverPort`` and never appear in this package.
 """
 
+from app.knowledge.access import (
+    KnowledgePolicy,
+    KnowledgePolicyDecision,
+    KnowledgePolicyResult,
+)
 from app.knowledge.api.service import KnowledgeService
+from app.knowledge.audit.evidence import (
+    InMemoryKnowledgeAuditSink,
+    KnowledgeAuditSink,
+    KnowledgeRetrievalAuditRecord,
+)
 from app.knowledge.config import KnowledgeConfig
 from app.knowledge.errors import (
     KnowledgeAccessDeniedError,
     KnowledgeEmbeddingError,
     KnowledgeError,
+    KnowledgeIndexError,
+    KnowledgeIngestionError,
     KnowledgeInvalidRequestError,
     KnowledgeNotFoundError,
+    KnowledgeRetrievalError,
     KnowledgeTimeoutError,
     KnowledgeUnavailableError,
+    KnowledgeValidationError,
     KnowledgeVersionConflictError,
 )
 from app.knowledge.factory import KnowledgeSystem, build_knowledge
@@ -47,6 +61,12 @@ __all__ = [
     "KnowledgeRetrieval",
     "KnowledgeRetrieverPort",
     "RetrievalHit",
+    "KnowledgePolicy",
+    "KnowledgePolicyDecision",
+    "KnowledgePolicyResult",
+    "KnowledgeAuditSink",
+    "InMemoryKnowledgeAuditSink",
+    "KnowledgeRetrievalAuditRecord",
     "KnowledgeError",
     "KnowledgeInvalidRequestError",
     "KnowledgeAccessDeniedError",
@@ -55,4 +75,8 @@ __all__ = [
     "KnowledgeTimeoutError",
     "KnowledgeNotFoundError",
     "KnowledgeVersionConflictError",
+    "KnowledgeRetrievalError",
+    "KnowledgeIngestionError",
+    "KnowledgeValidationError",
+    "KnowledgeIndexError",
 ]
