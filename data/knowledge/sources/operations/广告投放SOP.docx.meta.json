@@ -1,0 +1,6 @@
+{
+  "tenant_id": "demo",
+  "security_level": "internal",
+  "knowledge_scope": "operations",
+  "region": "JP"
+}

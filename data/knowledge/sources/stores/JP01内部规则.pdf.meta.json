@@ -1,0 +1,7 @@
+{
+  "tenant_id": "demo",
+  "security_level": "internal",
+  "knowledge_scope": "stores",
+  "region": "JP",
+  "store_id": "JP01"
+}
