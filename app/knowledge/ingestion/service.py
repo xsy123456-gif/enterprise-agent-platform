@@ -35,24 +35,38 @@ class KnowledgeIngestionService:
     async def ingest(self, document: SourceDocument) -> str:
         self.validator.validate(document)
         normalized = self.normalizer.normalize(document)
-        self._publish("knowledge.ingestion.started", {
-            "document_id": stable_document_id(normalized.source_system, normalized.external_id),
-        })
-        document_id = await self.ingestion.ingest(normalized)
-        self._publish("knowledge.ingestion.completed", {"document_id": document_id})
-        return document_id
+        document_id = stable_document_id(normalized.source_system, normalized.external_id)
+        self._publish("knowledge.ingestion.started", {"document_id": document_id})
+        try:
+            result = await self.ingestion.ingest(normalized)
+        except Exception:
+            self._publish("knowledge.ingestion.failed", {"document_id": document_id})
+            raise
+        self._publish("knowledge.ingestion.completed", {"document_id": result})
+        return result
 
     async def update(self, document: SourceDocument) -> str:
         self.validator.validate(document)
         normalized = self.normalizer.normalize(document)
-        return await self.ingestion.update(normalized)
+        document_id = await self.ingestion.update(normalized)
+        self._publish("knowledge.document.updated", {"document_id": document_id})
+        return document_id
 
     async def delete(self, document_id: str, version: str | None = None) -> None:
         await self.ingestion.delete(document_id, version)
         self._publish("knowledge.document.deleted", {"document_id": document_id})
 
+    async def reindex(self, document_id: str) -> str:
+        result = await self.ingestion.reindex(document_id)
+        self._publish("knowledge.document.reindexed", {"document_id": result})
+        return result
+
     async def set_acl(self, document_id: str, access_policy: dict) -> None:
         await self.ingestion.set_acl(document_id, access_policy)
+        self._publish("knowledge.acl.updated", {
+            "document_id": document_id,
+            "tenant_id": (access_policy or {}).get("tenant_id"),
+        })
 
     @staticmethod
     def document_id(document: SourceDocument) -> str:

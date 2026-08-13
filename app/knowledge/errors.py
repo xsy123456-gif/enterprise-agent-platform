@@ -13,6 +13,10 @@ class KnowledgeInvalidRequestError(KnowledgeError):
     """A retrieve/ingest request failed validation."""
 
 
+class KnowledgeValidationError(KnowledgeError):
+    """A source document or ACL metadata failed validation."""
+
+
 class KnowledgeAccessDeniedError(KnowledgeError):
     """The effective scope resolved to an empty authorized set."""
 
@@ -23,6 +27,10 @@ class KnowledgeUnavailableError(KnowledgeError):
 
 class KnowledgeEmbeddingError(KnowledgeError):
     """The embedding provider failed."""
+
+
+class KnowledgeRetrievalError(KnowledgeError):
+    """A retrieval step failed."""
 
 
 class KnowledgeTimeoutError(KnowledgeError):
@@ -39,3 +47,7 @@ class KnowledgeVersionConflictError(KnowledgeError):
 
 class KnowledgeIngestionError(KnowledgeError):
     """A knowledge ingestion step failed."""
+
+
+class KnowledgeIndexError(KnowledgeError):
+    """An indexing/reindex operation failed."""

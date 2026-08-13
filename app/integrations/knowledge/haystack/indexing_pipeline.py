@@ -49,7 +49,7 @@ class IndexingPipeline:
             Document(
                 id=f"{document.id}:{index}",
                 content=chunk,
-                meta={**document.meta, "chunk_id": f"{document.id}:{index}"},
+                meta=dict(document.meta),
             )
             for index, chunk in enumerate(chunks)
         ]
