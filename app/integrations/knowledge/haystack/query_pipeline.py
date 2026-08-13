@@ -4,18 +4,20 @@ Standard pipeline per the Knowledge design:
 
     Query -> Dense Embedding + Sparse Embedding -> QdrantHybridRetriever
 
-The pipeline is built once and reused; filters, top_k and score_threshold are
-passed per-run.
+Sparse embedding uses the real fastembed BM25 embedder (not a placeholder).
 """
 
 from haystack import Pipeline
+from haystack_integrations.components.embedders.fastembed import (
+    FastembedSparseTextEmbedder,
+)
 from haystack_integrations.components.retrievers.qdrant import (
     QdrantHybridRetriever,
 )
 
 from .config import HaystackKnowledgeConfig
 from .document_store import QdrantStoreManager
-from .embedders import HashSparseTextEmbedder, OllamaTextEmbedder
+from .embedders import OllamaTextEmbedder
 
 
 class QueryPipelineFactory:
@@ -42,7 +44,9 @@ class QueryPipelineFactory:
         )
         pipeline.add_component(
             "sparse_embedder",
-            HashSparseTextEmbedder(vocab_size=self.config.sparse_vocab_size),
+            FastembedSparseTextEmbedder(
+                model=self.config.sparse_model, progress_bar=False
+            ),
         )
         pipeline.add_component(
             "retriever",

@@ -5,6 +5,11 @@
 # Direct dependencies
 haystack-ai==3.0.0
 qdrant-haystack==10.5.0
+fastembed-haystack==2.6.0
+
+# Sparse retrieval (real BM25, not a placeholder)
+fastembed==0.8.0
+onnxruntime==1.28.0
 
 # Transitive dependencies (pinned for reproducibility)
 jinja2==3.1.6
@@ -23,3 +28,14 @@ networkx==3.6.1
 posthog==7.39.0
 python-dateutil==2.9.0.post0
 six==1.17.0
+huggingface-hub==1.27.0
+tokenizers==0.23.1
+loguru==0.7.3
+mmh3==5.2.1
+pillow==12.3.0
+py-rust-stemmers==0.1.8
+flatbuffers==25.12.19
+fsspec==2026.7.0
+hf-xet==1.6.0
+filelock==3.32.2
+click==8.4.2
