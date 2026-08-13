@@ -122,7 +122,8 @@ class LocalFileSourceAdapter(KnowledgeSourcePort):
             )
         return documents
 
-    def _access_policy(self, document) -> dict:
+    @staticmethod
+    def _access_policy(document) -> dict:
         metadata = document.metadata or {}
         return {
             "security_level": metadata.get("security_level", "public"),

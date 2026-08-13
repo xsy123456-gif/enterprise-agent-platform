@@ -1,12 +1,17 @@
-"""EffectiveFilter -> Haystack/Qdrant filter mapping.
+"""EffectiveFilter -> Qdrant filter mapping.
 
 The mandatory ACL filter is produced here *before* retrieval.  Field names map
 onto Qdrant payload keys (Haystack stores document meta under ``meta.*``).
-ACL fields and business-scope fields are intentionally listed separately so
-authorization can never be confused with a consumer preference.
+
+Optional ACL dimensions (store / region / department) use ``IS NULL OR IN``
+semantics: a document without that dimension is treated as global (visible to
+everyone subject to the mandatory dimensions).  Mandatory dimensions (tenant,
+security level, knowledge scope) always match.
 """
 
 from typing import Any
+
+from qdrant_client import models
 
 from app.knowledge.access.filters import EffectiveFilter
 
@@ -14,46 +19,54 @@ from .config import HaystackKnowledgeConfig
 
 
 def _eq(field, value):
-    return {"field": field, "operator": "==", "value": value}
+    return models.FieldCondition(key=field, match=models.MatchValue(value=value))
 
 
 def _in(field, values):
-    return {"field": field, "operator": "in", "value": list(values)}
+    return models.FieldCondition(key=field, match=models.MatchAny(any=list(values)))
+
+
+def _null_or_in(field, values):
+    """IS NULL (global) OR IN (scoped)."""
+    if not values:
+        return None
+    return models.Filter(
+        should=[
+            models.FieldCondition(key=field, is_null=True),
+            _in(field, values),
+        ]
+    )
 
 
 def build_filter(
     effective_filter: EffectiveFilter,
     config: HaystackKnowledgeConfig,
-) -> dict[str, Any] | None:
+) -> models.Filter:
     """Build the mandatory retrieval filter (ACL + authorized scope)."""
 
-    conditions: list[dict[str, Any]] = []
+    must: list[Any] = []
 
-    # --- ACL (authorization) ---
-    conditions.append(_eq("meta.tenant_id", effective_filter.tenant_id))
-
+    # --- mandatory (authorization) ---
+    must.append(_eq("meta.tenant_id", effective_filter.tenant_id))
     allowed_levels = config.allowed_levels(effective_filter.security_level)
-    conditions.append(_in("meta.security_level", allowed_levels))
+    must.append(_in("meta.security_level", allowed_levels))
 
-    if effective_filter.stores:
-        conditions.append(_in("meta.store_id", effective_filter.stores))
-    if effective_filter.regions:
-        conditions.append(_in("meta.region", effective_filter.regions))
-    if effective_filter.departments:
-        conditions.append(_in("meta.department_id", effective_filter.departments))
+    # --- optional ACL dimensions (global OR scoped) ---
+    for field, values in (
+        ("meta.store_id", effective_filter.stores),
+        ("meta.region", effective_filter.regions),
+        ("meta.department_id", effective_filter.departments),
+    ):
+        condition = _null_or_in(field, values)
+        if condition is not None:
+            must.append(condition)
 
-    # --- authorized knowledge scope ---
+    # --- authorized knowledge scope (mandatory when set) ---
     if effective_filter.knowledge_types:
-        conditions.append(
-            _in("meta.knowledge_type", effective_filter.knowledge_types)
-        )
+        must.append(_in("meta.knowledge_type", effective_filter.knowledge_types))
 
     # --- requested business filters (non-authoritative, already intersected) ---
     for key, value in (effective_filter.extra or {}).items():
-        conditions.append(_eq(f"meta.{key}", value))
+        must.append(_eq(f"meta.{key}", value))
 
-    if not conditions:
-        return None
-    if len(conditions) == 1:
-        return conditions[0]
-    return {"operator": "AND", "conditions": conditions}
+    return models.Filter(must=must)

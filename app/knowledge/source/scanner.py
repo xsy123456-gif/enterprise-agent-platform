@@ -14,12 +14,12 @@ from app.knowledge.source.models import KnowledgeSourceDocument
 # Directory name -> document_type.  The directory layout is the source of
 # truth for document classification.
 DIR_TO_TYPE = {
-    "products": "product_knowledge",
+    "products": "product",
     "faq": "faq",
     "policies": "policy",
     "operations": "sop",
-    "stores": "internal_policy",
-    "management": "management_policy",
+    "stores": "store_rule",
+    "management": "management",
 }
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt"}

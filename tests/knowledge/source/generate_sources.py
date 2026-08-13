@@ -188,7 +188,7 @@ FILES = [
             "所有投放数据须留存至少六个月，便于后期追溯和审计。",
         ]),
     ], {"tenant_id": "demo", "security_level": "internal",
-        "knowledge_scope": "operations", "region": "JP"}),
+        "knowledge_scope": "sop", "region": "JP"}),
 
     ("stores", "JP01内部规则.pdf", "internal_policy", [
         ("店铺运营规范", [
@@ -231,7 +231,7 @@ FILES = [
             "临期商品提前一个月下架处理，避免影响店铺信誉。",
         ]),
     ], {"tenant_id": "demo", "security_level": "internal",
-        "knowledge_scope": "stores", "region": "JP", "store_id": "JP01"}),
+        "knowledge_scope": "store_rule", "region": "JP", "store_id": "JP01"}),
 
     ("management", "管理层经营制度.docx", "management_policy", [
         ("经营分析", [

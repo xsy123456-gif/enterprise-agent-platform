@@ -1,7 +1,7 @@
 {
   "tenant_id": "demo",
   "security_level": "internal",
-  "knowledge_scope": "stores",
+  "knowledge_scope": "store_rule",
   "region": "JP",
   "store_id": "JP01"
 }
