@@ -122,7 +122,8 @@ class RuntimeDispatcher:
 
     def __init__(self, selector, artifact_resolver, state_factory=None,
                  event_bus=None, event_store=None, event_mapper=None,
-                 execution_manager=None):
+                 execution_manager=None, agent_registry=None,
+                 runtime_engine=None):
         self.selector = selector
         self.artifact_resolver = artifact_resolver
         self.state_factory = state_factory or AgentRuntimeStateFactory()
@@ -130,6 +131,11 @@ class RuntimeDispatcher:
         self.event_store = event_store
         self.event_mapper = event_mapper or RuntimeEventMapper()
         self.execution_manager = execution_manager
+        self.agent_registry = agent_registry
+        self.runtime_engine = runtime_engine
+
+    def health(self):
+        return True
 
     def execute_step(self, context, agent_id, version):
         definition = context.agent_definition
@@ -286,6 +292,8 @@ class RuntimeDispatcher:
                 AgentContextBuilder(runtime_engine.memory_adapter)
             ),
             execution_manager=execution_manager,
+            agent_registry=agent_registry,
+            runtime_engine=runtime_engine,
         )
 
     @staticmethod
