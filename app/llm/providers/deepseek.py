@@ -2,7 +2,7 @@ from openai import OpenAI
 
 
 from app.llm.base import BaseLLM
-
+from app.llm.registry import registry
 
 
 class DeepSeekLLM(BaseLLM):
@@ -53,3 +53,13 @@ class DeepSeekLLM(BaseLLM):
 
 
         return response.choices[0].message.content
+
+
+def create_deepseek(**kwargs):
+    from app.llm.config import LLMConfig
+
+    api_key = kwargs.get("api_key") or LLMConfig.DEEPSEEK_API_KEY
+    return DeepSeekLLM(api_key=api_key)
+
+
+registry.register("deepseek", create_deepseek)

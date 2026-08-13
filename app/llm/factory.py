@@ -1,28 +1,13 @@
+"""LLM factory — selects a provider from the registry by configuration."""
+
 from app.llm.config import LLMConfig
+from app.llm.registry import registry
 
-from app.llm.providers.deepseek import DeepSeekLLM
-
-
-
-def create_llm():
+# Importing the providers package triggers provider self-registration.
+import app.llm.providers  # noqa: F401
 
 
-    provider = (
-        LLMConfig.DEFAULT_PROVIDER
-    )
-
-
-    if provider == "deepseek":
-
-
-        return DeepSeekLLM(
-
-            api_key=
-            LLMConfig.DEEPSEEK_API_KEY
-
-        )
-
-
-    raise ValueError(
-        f"Unsupported LLM provider:{provider}"
-    )
+def create_llm(provider=None, **kwargs):
+    """Create an LLM for the configured (or explicitly named) provider."""
+    name = provider or LLMConfig.DEFAULT_PROVIDER
+    return registry.create(name, **kwargs)
