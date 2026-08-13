@@ -20,7 +20,7 @@ class HaystackKnowledgeConfig:
     ollama_endpoint: str = "http://localhost:11434"
     ollama_model: str = "bge-m3"
     ollama_timeout: float = 30.0
-    sparse_model: str = "Qdrant/bm25"
+    sparse_vocab_size: int = 1_000_000
     security_levels: tuple[str, ...] = SECURITY_LEVELS
 
     @classmethod
@@ -52,7 +52,7 @@ class HaystackKnowledgeConfig:
             ),
             ollama_model=env.get("KNOWLEDGE_DENSE_MODEL", "bge-m3"),
             ollama_timeout=_float("KNOWLEDGE_EMBEDDING_TIMEOUT", 30.0),
-            sparse_model=env.get("KNOWLEDGE_SPARSE_MODEL", "Qdrant/bm25"),
+            sparse_vocab_size=_int("KNOWLEDGE_SPARSE_VOCAB_SIZE", 1_000_000),
         )
 
     def allowed_levels(self, clearance: str) -> list[str]:

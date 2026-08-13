@@ -7,9 +7,10 @@ haystack-ai==3.0.0
 qdrant-haystack==10.5.0
 fastembed-haystack==2.6.0
 
-# Sparse retrieval (real BM25, not a placeholder)
+# Sparse retrieval (jieba lexical for Chinese; FastEmbed BM25 kept as option)
 fastembed==0.8.0
 onnxruntime==1.28.0
+jieba==0.42.1
 
 # Transitive dependencies (pinned for reproducibility)
 jinja2==3.1.6

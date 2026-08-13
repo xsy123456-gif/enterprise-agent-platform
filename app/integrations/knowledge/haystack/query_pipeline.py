@@ -8,9 +8,6 @@ Sparse embedding uses the real fastembed BM25 embedder (not a placeholder).
 """
 
 from haystack import Pipeline
-from haystack_integrations.components.embedders.fastembed import (
-    FastembedSparseTextEmbedder,
-)
 from haystack_integrations.components.retrievers.qdrant import (
     QdrantHybridRetriever,
 )
@@ -18,6 +15,7 @@ from haystack_integrations.components.retrievers.qdrant import (
 from .config import HaystackKnowledgeConfig
 from .document_store import QdrantStoreManager
 from .embedders import OllamaTextEmbedder
+from .jieba_sparse import JiebaSparseTextEmbedder
 
 
 class QueryPipelineFactory:
@@ -44,9 +42,7 @@ class QueryPipelineFactory:
         )
         pipeline.add_component(
             "sparse_embedder",
-            FastembedSparseTextEmbedder(
-                model=self.config.sparse_model, progress_bar=False
-            ),
+            JiebaSparseTextEmbedder(vocab_size=self.config.sparse_vocab_size),
         )
         pipeline.add_component(
             "retriever",

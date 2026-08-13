@@ -7,14 +7,12 @@ platform-owned character-window splitter (Chinese-friendly).
 
 from haystack import Document
 from haystack.document_stores.types import DuplicatePolicy
-from haystack_integrations.components.embedders.fastembed import (
-    FastembedSparseDocumentEmbedder,
-)
 
 from .chunking import split_text
 from .config import HaystackKnowledgeConfig
 from .document_store import QdrantStoreManager
 from .embedders import OllamaDocumentEmbedder
+from .jieba_sparse import JiebaSparseDocumentEmbedder
 
 
 class IndexingPipeline:
@@ -37,8 +35,8 @@ class IndexingPipeline:
     @property
     def sparse_embedder(self):
         if self._sparse is None:
-            self._sparse = FastembedSparseDocumentEmbedder(
-                model=self.config.sparse_model, progress_bar=False
+            self._sparse = JiebaSparseDocumentEmbedder(
+                vocab_size=self.config.sparse_vocab_size
             )
         return self._sparse
 
