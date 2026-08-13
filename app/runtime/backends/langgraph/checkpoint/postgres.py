@@ -1,5 +1,7 @@
 """Optional native LangGraph PostgreSQL checkpointer boundary."""
 
+from contextlib import ExitStack
+
 from .adapter import CheckpointerAdapter
 
 
@@ -8,6 +10,7 @@ class PostgresCheckpointAdapter(CheckpointerAdapter):
 
     def __init__(self, connection_string, saver=None):
         self.connection_string = connection_string
+        self._stack = None
         if saver is None:
             try:
                 from langgraph.checkpoint.postgres import PostgresSaver
@@ -15,11 +18,15 @@ class PostgresCheckpointAdapter(CheckpointerAdapter):
                 raise RuntimeError(
                     "Install langgraph-checkpoint-postgres for production durability"
                 ) from error
-            saver = PostgresSaver.from_conn_string(connection_string)
-            # Depending on package version, from_conn_string returns either a
-            # saver or a context manager.  Resolve the latter at the boundary.
-            if hasattr(saver, "__enter__") and not hasattr(saver, "put"):
-                saver = saver.__enter__()
+            resource = PostgresSaver.from_conn_string(connection_string)
+            # Keep the context manager alive for the adapter lifetime; entering
+            # and immediately dropping it closes the underlying PostgreSQL
+            # connection before the first checkpoint operation.
+            if hasattr(resource, "__enter__") and not hasattr(resource, "put"):
+                self._stack = ExitStack()
+                saver = self._stack.enter_context(resource)
+            else:
+                saver = resource
         super().__init__(saver)
 
     def initialize_schema(self):
@@ -32,3 +39,6 @@ class PostgresCheckpointAdapter(CheckpointerAdapter):
         close = getattr(self.saver, "close", None)
         if callable(close):
             close()
+        if self._stack is not None:
+            self._stack.close()
+            self._stack = None
