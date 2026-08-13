@@ -230,6 +230,10 @@ def build_runtime(
 
     )
 
+    # Expose the composed Memory subsystem to the composition root without
+    # making Runtime own its lifecycle.
+    runtime.memory_system = memory_system
+
     runtime.memory_audit = memory_audit
     runtime.lifecycle_service = lifecycle_service
     runtime.governance_policy_engine = governance_engine
@@ -282,7 +286,7 @@ def build_orchestration(
     )
 
     runtime_dispatcher = RuntimeDispatcher.from_runtime_engine(
-        runtime, runtime.agent_registry
+        runtime, runtime.agent_registry, event_bus=event_bus
     )
     runtime_dispatcher.event_bus = event_bus
     runtime_dispatcher.event_store = InMemoryEventStore()
@@ -303,6 +307,31 @@ def build_orchestration(
         supervisor,
         audit,
         event_bus,
+    )
+
+
+def build_application(environment=None, **kwargs):
+    """Create an explicit environment-aware application container.
+
+    Existing ``build_orchestration`` remains the compatibility entrypoint; the
+    container is the preferred lifecycle boundary for new callers.
+    """
+    from app.composition import create_application
+
+    planner, supervisor, audit, event_bus = build_orchestration(**kwargs)
+    runtime = supervisor.runtime
+    return create_application(
+        environment=environment,
+        runtime=runtime,
+        memory=getattr(runtime, "memory_system", None),
+        governance=getattr(runtime, "governance_policy_engine", None),
+        trace=getattr(runtime, "trace_consumer", None),
+        execution=getattr(runtime, "execution_manager", None),
+        registry=runtime.agent_registry,
+        event_bus=event_bus,
+        audit=audit,
+        planner=planner,
+        supervisor=supervisor,
     )
 
 

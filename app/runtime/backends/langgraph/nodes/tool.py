@@ -43,9 +43,10 @@ class _ToolExecutionState:
 class ToolNode:
     """Delegate governed execution to ToolRunner; never access a Tool directly."""
 
-    def __init__(self, tool_runner=None, validator=None):
+    def __init__(self, tool_runner=None, validator=None, governance_gate=None):
         self.tool_runner = tool_runner
         self.validator = validator
+        self.governance_gate = governance_gate
 
     def __call__(self, state):
         if self.tool_runner is None:
@@ -70,6 +71,10 @@ class ToolNode:
             capability=state.get("metadata", {}).get("capability"),
             allowed_tools=tuple(state.get("metadata", {}).get("allowed_tools", ())),
         )
+        if self.governance_gate is not None:
+            allowed, decision = self.governance_gate.check(request)
+            if not allowed:
+                raise PermissionError(decision.reason or decision.decision.value)
         execution_state = _ToolExecutionState(state)
         result = self.tool_runner.execute(request)
         if not result.success:

@@ -99,10 +99,11 @@ class LangGraphNodeAdapterRegistry:
     """Composition boundary between backend nodes and platform service ports."""
 
     def __init__(self, agent_registry=None, tool_runner=None, memory_adapter=None,
-                 custom_adapters=None):
+                 governance_gate=None, custom_adapters=None):
         self.agent_registry = agent_registry
         self.tool_runner = tool_runner
         self.memory_adapter = memory_adapter
+        self.governance_gate = governance_gate
         self.custom_adapters = dict(custom_adapters or {})
 
     def build(self, node_definition):
@@ -112,7 +113,10 @@ class LangGraphNodeAdapterRegistry:
         if name == "AgentNodeAdapter":
             return AgentNodeAdapter(self.agent_registry, node_definition)
         if name == "ToolNodeAdapter":
-            return ToolNode(tool_runner=self.tool_runner)
+            return ToolNode(
+                tool_runner=self.tool_runner,
+                governance_gate=self.governance_gate,
+            )
         if name == "MemoryNodeAdapter":
             return MemoryNodeAdapter(
                 self.memory_adapter, self.agent_registry, node_definition

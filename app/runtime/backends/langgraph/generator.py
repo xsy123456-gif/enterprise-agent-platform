@@ -13,7 +13,7 @@ class LangGraphGraphGenerator:
     def __init__(self, node_adapters):
         self.node_adapters = node_adapters
 
-    def generate(self, runtime_definition):
+    def generate(self, runtime_definition, checkpointer=None):
         if runtime_definition.get("schema_version") != "langgraph.backend/v1":
             raise ValueError("Unsupported LangGraph backend artifact schema")
         builder = StateGraph(GraphState)
@@ -53,7 +53,10 @@ class LangGraphGraphGenerator:
                 self._router(edges),
                 path_map,
             )
-        return builder.compile()
+        # The checkpointer is supplied by the runtime composition root.  This
+        # keeps persistence out of node adapters and makes thread identity a
+        # backend concern rather than an Agent concern.
+        return builder.compile(checkpointer=checkpointer)
 
     @staticmethod
     def _endpoint(node_id, definition, node_ids, source):

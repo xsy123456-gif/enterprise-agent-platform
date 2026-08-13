@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "enterprise-agent-platform"
+version = "0.8.8"
+description = "Enterprise Agent Runtime Foundation"
+requires-python = ">=3.11"
+dependencies = [
+  "PyYAML>=6.0,<7.0",
+  "pgvector>=0.3,<1.0",
+  "psycopg[binary]>=3.2,<4.0",
+  "langgraph>=1.2,<2.0",
+  "langchain-core>=1.5,<2.0",
+  "openai>=1.0,<2.0",
+  "python-dotenv>=1.0,<2.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0,<9.0", "pytest-asyncio>=0.23,<1.0"]
+production = ["langgraph-checkpoint-postgres>=3.0,<4.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

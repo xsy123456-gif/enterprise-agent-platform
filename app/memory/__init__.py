@@ -36,6 +36,7 @@ from app.memory.factory import (
     MemorySystem,
     build_memory_system,
 )
+from app.memory.runtime import MemoryRuntimeManager, MemoryRuntimeStatus
 from app.memory.models.scope import MemoryScope
 from app.memory.ports.authorization import (
     AllowAllMemoryAuthorizationProvider,
@@ -50,6 +51,8 @@ __all__ = [
     "MemoryClient",
     "MemorySystem",
     "MemoryRuntime",
+    "MemoryRuntimeManager",
+    "MemoryRuntimeStatus",
     "build_memory_system",
     "MemoryWriteRequest",
     "MemoryWriteReceipt",

@@ -28,6 +28,7 @@ from app.memory.pipeline.write.updater import MemoryUpdater
 from app.memory.ports.authorization import MemoryAuthorizationProvider
 from app.memory.storage.postgres import create_postgres_repository
 from app.memory.worker.event_worker import MemoryWorker
+from app.memory.runtime import MemoryRuntimeManager
 
 
 class MemoryClient:
@@ -144,7 +145,7 @@ def build_memory_system(
         repository, write_pipeline, event_sink=event_sink, claim_limit=1,
     )
     client = MemoryClient(service)
-    runtime = MemoryRuntime(worker)
+    runtime = MemoryRuntimeManager(worker)
     return MemorySystem(client=client, runtime=runtime)
 
 

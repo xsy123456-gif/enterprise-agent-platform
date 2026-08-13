@@ -22,6 +22,7 @@ from app.governance.adapters.checkpoint import PersistentCheckpointStore
 from app.runtime.governance.adapters import RuntimeEventContext, RuntimeEventMapper
 from app.runtime.ports import CurrentRuntimeAdapter
 from app.runtime.selector import RuntimeSelector
+from app.runtime.governance.gate import GovernanceGate
 
 
 class BackendArtifactResolver:
@@ -198,7 +199,8 @@ class RuntimeDispatcher:
                 self.event_bus.publish(mapped)
 
     @classmethod
-    def from_runtime_engine(cls, runtime_engine, agent_registry):
+    def from_runtime_engine(cls, runtime_engine, agent_registry,
+                            governance_gate=None, event_bus=None):
         resolver = BackendArtifactResolver()
         graph_compiler = GraphCompiler(compiler_version="v0.8.6")
         langgraph_compiler = LangGraphBackendCompiler(
@@ -251,6 +253,9 @@ class RuntimeDispatcher:
                 agent_registry=agent_registry,
                 tool_runner=runtime_engine.tool_runner,
                 memory_adapter=runtime_engine.memory_adapter,
+                governance_gate=governance_gate or GovernanceGate(
+                    event_bus=event_bus
+                ),
             )
         )
         selector = RuntimeSelector(

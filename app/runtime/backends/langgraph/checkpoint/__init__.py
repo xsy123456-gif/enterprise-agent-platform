@@ -1,10 +1,11 @@
-from app.runtime.checkpoint import CheckpointStore
+from .adapter import CheckpointerAdapter, create_postgres_checkpointer
+from .base import LangGraphCheckpointer, create_in_memory_checkpointer
 
 
 class LangGraphCheckpointAdapter:
-    """Bind backend execution to the platform CheckpointStore port."""
+    """Persist the platform-neutral AgentRuntimeState alongside LangGraph."""
 
-    def __init__(self, store: CheckpointStore):
+    def __init__(self, store):
         self.store = store
 
     @staticmethod
@@ -19,3 +20,8 @@ class LangGraphCheckpointAdapter:
 
     def delete(self, execution_id):
         return self.store.delete(execution_id)
+
+__all__ = [
+    "LangGraphCheckpointer", "LangGraphCheckpointAdapter", "CheckpointerAdapter", "create_in_memory_checkpointer",
+    "create_postgres_checkpointer",
+]

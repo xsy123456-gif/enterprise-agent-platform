@@ -1,5 +1,7 @@
 from app.compiler.backend.models import BackendArtifact
-from app.runtime.backends.langgraph.checkpoint import LangGraphCheckpointAdapter
+from app.runtime.backends.langgraph.checkpoint import (
+    LangGraphCheckpointAdapter, create_in_memory_checkpointer,
+)
 from app.runtime.backends.langgraph.generator import LangGraphGraphGenerator
 from app.runtime.backends.langgraph.state_mapper import LangGraphStateMapper
 from langgraph.types import Command
@@ -14,13 +16,18 @@ class LangGraphRuntimeAdapter(GraphRuntime):
     """Execute only compiled LangGraph BackendArtifacts through Runtime Contract v1."""
 
     def __init__(self, node_adapters=None, checkpoint_store=None, state_mapper=None,
-                 graph_generator=None, graph=None, response_event_hook=None):
+                 graph_generator=None, graph=None, response_event_hook=None,
+                 langgraph_checkpointer=None):
         self.state_mapper = state_mapper or LangGraphStateMapper()
         if graph is None and node_adapters is None:
             raise ValueError(
                 "LangGraph Runtime requires Backend node adapters or an injected graph"
             )
         self.graph = graph
+        self.langgraph_checkpointer = (
+            langgraph_checkpointer or create_in_memory_checkpointer()
+        )
+        self._graphs = {}
         self.graph_generator = graph_generator or (
             LangGraphGraphGenerator(node_adapters)
             if node_adapters is not None else None
@@ -44,9 +51,13 @@ class LangGraphRuntimeAdapter(GraphRuntime):
         backend_state["_graph_span_id"] = graph_span_id
         self.checkpoints.save(state)
         try:
-            graph = self.graph or self.graph_generator.generate(
-                artifact.runtime_definition
-            )
+            graph = self.graph or self._graphs.get(artifact.artifact_id)
+            if graph is None:
+                graph = self.graph_generator.generate(
+                    artifact.runtime_definition,
+                    checkpointer=self.langgraph_checkpointer,
+                )
+                self._graphs[artifact.artifact_id] = graph
             recursion_limit = artifact.runtime_definition.get(
                 "execution_policy", {}
             ).get("max_steps", 25)
@@ -112,9 +123,19 @@ class LangGraphRuntimeAdapter(GraphRuntime):
 
     def resume_execution(self, execution_id, approval_result, state=None):
         """Resume a checkpointed LangGraph execution by its stable thread id."""
-        if self.graph is None:
-            raise RuntimeError("Resume requires an injected checkpointed graph")
-        output = self.graph.invoke(
+        graph = self.graph
+        if graph is None:
+            if state is None:
+                state = self.checkpoints.load(execution_id)
+            if state is None:
+                raise KeyError(f"Checkpoint not found: {execution_id}")
+            artifact_id = state.metadata.get("artifact_id")
+            graph = self._graphs.get(artifact_id)
+            if graph is None:
+                raise RuntimeError(
+                    "Checkpointed graph is not available; recreate the adapter with the same artifact"
+                )
+        output = graph.invoke(
             Command(resume=approval_result),
             config={"configurable": {"thread_id": execution_id}},
         )
