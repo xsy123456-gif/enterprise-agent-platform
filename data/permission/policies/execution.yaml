@@ -56,3 +56,20 @@ policies:
       field: subject.department_id
       operator: equals
       value: management
+
+  # System bootstrap: platform bootstrap principal may run agent lifecycle init.
+  - policy_id: platform.bootstrap.agent.lifecycle
+    version: 1
+    status: active
+    scope:
+      type: platform
+    effect: allow
+    target:
+      resource_types: [agent_definition]
+      resource_match:
+        type: any
+      actions: [create, submit_review, approve, activate, suspend, deprecate, archive]
+    condition:
+      field: subject.roles
+      operator: contains
+      value: platform_bootstrap
