@@ -54,9 +54,6 @@ from app.orchestration.supervisor import Supervisor
 from app.orchestration.validator import PlanValidator
 
 
-from app.permission.rbac import PermissionManager
-
-
 from app.registry.service import AgentRegistry
 
 

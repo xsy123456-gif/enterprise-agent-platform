@@ -17,11 +17,15 @@ from app.permission import (
     PermissionSubject,
     build_permission,
 )
-from app.permission.rbac import PermissionManager
 
 ROOT = Path(__file__).resolve().parents[2] / "data" / "permission" / "policies"
 
-_legacy_manager = PermissionManager()
+# Static legacy behavior matrix (PermissionManager semantics frozen as data).
+_LEGACY = {
+    "sales": {"crm_query", "financial_query", "market_query"},
+    "manager": {"crm_query", "customer_update"},
+    "admin": "*",
+}
 
 _TOOLS = ["crm_query", "financial_query", "market_query", "customer_update"]
 
@@ -46,7 +50,10 @@ def _evaluate(system, role, tool):
 
 
 def _legacy_allows(role, tool):
-    return _legacy_manager.check(role, tool)
+    allowed = _LEGACY.get(role, set())
+    if allowed == "*":
+        return True
+    return tool in allowed
 
 
 @pytest.mark.parametrize("role", ["sales", "manager", "admin", "unknown"])

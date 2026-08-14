@@ -2,7 +2,7 @@ import unittest
 
 from app.audit.logger import AuditLogger
 from app.events.bus import EventBus
-from app.permission.rbac import PermissionManager
+from app.integrations.security.tools.structural import StructuralPermission
 from app.runtime.tool_runner import ToolRunner
 from app.tools.models import ToolCallRequest, ToolResult
 from app.tools.registry import ToolRegistry
@@ -28,7 +28,7 @@ class ToolRunnerIntegrationTest(unittest.TestCase):
         events = EventBus()
         audit = AuditLogger()
         return ToolRunner(
-            registry, permission or PermissionManager(), audit, events
+            registry, permission or StructuralPermission(), audit, events
         ), audit, events
 
     def request(self, role="sales"):
