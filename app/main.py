@@ -171,7 +171,12 @@ def build_runtime(
     # Permission
     # -----------------------------
 
-    permission = PermissionManager()
+    # User authorization is handled by ExecutionSecurityGate (Permission ->
+    # Governance) at the tool invocation boundary.  ToolRunner keeps only
+    # structural constraints here.
+    from app.integrations.security.tools.structural import StructuralPermission
+
+    permission = StructuralPermission()
 
 
 
@@ -248,7 +253,7 @@ def build_runtime(
 
 def build_orchestration(
     llm=None, activate_builtin=False, memory_repository=None,
-    memory_embedding_service=None,
+    memory_embedding_service=None, security=None,
 ):
 
     if llm is None:
@@ -283,7 +288,8 @@ def build_orchestration(
     )
 
     runtime_dispatcher = RuntimeDispatcher.from_runtime_engine(
-        runtime, runtime.agent_registry, event_bus=event_bus
+        runtime, runtime.agent_registry, event_bus=event_bus,
+        governance_gate=getattr(security, "tool_gate", None),
     )
     runtime_dispatcher.event_bus = event_bus
     runtime_dispatcher.event_store = InMemoryEventStore()
@@ -314,8 +320,23 @@ def build_application(environment=None, **kwargs):
     container is the preferred lifecycle boundary for new callers.
     """
     from app.composition import create_application
+    from app.identity import build_identity
+    from app.integrations.security import build_security_integration
+    from app.permission import build_permission
+    from app.runtime.governance.gate import AllowAllGovernancePolicy, GovernanceGate
 
-    planner, supervisor, audit, event_bus = build_orchestration(**kwargs)
+    identity = build_identity()
+    permission = build_permission()
+    permission.runtime.start()
+    security = build_security_integration(
+        identity_service=identity.service,
+        permission_service=permission.service,
+        governance_gate=GovernanceGate(AllowAllGovernancePolicy()),
+    )
+
+    planner, supervisor, audit, event_bus = build_orchestration(
+        security=security, **kwargs
+    )
     runtime = supervisor.runtime
     return create_application(
         environment=environment,
@@ -329,4 +350,7 @@ def build_application(environment=None, **kwargs):
         audit=audit,
         planner=planner,
         supervisor=supervisor,
+        identity=identity,
+        permission=permission,
+        security=security,
     )

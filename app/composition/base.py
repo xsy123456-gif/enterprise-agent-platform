@@ -21,6 +21,9 @@ class ApplicationContainer:
     audit: Any = None
     planner: Any = None
     supervisor: Any = None
+    identity: Any = None
+    permission: Any = None
+    security: Any = None
     infrastructure: dict = field(default_factory=dict)
     checkpoint: Any = None
     environment: str = "development"
