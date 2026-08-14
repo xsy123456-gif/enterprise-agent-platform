@@ -35,6 +35,8 @@ models/
 !app/compiler/models/*.py
 !app/identity/models/
 !app/identity/models/*.py
+!app/permission/models/
+!app/permission/models/*.py
 *.bin
 *.safetensors
 
