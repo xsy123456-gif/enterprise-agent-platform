@@ -1,0 +1,58 @@
+policies:
+  # Agent admission: operations/management at P3+ may invoke an agent.
+  - policy_id: execution.agent.invoke
+    version: 1
+    status: active
+    scope:
+      type: tenant
+      tenant_id: company_A
+    effect: allow
+    target:
+      resource_types: [agent]
+      resource_match:
+        type: any
+      actions: [invoke]
+    condition:
+      all:
+        - field: subject.department_id
+          operator: in
+          value: [operations, management]
+        - field: subject.professional_level
+          operator: gte_level
+          value: P3
+
+  # Tool execution: authorized business departments may execute tools.
+  - policy_id: execution.department.tool.execute
+    version: 1
+    status: active
+    scope:
+      type: tenant
+      tenant_id: company_A
+    effect: allow
+    target:
+      resource_types: [tool]
+      resource_match:
+        type: any
+      actions: [execute]
+    condition:
+      field: subject.department_id
+      operator: in
+      value: [operations, management, advertising, customer_service]
+
+  # Lifecycle authorization: management may approve/activate/suspend/deprecate.
+  - policy_id: execution.management.lifecycle
+    version: 1
+    status: active
+    scope:
+      type: tenant
+      tenant_id: company_A
+    effect: allow
+    target:
+      resource_types: [agent_definition]
+      resource_match:
+        type: any
+      actions: [create, approve, activate, suspend, deprecate]
+    condition:
+      field: subject.department_id
+      operator: equals
+      value: management
