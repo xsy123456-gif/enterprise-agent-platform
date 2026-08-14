@@ -1,0 +1,21 @@
+departments:
+  - department_id: operations
+    tenant_id: company_A
+    name: 运营部
+
+  - department_id: advertising
+    tenant_id: company_A
+    name: 广告运营部
+    parent_department_id: operations
+
+  - department_id: customer_service
+    tenant_id: company_A
+    name: 客服部
+
+  - department_id: finance
+    tenant_id: company_A
+    name: 财务部
+
+  - department_id: management
+    tenant_id: company_A
+    name: 管理层

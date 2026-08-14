@@ -1,0 +1,32 @@
+scopes:
+  - scope_id: JP01_OPERATION_SCOPE
+    tenant_id: company_A
+    stores:
+      - JP01
+    regions:
+      - JP
+    channels:
+      - amazon
+
+  - scope_id: JP_MULTI_STORE_SCOPE
+    tenant_id: company_A
+    stores:
+      - JP01
+      - JP02
+    regions:
+      - JP
+    channels:
+      - amazon
+
+  - scope_id: GLOBAL_MANAGEMENT_SCOPE
+    tenant_id: company_A
+    stores:
+      - JP01
+      - JP02
+      - US01
+    regions:
+      - JP
+      - US
+    channels:
+      - amazon
+      - shopify

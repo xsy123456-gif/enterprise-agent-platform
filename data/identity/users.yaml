@@ -1,0 +1,145 @@
+users:
+  - user_id: U001
+    tenant_id: company_A
+    name: 张三
+    status: active
+    organization_id: company_A
+    department_id: operations
+    position_id: product_operator
+    professional_level_id: P3
+    role_ids:
+      - product_operator
+    scope_ids:
+      - JP01_OPERATION_SCOPE
+    security_clearance: internal
+    attributes:
+      language: zh-CN
+      employment_type: full_time
+      location: Shanghai
+
+  - user_id: U002
+    tenant_id: company_A
+    name: 李四
+    status: active
+    organization_id: company_A
+    department_id: operations
+    position_id: senior_product_operator
+    professional_level_id: P5
+    role_ids:
+      - product_operator
+    scope_ids:
+      - JP_MULTI_STORE_SCOPE
+    security_clearance: internal
+    attributes:
+      language: zh-CN
+      employment_type: full_time
+      location: Shanghai
+
+  - user_id: U003
+    tenant_id: company_A
+    name: 王五
+    status: active
+    organization_id: company_A
+    department_id: advertising
+    position_id: advertising_specialist
+    professional_level_id: P4
+    role_ids:
+      - advertising_operator
+    scope_ids:
+      - JP01_OPERATION_SCOPE
+    security_clearance: internal
+    attributes:
+      language: zh-CN
+      employment_type: full_time
+      location: Hangzhou
+
+  - user_id: U004
+    tenant_id: company_A
+    name: 赵六
+    status: active
+    organization_id: company_A
+    department_id: advertising
+    position_id: advertising_lead
+    professional_level_id: P6
+    role_ids:
+      - advertising_operator
+      - advertising_approver
+    scope_ids:
+      - JP_MULTI_STORE_SCOPE
+    security_clearance: confidential
+    attributes:
+      language: zh-CN
+      employment_type: full_time
+      location: Hangzhou
+
+  - user_id: U005
+    tenant_id: company_A
+    name: 孙七
+    status: active
+    organization_id: company_A
+    department_id: customer_service
+    position_id: customer_service_specialist
+    professional_level_id: P3
+    role_ids:
+      - customer_service_operator
+    scope_ids:
+      - JP01_OPERATION_SCOPE
+    security_clearance: internal
+    attributes:
+      language: zh-CN
+      employment_type: full_time
+      location: Shenzhen
+
+  - user_id: U006
+    tenant_id: company_A
+    name: 周八
+    status: active
+    organization_id: company_A
+    department_id: finance
+    position_id: finance_specialist
+    professional_level_id: P5
+    role_ids:
+      - finance_reader
+    scope_ids:
+      - JP_MULTI_STORE_SCOPE
+    security_clearance: confidential
+    attributes:
+      language: zh-CN
+      employment_type: full_time
+      location: Shanghai
+
+  - user_id: U007
+    tenant_id: company_A
+    name: 吴九
+    status: active
+    organization_id: company_A
+    department_id: operations
+    position_id: store_manager
+    professional_level_id: P7
+    role_ids:
+      - store_manager
+    scope_ids:
+      - JP_MULTI_STORE_SCOPE
+    security_clearance: confidential
+    attributes:
+      language: zh-CN
+      employment_type: full_time
+      location: Tokyo
+
+  - user_id: U008
+    tenant_id: company_A
+    name: 郑十
+    status: active
+    organization_id: company_A
+    department_id: management
+    position_id: executive
+    professional_level_id: P9
+    role_ids:
+      - executive_viewer
+    scope_ids:
+      - GLOBAL_MANAGEMENT_SCOPE
+    security_clearance: confidential
+    attributes:
+      language: zh-CN
+      employment_type: full_time
+      location: Shanghai

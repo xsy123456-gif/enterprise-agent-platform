@@ -1,0 +1,6 @@
+organizations:
+  - organization_id: company_A
+    tenant_id: company_A
+    name: Demo Ecommerce Company
+    type: company
+    status: active

@@ -1,0 +1,36 @@
+positions:
+  - position_id: product_operator
+    tenant_id: company_A
+    name: 商品运营专员
+
+  - position_id: senior_product_operator
+    tenant_id: company_A
+    name: 高级商品运营专员
+
+  - position_id: advertising_specialist
+    tenant_id: company_A
+    name: 广告运营专员
+
+  - position_id: advertising_lead
+    tenant_id: company_A
+    name: 广告负责人
+
+  - position_id: customer_service_specialist
+    tenant_id: company_A
+    name: 客服专员
+
+  - position_id: finance_specialist
+    tenant_id: company_A
+    name: 财务专员
+
+  - position_id: store_manager
+    tenant_id: company_A
+    name: 店铺负责人
+
+  - position_id: operation_director
+    tenant_id: company_A
+    name: 运营总监
+
+  - position_id: executive
+    tenant_id: company_A
+    name: 企业管理层

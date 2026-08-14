@@ -1,0 +1,5 @@
+security_clearances:
+  - id: public
+  - id: internal
+  - id: confidential
+  - id: restricted

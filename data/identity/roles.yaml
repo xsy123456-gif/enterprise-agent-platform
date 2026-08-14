@@ -1,0 +1,32 @@
+roles:
+  - role_id: product_operator
+    tenant_id: company_A
+    name: 商品运营
+
+  - role_id: advertising_reader
+    tenant_id: company_A
+    name: 广告只读
+
+  - role_id: advertising_operator
+    tenant_id: company_A
+    name: 广告运营
+
+  - role_id: advertising_approver
+    tenant_id: company_A
+    name: 广告审批
+
+  - role_id: customer_service_operator
+    tenant_id: company_A
+    name: 客服运营
+
+  - role_id: finance_reader
+    tenant_id: company_A
+    name: 财务只读
+
+  - role_id: store_manager
+    tenant_id: company_A
+    name: 店铺管理
+
+  - role_id: executive_viewer
+    tenant_id: company_A
+    name: 管理层查看
