@@ -1,85 +1,57 @@
-"""Legacy governance PolicyDecisionEngine semantic parity tests.
+"""Lifecycle authorization tests: system principal + management department.
 
-Verifies the migrated authorization policies reproduce the legacy
-PolicyDecisionEngine decisions exactly (100% parity).
+The legacy PolicyDecisionEngine is removed; lifecycle authorization is now
+decided by the Permission foundation via the security integration layer.
 """
 
 from pathlib import Path
 
 import pytest
 
-from app.governance.policy import (
-    GovernancePolicy,
-    InMemoryPolicyRepository,
-    PolicyDecisionEngine,
-    PolicyRule,
-)
-from app.permission import (
-    Decision,
-    PermissionConfig,
-    PermissionEnvironment,
-    PermissionRequest,
-    PermissionResource,
-    PermissionSubject,
-    build_permission,
-)
+from app.identity import build_identity
+from app.identity.providers.local_file import LocalFileIdentityProvider
+from app.integrations.security import TrustedPrincipal, build_security_integration
+from app.permission import PermissionConfig, build_permission
+from app.runtime.governance.gate import AllowAllGovernancePolicy, GovernanceGate
 
-ROOT = Path(__file__).resolve().parents[2] / "data" / "permission" / "policies"
-
-
-def _legacy_policy():
-    return GovernancePolicy(
-        policy_id="default_governance",
-        name="legacy",
-        rules=[
-            PolicyRule("system", "create_agent", "*", "allow"),
-            PolicyRule("developer", "submit_review", "*", "allow"),
-            PolicyRule("admin", "approve_agent", "*", "allow"),
-            PolicyRule("admin", "reject_agent", "*", "allow"),
-            PolicyRule("admin", "activate_agent", "*", "allow"),
-            PolicyRule("admin", "suspend_agent", "*", "allow"),
-            PolicyRule("admin", "deprecate_agent", "*", "allow"),
-        ],
-    )
-
-
-def _legacy_allows(role, action):
-    engine = PolicyDecisionEngine(InMemoryPolicyRepository())
-    engine.register(_legacy_policy())
-    decision = engine.check({
-        "user_id": "u", "role": role, "action": action,
-        "agent_id": "a1", "version": "v1",
-    })
-    return decision.allowed
+ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="module")
-def system():
-    permission = build_permission(config=PermissionConfig(policy_root=str(ROOT)))
-    permission.runtime.start()
-    return permission
-
-
-def _evaluate(system, role, action):
-    subject = PermissionSubject(subject_id="u", tenant_id="company_A",
-                               roles=frozenset({role}))
-    resource = PermissionResource("agent", "a1", "company_A")
-    request = PermissionRequest(
-        "R", subject, resource, action, PermissionEnvironment()
+def security():
+    identity = build_identity(
+        provider=LocalFileIdentityProvider(str(ROOT / "data" / "identity"))
     )
-    return system.evaluate(request)
+    permission = build_permission(
+        config=PermissionConfig(policy_root=str(ROOT / "data" / "permission" / "policies"))
+    )
+    permission.runtime.start()
+    return build_security_integration(
+        identity_service=identity.service,
+        permission_service=permission.service,
+        governance_gate=GovernanceGate(AllowAllGovernancePolicy()),
+    )
 
 
-_ACTIONS = [
-    "create_agent", "submit_review", "approve_agent", "reject_agent",
-    "activate_agent", "suspend_agent", "deprecate_agent",
-]
-_ROLES = ["system", "developer", "admin", "unknown"]
+def test_system_principal_can_do_lifecycle(security):
+    bootstrap = TrustedPrincipal("platform.bootstrap", source="system")
+    for action in ["create", "submit_review", "approve", "activate",
+                   "suspend", "deprecate", "archive"]:
+        assert security.lifecycle_authorization.authorize(
+            bootstrap, action, "sales_agent", "0.2"
+        ) is True
 
 
-@pytest.mark.parametrize("role", _ROLES)
-@pytest.mark.parametrize("action", _ACTIONS)
-def test_governance_policy_parity(system, role, action):
-    expected = _legacy_allows(role, action)
-    decision = _evaluate(system, role, action)
-    assert (decision.decision is Decision.ALLOW) == expected
+def test_management_can_do_lifecycle(security):
+    executive = TrustedPrincipal("U008")  # management executive
+    for action in ["create", "approve", "activate", "suspend", "deprecate"]:
+        assert security.lifecycle_authorization.authorize(
+            executive, action, "sales_agent", "0.2"
+        ) is True
+
+
+def test_other_department_cannot_do_lifecycle(security):
+    ads = TrustedPrincipal("U003")  # advertising
+    assert security.lifecycle_authorization.authorize(
+        ads, "activate", "sales_agent", "0.2"
+    ) is False

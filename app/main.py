@@ -24,12 +24,6 @@ from app.governance.repository import InMemoryLifecycleRepository
 from app.governance.service import AgentLifecycleService
 from app.governance.approval.repository import InMemoryApprovalRepository
 from app.governance.approval.service import ApprovalService
-from app.governance.policy import (
-    GovernancePolicy,
-    InMemoryPolicyRepository,
-    PolicyDecisionEngine,
-    PolicyRule,
-)
 
 
 from app.llm.factory import create_llm
@@ -84,7 +78,7 @@ from app.tools.registry import ToolRegistry
 
 def build_runtime(
     llm=None, capability_catalog=None, memory_repository=None,
-    memory_embedding_service=None,
+    memory_embedding_service=None, security=None,
 ):
 
 
@@ -102,28 +96,25 @@ def build_runtime(
 
     event_bus = EventBus()
 
-    governance_policy = GovernancePolicy(
-        policy_id="default_governance",
-        name="Default platform governance",
-        rules=[
-            PolicyRule("system", "create_agent", "*", "allow"),
-            PolicyRule("developer", "submit_review", "*", "allow"),
-            PolicyRule("admin", "approve_agent", "*", "allow"),
-            PolicyRule("admin", "reject_agent", "*", "allow"),
-            PolicyRule("admin", "activate_agent", "*", "allow"),
-            PolicyRule("admin", "suspend_agent", "*", "allow"),
-            PolicyRule("admin", "deprecate_agent", "*", "allow"),
-        ],
-    )
-    governance_engine = PolicyDecisionEngine(InMemoryPolicyRepository())
-    governance_engine.register(governance_policy)
     governance_audit = GovernanceAuditSubscriber()
     event_bus.subscribe(governance_audit)
+
+    # Development/test compatibility: without a wired security integration,
+    # lifecycle authorization defaults to allow-all.  Production always wires
+    # security (build_application), so this never applies there.
+    if security is None:
+        class _DevAllowAllAuthorization:
+            def authorize(self, principal, action, agent_id, version):
+                return True
+
+        lifecycle_authorization = _DevAllowAllAuthorization()
+    else:
+        lifecycle_authorization = security.lifecycle_authorization
 
     lifecycle_service = AgentLifecycleService(
         repository=InMemoryLifecycleRepository(),
         event_publisher=EventBusPublisher(event_bus),
-        governance_engine=governance_engine,
+        authorization=lifecycle_authorization,
     )
 
 
@@ -235,7 +226,6 @@ def build_runtime(
 
     runtime.memory_audit = memory_audit
     runtime.lifecycle_service = lifecycle_service
-    runtime.governance_policy_engine = governance_engine
     runtime.governance_audit = governance_audit
     runtime.approval_service = ApprovalService(
         InMemoryApprovalRepository(), lifecycle_service,
@@ -265,17 +255,21 @@ def build_orchestration(
         capability_catalog=capability_catalog,
         memory_repository=memory_repository,
         memory_embedding_service=memory_embedding_service,
+        security=security,
     )
 
     if activate_builtin:
+        from app.integrations.security.models.trusted_principal import TrustedPrincipal
+
+        bootstrap = TrustedPrincipal(principal_id="platform.bootstrap", source="system")
         lifecycle = runtime.lifecycle_service
         for agent in runtime.agent_registry.list_agents():
             lifecycle.request_review(
                 agent.agent_id, agent.version,
-                requester="bootstrap", approval_channel="manual",
+                principal=bootstrap, approval_channel="manual",
             )
-            lifecycle.approve(agent.agent_id, agent.version, reviewer="bootstrap")
-            lifecycle.activate(agent.agent_id, agent.version, operator="bootstrap")
+            lifecycle.approve(agent.agent_id, agent.version, principal=bootstrap)
+            lifecycle.activate(agent.agent_id, agent.version, principal=bootstrap)
 
     planner = LLMPlanner(
         llm=llm,
@@ -339,7 +333,7 @@ def build_application(environment=None, **kwargs):
         environment=environment,
         runtime=runtime,
         memory=getattr(runtime, "memory_system", None),
-        governance=getattr(runtime, "governance_policy_engine", None),
+        governance=security,
         trace=getattr(runtime, "trace_consumer", None),
         execution=getattr(runtime, "execution_manager", None),
         registry=runtime.agent_registry,

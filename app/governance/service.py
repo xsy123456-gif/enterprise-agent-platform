@@ -1,24 +1,28 @@
+from app.governance.authorization import (
+    LifecycleAuthorizationPort,
+    SYSTEM_PRINCIPAL,
+)
 from app.governance.events import LifecycleEvent
 from app.governance.models import AgentLifecycle, ApprovalRequest, utc_now
 from app.governance.policy import LifecyclePolicy
 
 
 class AgentLifecycleService:
-    def __init__(self, repository, event_publisher=None, policy=None, governance_engine=None):
+    def __init__(self, repository, event_publisher=None, policy=None, authorization=None):
         self.repository = repository
         self.event_publisher = event_publisher
         self.policy = policy or LifecyclePolicy()
-        self.governance_engine = governance_engine
+        self.authorization = authorization
 
-    def create(self, agent_id, version, owner="", user_id="system", role="system"):
-        self._authorize(user_id, role, "create_agent", agent_id, version)
+    def create(self, agent_id, version, owner="", principal=None):
+        self._authorize(principal, "create", agent_id, version)
         lifecycle = AgentLifecycle(
             agent_id=agent_id,
             version=version,
             owner=owner,
         )
         self.repository.add(lifecycle)
-        self._publish("agent.created", lifecycle, "system")
+        self._publish("agent.created", lifecycle, self._operator(principal))
         return lifecycle
 
     def get(self, agent_id, version):
@@ -31,51 +35,57 @@ class AgentLifecycleService:
         self,
         agent_id,
         version,
-        requester="system",
+        principal=None,
         approval_channel="manual",
         comment=None,
-        role="developer",
     ):
         lifecycle = self.get(agent_id, version)
-        self._authorize(requester, role, "submit_review", agent_id, version)
-        self._transition(lifecycle, "validating", requester)
-        self._publish("agent.validation_passed", lifecycle, requester)
-        self._transition(lifecycle, "reviewing", requester)
+        self._authorize(principal, "submit_review", agent_id, version)
+        operator = self._operator(principal)
+        self._transition(lifecycle, "validating", operator)
+        self._publish("agent.validation_passed", lifecycle, operator)
+        self._transition(lifecycle, "reviewing", operator)
         request = ApprovalRequest(
             agent_id=agent_id,
             version=version,
-            requester=requester,
+            requester=operator,
             approval_channel=approval_channel,
             comment=comment,
         )
         self.repository.add_approval(request)
-        self._publish("agent.review_requested", lifecycle, requester)
+        self._publish("agent.review_requested", lifecycle, operator)
         return request
 
-    def approve(self, agent_id, version, reviewer="admin", comment=None, role="admin"):
+    def approve(self, agent_id, version, principal=None, comment=None):
         lifecycle = self.get(agent_id, version)
-        self._authorize(reviewer, role, "approve_agent", agent_id, version)
-        self._transition(lifecycle, "approved", reviewer)
-        lifecycle.approved_by = reviewer
+        self._authorize(principal, "approve", agent_id, version)
+        operator = self._operator(principal)
+        self._transition(lifecycle, "approved", operator)
+        lifecycle.approved_by = operator
         lifecycle.approval_time = utc_now()
         self.repository.update(lifecycle)
-        self._publish("agent.approved", lifecycle, reviewer)
+        self._publish("agent.approved", lifecycle, operator)
         return lifecycle
 
-    def activate(self, agent_id, version, operator="admin", role="admin"):
-        self._authorize(operator, role, "activate_agent", agent_id, version)
-        return self._change(agent_id, version, "active", operator, "agent.activated")
+    def activate(self, agent_id, version, principal=None):
+        self._authorize(principal, "activate", agent_id, version)
+        return self._change(agent_id, version, "active",
+                            self._operator(principal), "agent.activated")
 
-    def suspend(self, agent_id, version, operator="admin", role="admin"):
-        self._authorize(operator, role, "suspend_agent", agent_id, version)
-        return self._change(agent_id, version, "suspended", operator, "agent.suspended")
+    def suspend(self, agent_id, version, principal=None):
+        self._authorize(principal, "suspend", agent_id, version)
+        return self._change(agent_id, version, "suspended",
+                            self._operator(principal), "agent.suspended")
 
-    def deprecate(self, agent_id, version, operator="admin", role="admin"):
-        self._authorize(operator, role, "deprecate_agent", agent_id, version)
-        return self._change(agent_id, version, "deprecated", operator, "agent.deprecated")
+    def deprecate(self, agent_id, version, principal=None):
+        self._authorize(principal, "deprecate", agent_id, version)
+        return self._change(agent_id, version, "deprecated",
+                            self._operator(principal), "agent.deprecated")
 
-    def archive(self, agent_id, version, operator="admin"):
-        return self._change(agent_id, version, "archived", operator, "agent.archived")
+    def archive(self, agent_id, version, principal=None):
+        self._authorize(principal, "archive", agent_id, version)
+        return self._change(agent_id, version, "archived",
+                            self._operator(principal), "agent.archived")
 
     def _change(self, agent_id, version, target, operator, event_type):
         lifecycle = self.get(agent_id, version)
@@ -100,15 +110,16 @@ class AgentLifecycleService:
                 )
             )
 
-    def _authorize(self, user_id, role, action, agent_id, version):
-        if self.governance_engine is None:
-            return
-        decision = self.governance_engine.check({
-            "user_id": user_id,
-            "role": role,
-            "action": action,
-            "agent_id": agent_id,
-            "version": version,
-        })
-        if not decision.allowed:
-            raise PermissionError(f"Governance policy denied {action}: {decision.reason}")
+    def _authorize(self, principal, action, agent_id, version):
+        if principal is None:
+            principal = SYSTEM_PRINCIPAL
+        if self.authorization is None:
+            raise PermissionError(f"Lifecycle authorization required for {action}")
+        if not self.authorization.authorize(principal, action, agent_id, version):
+            raise PermissionError(f"Permission denied for lifecycle {action}")
+
+    @staticmethod
+    def _operator(principal):
+        if principal is None:
+            return SYSTEM_PRINCIPAL.principal_id
+        return getattr(principal, "principal_id", "unknown")

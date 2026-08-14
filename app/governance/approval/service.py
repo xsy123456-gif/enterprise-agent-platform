@@ -8,40 +8,43 @@ class ApprovalService:
         self.lifecycle_service = lifecycle_service
         self.event_publisher = event_publisher
 
-    def create_request(self, agent_id, version, requester, approval_channel="manual", comment=None, role="developer"):
+    def create_request(self, agent_id, version, principal=None,
+                       approval_channel="manual", comment=None):
         self.lifecycle_service.request_review(
-            agent_id, version, requester=requester,
-            approval_channel=approval_channel, comment=comment, role=role,
+            agent_id, version, principal=principal,
+            approval_channel=approval_channel, comment=comment,
         )
-        request = ApprovalRequest(agent_id, version, requester, approval_channel, comment=comment)
+        operator = getattr(principal, "principal_id", "unknown") if principal else "system"
+        request = ApprovalRequest(agent_id, version, operator, approval_channel, comment=comment)
         self.repository.add(request)
-        self._publish("agent.review_requested", request, requester)
+        self._publish("agent.review_requested", request, operator)
         return request
 
-    def approve(self, approval_id, reviewer, comment=None, role="admin"):
+    def approve(self, approval_id, principal=None, comment=None):
         request = self._get(approval_id)
         if request.status != ApprovalStatus.PENDING.value:
             raise ValueError("Approval request is not pending")
-        self.lifecycle_service.approve(request.agent_id, request.version, reviewer=reviewer, comment=comment, role=role)
-        request.status = ApprovalStatus.APPROVED.value
-        request.reviewer = reviewer
-        request.comment = comment
-        self.repository.update(request)
-        self._publish("agent.approved", request, reviewer)
-        return request
-
-    def reject(self, approval_id, reviewer, comment=None, role="admin"):
-        request = self._get(approval_id)
-        if request.status != ApprovalStatus.PENDING.value:
-            raise ValueError("Approval request is not pending")
-        self.lifecycle_service._authorize(
-            reviewer, role, "reject_agent", request.agent_id, request.version,
+        self.lifecycle_service.approve(
+            request.agent_id, request.version, principal=principal, comment=comment
         )
-        request.status = ApprovalStatus.REJECTED.value
-        request.reviewer = reviewer
+        operator = getattr(principal, "principal_id", "unknown") if principal else "system"
+        request.status = ApprovalStatus.APPROVED.value
+        request.reviewer = operator
         request.comment = comment
         self.repository.update(request)
-        self._publish("agent.rejected", request, reviewer)
+        self._publish("agent.approved", request, operator)
+        return request
+
+    def reject(self, approval_id, principal=None, comment=None):
+        request = self._get(approval_id)
+        if request.status != ApprovalStatus.PENDING.value:
+            raise ValueError("Approval request is not pending")
+        operator = getattr(principal, "principal_id", "unknown") if principal else "system"
+        request.status = ApprovalStatus.REJECTED.value
+        request.reviewer = operator
+        request.comment = comment
+        self.repository.update(request)
+        self._publish("agent.rejected", request, operator)
         return request
 
     def get(self, approval_id):
