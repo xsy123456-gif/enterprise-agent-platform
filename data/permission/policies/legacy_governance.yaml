@@ -1,0 +1,50 @@
+# Migration-only compatibility policies for the legacy Governance
+# PolicyDecisionEngine authorization rules (role -> agent lifecycle action).
+policies:
+  - policy_id: legacy.agent.create
+    version: 1
+    status: active
+    scope:
+      type: platform
+    effect: allow
+    target:
+      resource_types: [agent]
+      resource_match:
+        type: any
+      actions: [create_agent]
+    condition:
+      field: subject.roles
+      operator: contains
+      value: system
+
+  - policy_id: legacy.agent.submit_review
+    version: 1
+    status: active
+    scope:
+      type: platform
+    effect: allow
+    target:
+      resource_types: [agent]
+      resource_match:
+        type: any
+      actions: [submit_review]
+    condition:
+      field: subject.roles
+      operator: contains
+      value: developer
+
+  - policy_id: legacy.agent.admin_actions
+    version: 1
+    status: active
+    scope:
+      type: platform
+    effect: allow
+    target:
+      resource_types: [agent]
+      resource_match:
+        type: any
+      actions: [approve_agent, reject_agent, activate_agent, suspend_agent, deprecate_agent]
+    condition:
+      field: subject.roles
+      operator: contains
+      value: admin
