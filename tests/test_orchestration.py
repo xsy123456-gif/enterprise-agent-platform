@@ -4,7 +4,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from unittest.mock import patch
 
-from app.main import build_orchestration, main as application_main
+from app.main import build_orchestration
 from app.capabilities.catalog import CapabilityCatalog
 from app.capabilities.models import CapabilityDefinition
 from app.capabilities.repository import InMemoryCapabilityRepository
@@ -405,20 +405,6 @@ class OrchestrationTest(unittest.TestCase):
             "tool.completed",
             [event.event_type for event in event_bus.events],
         )
-
-    def test_main_uses_orchestration_without_external_agent_selection(self):
-        output = StringIO()
-        with patch("app.main.create_llm", return_value=PlannerAndAgentStubLLM()):
-            with patch(
-                "app.memory.factory._repository_from_environment",
-                return_value=TestMemoryRepository(),
-            ), patch(
-                "app.memory.factory.create_embedding_service",
-                return_value=TestEmbeddingService(),
-            ), redirect_stdout(output):
-                application_main()
-
-        self.assertIn("visit prepared", output.getvalue())
 
 
 if __name__ == "__main__":

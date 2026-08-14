@@ -51,9 +51,6 @@ from app.orchestration.planner import BasicPlanner
 from app.orchestration.supervisor import Supervisor
 
 
-from app.orchestration.task import Task
-
-
 from app.orchestration.validator import PlanValidator
 
 
@@ -333,68 +330,3 @@ def build_application(environment=None, **kwargs):
         planner=planner,
         supervisor=supervisor,
     )
-
-
-
-
-
-# =====================================
-# Main
-# =====================================
-
-def main():
-
-    planner, supervisor, audit, event_bus = build_orchestration(
-        activate_builtin=True
-    )
-
-    task = Task(
-        user_query="分析客户A的合作风险"
-    )
-
-    plan = planner.plan(task)
-
-    result = supervisor.execute(
-        plan=plan,
-        user_id="sales_001",
-        role="sales"
-    )
-
-    print(
-        "\n最终结果:"
-    )
-
-
-    print(
-        result.output
-    )
-
-
-
-    print(
-        "\n审计记录:"
-    )
-
-
-    print(
-        audit.logs
-    )
-
-
-
-    print(
-        "\n事件记录:"
-    )
-
-
-    print(
-        event_bus.events
-    )
-
-
-
-
-
-if __name__ == "__main__":
-
-    main()
