@@ -33,6 +33,8 @@ venv/
 models/
 !app/compiler/models/
 !app/compiler/models/*.py
+!app/identity/models/
+!app/identity/models/*.py
 *.bin
 *.safetensors
 
