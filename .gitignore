@@ -37,6 +37,8 @@ models/
 !app/identity/models/*.py
 !app/permission/models/
 !app/permission/models/*.py
+!app/integrations/security/models/
+!app/integrations/security/models/*.py
 *.bin
 *.safetensors
 
