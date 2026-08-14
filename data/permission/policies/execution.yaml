@@ -39,6 +39,30 @@ policies:
       operator: in
       value: [operations, management, advertising, customer_service]
 
+  # Tool scope enforcement: a store_id that the subject scope does not contain
+  # is denied (scope shrink takes effect on the next tool call).
+  - policy_id: execution.tool.store_scope
+    version: 1
+    status: active
+    scope:
+      type: tenant
+      tenant_id: company_A
+    effect: deny
+    target:
+      resource_types: [tool]
+      resource_match:
+        type: any
+      actions: [execute]
+    condition:
+      all:
+        - field: resource.attributes.store_id
+          operator: exists
+        - not:
+            field: subject.scopes
+            operator: scope_contains
+            dimension: business.store
+            value_from: resource.attributes.store_id
+
   # Lifecycle authorization: management may approve/activate/suspend/deprecate.
   - policy_id: execution.management.lifecycle
     version: 1

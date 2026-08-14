@@ -24,7 +24,10 @@ from app.integrations.security.subject.system_resolver import (
     SystemPrincipalResolver,
     TrustedSystemPrincipalRegistry,
 )
-from app.integrations.security.tools.security_gate import ExecutionSecurityGate
+from app.integrations.security.tools.security_gate import (
+    ExecutionSecurityGate,
+    LocalTrustedPrincipalProvider,
+)
 
 
 def default_system_principals():
@@ -67,7 +70,13 @@ def build_security_integration(
         SystemPrincipalResolver(system_registry),
     )
     admission = AgentAdmissionController(resolver, permission_service)
-    tool_gate = ExecutionSecurityGate(resolver, permission_service, governance_gate)
+    principal_provider = LocalTrustedPrincipalProvider(
+        allow_local=(config.principal_source != "external_required")
+    )
+    tool_gate = ExecutionSecurityGate(
+        resolver, permission_service, governance_gate,
+        principal_provider=principal_provider,
+    )
     lifecycle = PermissionLifecycleAuthorizationAdapter(resolver, permission_service)
     carrier = carrier or InMemoryPrincipalContextCarrier()
     return SecurityIntegration(

@@ -21,9 +21,22 @@ class _DenyDecision:
 
 class LocalTrustedPrincipalProvider:
     """Development/testing: derive a TrustedPrincipal from the Application-layer
-    user_id carried on the tool request (never from LLM output)."""
+    user_id carried on the tool request (never from LLM output).
+
+    ``allow_local=False`` (production external_required) makes this provider
+    fail closed rather than silently trusting request.user_id.
+    """
+
+    def __init__(self, allow_local=True):
+        self.allow_local = allow_local
 
     def from_request(self, request) -> TrustedPrincipal:
+        if not self.allow_local:
+            from app.integrations.security.errors import TrustedPrincipalResolutionError
+
+            raise TrustedPrincipalResolutionError(
+                "external trusted principal source required in this environment"
+            )
         principal_id = getattr(request, "user_id", None)
         if not principal_id:
             raise ValueError("request has no principal (user_id)")
@@ -59,6 +72,8 @@ class ExecutionSecurityGate:
             )
 
         tool_name = getattr(request, "tool_name", None) or "tool"
+        arguments = getattr(request, "arguments", None)
+        store_id = arguments.get("store_id") if isinstance(arguments, dict) else None
         resource = PermissionResource(
             resource_type="tool",
             resource_id=tool_name,
@@ -66,6 +81,7 @@ class ExecutionSecurityGate:
             attributes={
                 "agent_id": getattr(request, "agent_id", None),
                 "capability": getattr(request, "capability", None),
+                "store_id": store_id,
             },
         )
         permission_request = PermissionRequest(

@@ -140,11 +140,11 @@ def _lte_level(left, right):
 # --- existence ---
 
 def _exists(left, right):
-    return TruthValue.TRUE if left is not MISSING else TruthValue.FALSE
+    return TruthValue.TRUE if (left is not MISSING and left is not None) else TruthValue.FALSE
 
 
 def _not_exists(left, right):
-    return TruthValue.TRUE if left is MISSING else TruthValue.FALSE
+    return TruthValue.TRUE if (left is MISSING or left is None) else TruthValue.FALSE
 
 
 # --- scope ---
