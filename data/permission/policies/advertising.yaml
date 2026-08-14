@@ -1,0 +1,35 @@
+policies:
+  - policy_id: advertising.report.read
+    version: 1
+    status: active
+    scope:
+      type: tenant
+      tenant_id: company_A
+    effect: allow
+    target:
+      resource_types: [report]
+      resource_match:
+        type: any
+      actions: [read]
+    condition:
+      field: subject.roles
+      operator: contains
+      value: advertising_operator
+
+  - policy_id: advertising.campaign.own_scope
+    version: 1
+    status: active
+    scope:
+      type: tenant
+      tenant_id: company_A
+    effect: allow
+    target:
+      resource_types: [campaign]
+      resource_match:
+        type: any
+      actions: [update]
+    condition:
+      field: subject.scopes
+      operator: scope_contains
+      dimension: business.store
+      value_from: resource.attributes.store_id

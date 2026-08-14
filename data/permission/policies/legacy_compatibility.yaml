@@ -1,0 +1,55 @@
+# Migration-only compatibility policies for the legacy hard-coded RBAC
+# (PermissionManager: sales / manager / admin -> tool).  Remove after cutover.
+policies:
+  - policy_id: legacy.sales.tool.execute
+    version: 1
+    status: active
+    scope:
+      type: tenant
+      tenant_id: company_A
+    effect: allow
+    target:
+      resource_types: [tool]
+      resource_match:
+        type: ids
+        ids: [crm_query, financial_query, market_query]
+      actions: [execute]
+    condition:
+      field: subject.roles
+      operator: contains
+      value: sales
+
+  - policy_id: legacy.manager.tool.execute
+    version: 1
+    status: active
+    scope:
+      type: tenant
+      tenant_id: company_A
+    effect: allow
+    target:
+      resource_types: [tool]
+      resource_match:
+        type: ids
+        ids: [crm_query, customer_update]
+      actions: [execute]
+    condition:
+      field: subject.roles
+      operator: contains
+      value: manager
+
+  - policy_id: legacy.admin.tool.execute
+    version: 1
+    status: active
+    scope:
+      type: tenant
+      tenant_id: company_A
+    effect: allow
+    target:
+      resource_types: [tool]
+      resource_match:
+        type: any
+      actions: [execute]
+    condition:
+      field: subject.roles
+      operator: contains
+      value: admin

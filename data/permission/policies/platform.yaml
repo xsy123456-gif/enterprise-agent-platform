@@ -1,0 +1,32 @@
+policies:
+  - policy_id: platform.business_freeze.deny
+    version: 1
+    status: active
+    scope:
+      type: platform
+    effect: deny
+    target:
+      resource_types: [campaign, order, report]
+      resource_match:
+        type: any
+      actions: [update, write, execute, delete]
+    condition:
+      field: environment.attributes.business_freeze
+      operator: equals
+      value: true
+
+  - policy_id: platform.contractor.deny
+    version: 1
+    status: active
+    scope:
+      type: platform
+    effect: deny
+    target:
+      resource_types: [campaign, order]
+      resource_match:
+        type: any
+      actions: [update, write, delete]
+    condition:
+      field: subject.attributes.employment_type
+      operator: equals
+      value: contractor

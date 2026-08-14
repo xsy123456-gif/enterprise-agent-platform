@@ -1,0 +1,17 @@
+policies:
+  - policy_id: management.report.read
+    version: 1
+    status: active
+    scope:
+      type: tenant
+      tenant_id: company_A
+    effect: allow
+    target:
+      resource_types: [report]
+      resource_match:
+        type: any
+      actions: [read]
+    condition:
+      field: subject.roles
+      operator: contains
+      value: executive_viewer

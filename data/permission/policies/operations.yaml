@@ -1,0 +1,21 @@
+policies:
+  - policy_id: operations.campaign.update
+    version: 1
+    status: active
+    scope:
+      type: tenant
+      tenant_id: company_A
+    effect: allow
+    target:
+      resource_types: [campaign]
+      resource_match:
+        type: any
+      actions: [update]
+    condition:
+      all:
+        - field: subject.department_id
+          operator: in
+          value: [operations, management]
+        - field: subject.professional_level
+          operator: gte_level
+          value: P3
