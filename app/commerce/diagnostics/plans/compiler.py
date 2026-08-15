@@ -98,7 +98,7 @@ class PlanCompiler:
             required_evidence=definition.required_evidence,
             optional_evidence=definition.optional_evidence,
             max_depth=definition.max_depth,
-            entry_step_id=definition.entry_step_id(),
+            entry_step_id=definition.effective_entry_step_id(),
             analysis_period=definition.analysis_period,
             comparison_period=definition.comparison_period,
         )

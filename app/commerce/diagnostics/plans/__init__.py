@@ -78,6 +78,7 @@ from app.commerce.diagnostics.plans.state import PlanExecutionState, StepTrace
 from app.commerce.diagnostics.plans.validator import (
     MaxDepthExceededError,
     PlanValidationError,
+    SecurityFieldViolation,
     validate_plan,
 )
 from app.commerce.diagnostics.plans.when import (
@@ -112,6 +113,7 @@ __all__ = [
     "validate_plan",
     "PlanValidationError",
     "MaxDepthExceededError",
+    "SecurityFieldViolation",
     "resolve_period",
     "FactQueryExecutorPort",
     "FactQuerySpec",

@@ -21,6 +21,36 @@ class MaxDepthExceededError(PlanValidationError):
     """A plan's drill-down depth exceeds its declared ``max_depth``."""
 
 
+class SecurityFieldViolation(PlanValidationError):
+    """A reserved security field appeared in untrusted plan/query params."""
+
+
+# Reserved security field names (normalized).  These must never appear in
+# untrusted plan/step/query params — even though they cannot override the
+# TrustedExecutionContext, their presence is rejected fail-closed.
+RESERVED_SECURITY_FIELDS = frozenset({
+    "tenant", "tenantid", "principal", "principalid", "organization",
+    "organizationid", "org", "orgid", "role", "roles", "scope", "scopes",
+    "permission", "permissions", "clearance", "securityclearance",
+    "accesscontext", "user", "userid", "actor",
+})
+
+
+def _normalize_key(key):
+    return str(key).lower().replace("_", "").replace("-", "")
+
+
+def _scan_security_fields(value, path, violations):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if _normalize_key(key) in RESERVED_SECURITY_FIELDS:
+                violations.append(f"{path}.{key}")
+            _scan_security_fields(item, f"{path}.{key}", violations)
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            _scan_security_fields(item, f"{path}[{index}]", violations)
+
+
 def validate_plan(definition):
     if not definition.plan_id:
         raise PlanValidationError("plan_id is required")
@@ -62,9 +92,22 @@ def validate_plan(definition):
                 )
 
     _check_capabilities(definition)
+    _check_security_fields(definition)
     _check_acyclic(definition)
     _check_result_assemble(definition)
     _check_drill_depth(definition)
+
+
+def _check_security_fields(definition):
+    violations = []
+    for step in definition.steps:
+        _scan_security_fields(step.params, f"step.{step.step_id}.params", violations)
+    _scan_security_fields(definition.analysis_period, "analysis_period", violations)
+    _scan_security_fields(definition.comparison_period, "comparison_period", violations)
+    if violations:
+        raise SecurityFieldViolation(
+            f"reserved security fields found: {', '.join(sorted(violations))}"
+        )
 
 
 def _check_capabilities(definition):
@@ -126,4 +169,10 @@ def _check_result_assemble(definition):
         raise PlanValidationError("RESULT_ASSEMBLE must be a terminal step")
 
 
-__all__ = ["validate_plan", "PlanValidationError", "MaxDepthExceededError"]
+__all__ = [
+    "validate_plan",
+    "PlanValidationError",
+    "MaxDepthExceededError",
+    "SecurityFieldViolation",
+    "RESERVED_SECURITY_FIELDS",
+]

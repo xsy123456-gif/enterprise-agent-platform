@@ -130,6 +130,7 @@ class PlanDefinition:
     required_evidence: tuple[str, ...] = ()
     optional_evidence: tuple[str, ...] = ()
     max_depth: int = 3
+    entry_step_id: str = ""
     # Period *specification* (e.g. {"days": 7}), not a resolved runtime TimeRange.
     analysis_period: dict | None = None
     comparison_period: dict | None = None
@@ -149,8 +150,8 @@ class PlanDefinition:
                 return step
         return None
 
-    def entry_step_id(self):
-        return self.steps[0].step_id if self.steps else ""
+    def effective_entry_step_id(self):
+        return self.entry_step_id or (self.steps[0].step_id if self.steps else "")
 
     def to_dict(self) -> dict:
         return {
@@ -164,6 +165,7 @@ class PlanDefinition:
             "required_evidence": list(self.required_evidence),
             "optional_evidence": list(self.optional_evidence),
             "max_depth": self.max_depth,
+            "entry_step_id": self.entry_step_id,
             "analysis_period": self.analysis_period,
             "comparison_period": self.comparison_period,
         }
@@ -181,6 +183,7 @@ class PlanDefinition:
             required_evidence=tuple(data.get("required_evidence", ())),
             optional_evidence=tuple(data.get("optional_evidence", ())),
             max_depth=data.get("max_depth", 3),
+            entry_step_id=data.get("entry_step_id", ""),
             analysis_period=data.get("analysis_period"),
             comparison_period=data.get("comparison_period"),
         )

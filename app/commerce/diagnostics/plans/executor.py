@@ -1,17 +1,17 @@
 """Deterministic Plan Executor.
 
-Executes a compiled ``PlanIR`` by following its ``next`` DAG edges from the
-entry step: only *reachable* steps whose WHEN conditions are satisfied execute.
-Steps have a failure policy (SKIP / MARK_UNKNOWN / STOP); a max-depth violation
-is a hard typed failure.  RESULT_ASSEMBLE (or an early DATA_QUALITY_GATE) sets
-the plan outcome.
+Executes a compiled ``PlanIR`` with runtime edge/step activation: execution
+starts at the entry step and follows ``next`` edges.  A step runs only when it
+has been *activated* (an executed predecessor transitioned to it) AND its WHEN
+conditions hold; a WHEN-false step does not activate its outgoing transitions,
+so its downstream branch does not run.  Max-depth violations are hard typed
+failures.
 """
 
 import uuid
 
 from app.commerce.diagnostics.plans.handlers import HANDLERS
 from app.commerce.diagnostics.plans.period import resolve_period
-from app.commerce.diagnostics.plans.ports import TrustedExecutionContext
 from app.commerce.diagnostics.plans.schema import (
     FAILURE_MARK_UNKNOWN,
     FAILURE_STOP,
@@ -67,17 +67,23 @@ class PlanExecutor:
         context = PlanContext(compile_context, fact_executor, trusted_context)
         context.plan_ir = ir
 
-        reachable = self._reachable(ir)
-        for step in self._topological_order(ir, reachable):
+        entry = ir.entry_step_id or (ir.steps[0].step_id if ir.steps else "")
+        activated = {entry} if entry else set()
+        for step in self._topological_order(ir):
             if state._terminated:
                 break
+            if step.step_id not in activated:
+                state.mark(step.step_id, STEP_STATUS_SKIPPED, "not activated")
+                continue
             if not evaluate_all(step.when, state):
                 state.mark(step.step_id, STEP_STATUS_SKIPPED)
-                continue
+                continue  # WHEN-false step does not activate its successors
             handler = HANDLERS[step.type]
             try:
                 handler(step, state, context)
                 state.mark(step.step_id, STEP_STATUS_SUCCEEDED)
+                for nxt in step.next:
+                    activated.add(nxt)
                 if state._terminated:
                     break
             except MaxDepthExceededError as error:
@@ -95,35 +101,16 @@ class PlanExecutor:
                     state.mark(step.step_id, STEP_STATUS_MARKED_UNKNOWN, str(error))
                 else:
                     state.mark(step.step_id, STEP_STATUS_SKIPPED, str(error))
-        for step in ir.steps:
-            if step.step_id not in reachable:
-                state.mark(step.step_id, STEP_STATUS_SKIPPED, "unreachable")
         return state
 
     @staticmethod
-    def _reachable(ir):
-        entry = ir.entry_step_id or (ir.steps[0].step_id if ir.steps else "")
-        steps = {step.step_id: step for step in ir.steps}
-        reachable = set()
-        if entry:
-            stack = [entry]
-            while stack:
-                sid = stack.pop()
-                if sid in reachable:
-                    continue
-                reachable.add(sid)
-                stack.extend(steps[sid].next)
-        return reachable
-
-    @staticmethod
-    def _topological_order(ir, reachable):
+    def _topological_order(ir):
         steps = {step.step_id: step for step in ir.steps}
         order_index = {step.step_id: i for i, step in enumerate(ir.steps)}
-        indegree = {step_id: 0 for step_id in reachable}
-        for sid in reachable:
-            for nxt in steps[sid].next:
-                if nxt in reachable:
-                    indegree[nxt] += 1
+        indegree = {step_id: 0 for step_id in steps}
+        for step in ir.steps:
+            for nxt in step.next:
+                indegree[nxt] += 1
         queue = [sid for sid in indegree if indegree[sid] == 0]
         ordered = []
         while queue:
@@ -131,8 +118,6 @@ class PlanExecutor:
             sid = queue.pop(0)
             ordered.append(steps[sid])
             for nxt in steps[sid].next:
-                if nxt not in reachable:
-                    continue
                 indegree[nxt] -= 1
                 if indegree[nxt] == 0:
                     queue.append(nxt)

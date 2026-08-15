@@ -23,7 +23,13 @@ FRESHNESS_UNKNOWN = "UNKNOWN"
 
 @dataclass(frozen=True)
 class TrustedExecutionContext:
-    """Runtime-injected security context; the only source of tenant/principal."""
+    """Immutable trusted projection of the Platform Runtime / AccessContext.
+
+    This is the *only* source of tenant / principal / organization / scope /
+    permission during a plan execution.  Commerce does NOT own the identity or
+    authorization fact source; it only consumes this trusted projection.  The
+    dataclass is frozen so no plan, step, query or handler can mutate it.
+    """
 
     tenant_id: str
     principal_id: str = ""
