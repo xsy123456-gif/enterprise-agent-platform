@@ -20,6 +20,11 @@ METRIC_CLASS_AGGREGATED = "AGGREGATED"
 METRIC_CLASS_DERIVED = "DERIVED"
 METRIC_CLASSES = frozenset({METRIC_CLASS_SOURCE, METRIC_CLASS_AGGREGATED, METRIC_CLASS_DERIVED})
 
+# Zero policies for DERIVED metric formulas.
+ZERO_POLICY_NULL = "NULL"
+ZERO_POLICY_ZERO = "ZERO"
+ZERO_POLICIES = frozenset({ZERO_POLICY_NULL, ZERO_POLICY_ZERO})
+
 
 def _canonical(value):
     """Recursively sort dict keys so serialization is order-independent."""
@@ -161,5 +166,8 @@ __all__ = [
     "METRIC_CLASS_AGGREGATED",
     "METRIC_CLASS_DERIVED",
     "METRIC_CLASSES",
+    "ZERO_POLICY_NULL",
+    "ZERO_POLICY_ZERO",
+    "ZERO_POLICIES",
     "canonical_dimensions_hash",
 ]
