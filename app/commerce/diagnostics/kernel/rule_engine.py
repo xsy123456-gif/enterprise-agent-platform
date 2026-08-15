@@ -57,14 +57,35 @@ def _downgrade(support_level):
     return _SUPPORT_ORDER[max(index - 1, 0)]
 
 
+def _period_overlaps(period, analysis_period):
+    """Temporal alignment: an Evidence period must overlap the analysis period.
+
+    A missing period is treated as aligned (the caller has already scoped it).
+    """
+    if period is None:
+        return True
+    if analysis_period is None:
+        return True
+    if (analysis_period.end is not None and period.start is not None
+            and period.start > analysis_period.end):
+        return False
+    if (analysis_period.start is not None and period.end is not None
+            and period.end < analysis_period.start):
+        return False
+    return True
+
+
 class RuleEngine:
     ALGORITHM_VERSION = ALGORITHM_VERSION
 
-    def evaluate(self, signals, evidence, rule_set, subject):
+    def evaluate(self, signals, evidence, rule_set, subject, analysis_period=None):
         """Evaluate ``rule_set`` and return the list of ``Cause`` objects.
 
-        ``signals`` / ``evidence`` are the already-collected facts for
-        ``subject``.  ``subject`` is required (a Cause names its subject).
+        ``signals`` / ``evidence`` are the collected facts.  Subject alignment
+        defaults to SAME_SUBJECT: only signals/evidence whose subject equals
+        ``subject`` are considered, so cross-SKU/Store facts are never silently
+        combined into a Cause.  ``analysis_period`` (optional) additionally
+        enforces temporal alignment for Evidence.
         """
         signal_index = {}
         for signal in signals:
@@ -73,6 +94,10 @@ class RuleEngine:
             signal_index.setdefault(signal.signal_code, []).append(signal)
         evidence_index = {}
         for item in evidence:
+            if subject is not None and item.subject != subject:
+                continue
+            if not _period_overlaps(item.period, analysis_period):
+                continue
             evidence_index.setdefault(item.code, []).append(item)
 
         causes = []

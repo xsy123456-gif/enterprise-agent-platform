@@ -1,8 +1,10 @@
 """Impact contract.
 
-Impact strictly separates OBSERVED from ESTIMATED from PROJECTED: an estimated
-revenue loss must never be reported as observed.  Every impact carries its
-formula id/version for replay.
+``impact_type`` is the *business impact code* (e.g. REVENUE_LOSS,
+WASTED_AD_SPEND, INVENTORY_CAPITAL_EXPOSURE).  ``classification`` is how the
+impact is known — OBSERVED / ESTIMATED / PROJECTED — and an estimated revenue
+loss must never be reported as observed.  Every impact carries its formula
+id/version for replay.
 """
 
 from dataclasses import dataclass
@@ -10,17 +12,26 @@ from dataclasses import dataclass
 from app.commerce.contracts.errors import CommerceValidationError
 from app.commerce.contracts.subject import SubjectRef
 
-IMPACT_OBSERVED = "OBSERVED"
-IMPACT_ESTIMATED = "ESTIMATED"
-IMPACT_PROJECTED = "PROJECTED"
-IMPACT_TYPES = frozenset({IMPACT_OBSERVED, IMPACT_ESTIMATED, IMPACT_PROJECTED})
+IMPACT_CLASSIFICATION_OBSERVED = "OBSERVED"
+IMPACT_CLASSIFICATION_ESTIMATED = "ESTIMATED"
+IMPACT_CLASSIFICATION_PROJECTED = "PROJECTED"
+IMPACT_CLASSIFICATIONS = frozenset({
+    IMPACT_CLASSIFICATION_OBSERVED,
+    IMPACT_CLASSIFICATION_ESTIMATED,
+    IMPACT_CLASSIFICATION_PROJECTED,
+})
+
+# Backwards-compatible aliases (classification values).
+IMPACT_OBSERVED = IMPACT_CLASSIFICATION_OBSERVED
+IMPACT_ESTIMATED = IMPACT_CLASSIFICATION_ESTIMATED
+IMPACT_PROJECTED = IMPACT_CLASSIFICATION_PROJECTED
 
 
 @dataclass(frozen=True)
 class Impact:
     impact_id: str
-    impact_type: str
-    classification: str
+    impact_type: str          # business impact code, e.g. REVENUE_LOSS
+    classification: str       # OBSERVED / ESTIMATED / PROJECTED
     value: float
     subject: SubjectRef | None = None
     unit: str = ""
@@ -29,8 +40,12 @@ class Impact:
     confidence: float | None = None
 
     def __post_init__(self):
-        if self.impact_type not in IMPACT_TYPES:
-            raise CommerceValidationError(f"unknown impact type: {self.impact_type}")
+        if not self.impact_type:
+            raise CommerceValidationError("impact_type (business impact code) is required")
+        if self.classification not in IMPACT_CLASSIFICATIONS:
+            raise CommerceValidationError(
+                f"unknown impact classification: {self.classification}"
+            )
 
     def to_dict(self) -> dict:
         return {
@@ -62,7 +77,10 @@ class Impact:
 
 __all__ = [
     "Impact",
-    "IMPACT_TYPES",
+    "IMPACT_CLASSIFICATIONS",
+    "IMPACT_CLASSIFICATION_OBSERVED",
+    "IMPACT_CLASSIFICATION_ESTIMATED",
+    "IMPACT_CLASSIFICATION_PROJECTED",
     "IMPACT_OBSERVED",
     "IMPACT_ESTIMATED",
     "IMPACT_PROJECTED",

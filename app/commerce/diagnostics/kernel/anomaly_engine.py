@@ -72,6 +72,16 @@ class AnomalyEngine:
             (current_value - baseline_value) / baseline_value if baseline_value != 0 else None
         )
         absolute_change = current_value - baseline_value
+
+        # Absolute materiality: a change below the policy floor is immaterial
+        # regardless of its relative size (e.g. 1 -> 2 is +100% but noise).
+        if (policy.minimum_absolute_change is not None
+                and abs(absolute_change) < policy.minimum_absolute_change):
+            return Signal(
+                **base, status=SIGNAL_NORMAL, direction=DIRECTION_STABLE,
+                magnitude=round(relative_change, 6) if relative_change is not None else None,
+            )
+
         zscore = None
         if baseline_series and len(baseline_series) >= 2:
             mu = mean(baseline_series)

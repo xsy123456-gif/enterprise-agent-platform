@@ -168,16 +168,23 @@ def test_cause_rejects_unknown_role():
 # --- Impact ---
 
 def test_impact_roundtrip():
+    # impact_type = business impact code; classification = OBSERVED/ESTIMATED/PROJECTED.
     impact = Impact(
-        impact_id="i1", impact_type="ESTIMATED",
-        classification="REVENUE_LOSS", value=500.0, unit="USD",
+        impact_id="i1", impact_type="REVENUE_LOSS",
+        classification="ESTIMATED", value=500.0, unit="USD",
     )
     assert Impact.from_dict(impact.to_dict()) == impact
 
 
-def test_impact_rejects_unknown_type():
+def test_impact_rejects_unknown_classification():
     with pytest.raises(CommerceValidationError):
-        Impact(impact_id="i1", impact_type="GUESSED", classification="X", value=1.0)
+        Impact(impact_id="i1", impact_type="REVENUE_LOSS",
+               classification="GUESSED", value=1.0)
+
+
+def test_impact_rejects_empty_impact_type():
+    with pytest.raises(CommerceValidationError):
+        Impact(impact_id="i1", impact_type="", classification="ESTIMATED", value=1.0)
 
 
 # --- Priority ---

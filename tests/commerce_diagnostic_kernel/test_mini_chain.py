@@ -2,6 +2,15 @@
 -> priority, wired end-to-end without any LLM."""
 
 from app.commerce.contracts.evidence import Evidence
+from app.commerce.contracts.cause import (
+    SUPPORT_CONFIRMED,
+    SUPPORT_INSUFFICIENT_EVIDENCE,
+)
+from app.commerce.contracts.signal import (
+    SIGNAL_ABNORMAL,
+    SIGNAL_WARNING,
+    Signal,
+)
 from app.commerce.contracts.subject import SubjectRef
 from app.commerce.diagnostics import (
     AnomalyEngine,
@@ -42,8 +51,8 @@ RULE_SET = RuleSet(
 )
 
 IMPACT_FORMULA = ImpactFormula(
-    formula_id="est_revenue_loss", version="1.0", impact_type="ESTIMATED",
-    classification="REVENUE_LOSS", unit="currency",
+    formula_id="est_revenue_loss", version="1.0", impact_type="REVENUE_LOSS",
+    classification="ESTIMATED", unit="currency",
     expression="GMV_BASELINE * DROP_RATE", dependencies=("GMV_BASELINE", "DROP_RATE"),
 )
 
@@ -106,7 +115,8 @@ def test_mini_chain_end_to_end():
     assert cause.causal_role == "PRIMARY"
     assert cause.support_level == "CONFIRMED"
 
-    assert impact.impact_type == "ESTIMATED"
+    assert impact.classification == "ESTIMATED"
+    assert impact.impact_type == "REVENUE_LOSS"
     assert impact.value == 50000.0
 
     assert priority.level in ("P0", "P1")
@@ -123,3 +133,82 @@ def test_mini_chain_deterministic_business_outputs():
     assert first[2].causal_role == second[2].causal_role
     assert first[3].value == second[3].value           # impact value
     assert first[4].level == second[4].level           # priority level
+
+
+# ── False correlation mini-chain ─────────────────────────────
+
+def test_false_correlation_price_increase_is_primary():
+    """PRICE_INCREASE is PRIMARY; a slight review change must not be promoted
+    to PRIMARY when the price change explains the conversion drop."""
+    rule_set = RuleSet(
+        rule_set_id="commerce.conversion.v1", version="1.0", domain="conversion",
+        rules=[
+            Rule(
+                rule_id="price", version="1.0",
+                antecedents=[RuleCondition("CVR_DROP", SIGNAL_ABNORMAL, "DOWN")],
+                consequent=RuleConsequent(
+                    cause_code="PRICE_INCREASE", causal_role="PRIMARY",
+                    support_level=SUPPORT_CONFIRMED, required_evidence=("PRICE_INCREASE",),
+                ),
+            ),
+            Rule(
+                rule_id="reputation", version="1.0",
+                antecedents=[
+                    RuleCondition("CVR_DROP", SIGNAL_ABNORMAL, "DOWN"),
+                    RuleCondition("NEGATIVE_REVIEW_RATE_RISE", SIGNAL_WARNING),
+                ],
+                consequent=RuleConsequent(
+                    cause_code="PRODUCT_REPUTATION_DETERIORATION",
+                    causal_role="CONTRIBUTING", support_level="POSSIBLE",
+                    contradicting_evidence=("PRICE_INCREASE",),
+                ),
+            ),
+        ],
+    )
+    signals = [
+        Signal(signal_id="s1", signal_code="CVR_DROP", domain="conversion",
+               subject=SUBJECT, status=SIGNAL_ABNORMAL, direction="DOWN"),
+        Signal(signal_id="s2", signal_code="NEGATIVE_REVIEW_RATE_RISE",
+               domain="review", subject=SUBJECT, status=SIGNAL_WARNING, direction="UP"),
+    ]
+    evidence = [
+        Evidence(evidence_id="e_price", subject=SUBJECT, evidence_type="METRIC",
+                 code="PRICE_INCREASE", value=0.15),
+    ]
+    causes = RuleEngine().evaluate(signals, evidence, rule_set, SUBJECT)
+    by_code = {c.cause_code: c for c in causes}
+    assert by_code["PRICE_INCREASE"].causal_role == "PRIMARY"
+    assert by_code["PRICE_INCREASE"].support_level == SUPPORT_CONFIRMED
+    # The slight review change is downgraded, not promoted to PRIMARY.
+    assert by_code["PRODUCT_REPUTATION_DETERIORATION"].causal_role == "CONTRIBUTING"
+    assert by_code["PRODUCT_REPUTATION_DETERIORATION"].support_level != SUPPORT_CONFIRMED
+
+
+# ── Missing evidence mini-chain ──────────────────────────────
+
+def test_missing_evidence_reputation_is_insufficient():
+    """CVR abnormal + Review unavailable -> Reputation cause is
+    INSUFFICIENT_EVIDENCE (candidate, not confirmed, not excluded)."""
+    rule_set = RuleSet(
+        rule_set_id="commerce.conversion.v1", version="1.0", domain="conversion",
+        rules=[
+            Rule(
+                rule_id="reputation", version="1.0",
+                antecedents=[RuleCondition("CVR_DROP", SIGNAL_ABNORMAL, "DOWN")],
+                consequent=RuleConsequent(
+                    cause_code="PRODUCT_REPUTATION_DETERIORATION",
+                    causal_role="PRIMARY", support_level=SUPPORT_CONFIRMED,
+                    required_evidence=("REVIEW_RATING",),
+                ),
+            ),
+        ],
+    )
+    signals = [
+        Signal(signal_id="s1", signal_code="CVR_DROP", domain="conversion",
+               subject=SUBJECT, status=SIGNAL_ABNORMAL, direction="DOWN"),
+    ]
+    causes = RuleEngine().evaluate(signals, [], rule_set, SUBJECT)
+    assert len(causes) == 1
+    assert causes[0].cause_code == "PRODUCT_REPUTATION_DETERIORATION"
+    assert causes[0].support_level == SUPPORT_INSUFFICIENT_EVIDENCE
+    assert causes[0].causal_role == "PRIMARY"

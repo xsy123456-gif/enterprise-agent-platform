@@ -6,9 +6,10 @@ relative contribution is that change divided by the parent's change.  Children
 are ranked by |relative contribution| (falling back to |absolute| when the
 parent change is zero).
 
-``coverage`` = sum(|child change|) / |parent change|.  It can exceed 1.0 when
-children overlap and be below 1.0 when children are missing — the engine reports
-the actual coverage rather than forcing it to 100%.
+- ``explained_change`` = sum of signed child changes (net explanation);
+- ``unexplained_change`` = parent change - explained change;
+- ``coverage`` = net explanation coverage in [0, 1];
+- ``gross_movement_ratio`` = sum(|child change|) / |parent change| (may be > 1).
 """
 
 from app.commerce.diagnostics.models import ContributionAnalysis, ContributionResult
@@ -53,12 +54,21 @@ class ContributionEngine:
             )
             for index, item in enumerate(ranked)
         ]
-        coverage = (
-            sum(abs(item.absolute_contribution) for item in ranked) / abs(parent_change)
-            if parent_change else None
-        )
+        explained_change = sum(item.absolute_contribution for item in ranked)
+        if parent_change:
+            coverage = max(0.0, min(1.0, explained_change / parent_change))
+            gross_movement_ratio = (
+                sum(abs(item.absolute_contribution) for item in ranked) / abs(parent_change)
+            )
+        else:
+            coverage = None
+            gross_movement_ratio = None
         return ContributionAnalysis(
-            items=tuple(ranked), coverage=coverage,
+            items=tuple(ranked),
+            explained_change=explained_change,
+            unexplained_change=parent_change - explained_change,
+            coverage=coverage,
+            gross_movement_ratio=gross_movement_ratio,
             algorithm_version=self.ALGORITHM_VERSION,
         )
 

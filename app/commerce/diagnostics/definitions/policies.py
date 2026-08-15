@@ -16,6 +16,7 @@ class DiagnosticPolicy:
     # Anomaly detection (§35)
     min_sample_size: int = 0
     min_baseline_volume: float = 0.0
+    minimum_absolute_change: float | None = None
     warning_relative_change: float = 0.10
     abnormal_relative_change: float = 0.20
     critical_relative_change: float = 0.40
@@ -44,6 +45,7 @@ class DiagnosticPolicy:
             "domain": self.domain,
             "min_sample_size": self.min_sample_size,
             "min_baseline_volume": self.min_baseline_volume,
+            "minimum_absolute_change": self.minimum_absolute_change,
             "warning_relative_change": self.warning_relative_change,
             "abnormal_relative_change": self.abnormal_relative_change,
             "critical_relative_change": self.critical_relative_change,
@@ -67,6 +69,7 @@ class DiagnosticPolicy:
             domain=data.get("domain", ""),
             min_sample_size=data.get("min_sample_size", 0),
             min_baseline_volume=data.get("min_baseline_volume", 0.0),
+            minimum_absolute_change=data.get("minimum_absolute_change"),
             warning_relative_change=data.get("warning_relative_change", 0.10),
             abnormal_relative_change=data.get("abnormal_relative_change", 0.20),
             critical_relative_change=data.get("critical_relative_change", 0.40),

@@ -1,23 +1,23 @@
 """ImpactFormula definition — declarative impact estimation.
 
-Impact type is strictly one of OBSERVED / ESTIMATED / PROJECTED; a formula is a
-declarative arithmetic expression over named inputs, evaluated by the safe
-parser (never eval).  ``classification`` names the impact kind (e.g.
-ESTIMATED_REVENUE_LOSS).
+``impact_type`` is the business impact code (e.g. REVENUE_LOSS);
+``classification`` is strictly one of OBSERVED / ESTIMATED / PROJECTED.  The
+formula is a declarative arithmetic expression over named inputs, evaluated by
+the safe parser (never eval).
 """
 
 from dataclasses import dataclass, field
 
 from app.commerce.contracts.errors import CommerceValidationError
-from app.commerce.contracts.impact import IMPACT_TYPES
+from app.commerce.contracts.impact import IMPACT_CLASSIFICATIONS
 
 
 @dataclass(frozen=True)
 class ImpactFormula:
     formula_id: str
     version: str
-    impact_type: str
-    classification: str
+    impact_type: str          # business impact code, e.g. REVENUE_LOSS
+    classification: str       # OBSERVED / ESTIMATED / PROJECTED
     unit: str = ""
     expression: str = ""
     dependencies: tuple[str, ...] = ()
@@ -25,10 +25,12 @@ class ImpactFormula:
 
     def __post_init__(self):
         object.__setattr__(self, "dependencies", tuple(self.dependencies or ()))
-        if self.impact_type not in IMPACT_TYPES:
+        if not self.impact_type:
+            raise CommerceValidationError("impact_type (business impact code) is required")
+        if self.classification not in IMPACT_CLASSIFICATIONS:
             raise CommerceValidationError(
-                f"unknown impact_type {self.impact_type!r}; expected OBSERVED, "
-                "ESTIMATED or PROJECTED"
+                f"unknown impact classification {self.classification!r}; expected "
+                "OBSERVED, ESTIMATED or PROJECTED"
             )
 
     def to_dict(self) -> dict:

@@ -90,3 +90,13 @@ def test_weights_are_normalized():
     # only severity has weight, so score == severity == 0.5 -> P2.
     assert result.score == pytest.approx(0.5)
     assert result.level == "P2"
+
+
+def test_unique_p_levels_for_fixed_policy():
+    # For a fixed policy, uniform factors produce exactly one deterministic level.
+    engine = PriorityEngine()
+    policy = _policy()
+    assert engine.compute(PriorityFactors(1.0, 1.0, 1.0, 1.0, 1.0), policy).level == "P0"
+    assert engine.compute(PriorityFactors(0.7, 0.7, 0.7, 0.7, 0.7), policy).level == "P1"
+    assert engine.compute(PriorityFactors(0.5, 0.5, 0.5, 0.5, 0.5), policy).level == "P2"
+    assert engine.compute(PriorityFactors(0.0, 0.0, 0.0, 0.0, 0.0), policy).level == "P3"

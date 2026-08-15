@@ -10,7 +10,14 @@ from app.commerce.contracts.cause import (
     SUPPORT_POSSIBLE,
 )
 from app.commerce.contracts.evidence import Evidence
-from app.commerce.contracts.signal import SIGNAL_ABNORMAL, SIGNAL_CRITICAL, Signal
+from app.commerce.contracts.signal import (
+    SIGNAL_ABNORMAL,
+    SIGNAL_CRITICAL,
+    SIGNAL_INSUFFICIENT_DATA,
+    SIGNAL_NOT_APPLICABLE,
+    SIGNAL_UNKNOWN,
+    Signal,
+)
 from app.commerce.contracts.subject import SubjectRef
 from app.commerce.diagnostics import (
     Rule,
@@ -21,6 +28,7 @@ from app.commerce.diagnostics import (
 )
 
 SUBJECT = SubjectRef("STORE", "store_amazon_001")
+OTHER_SUBJECT = SubjectRef("SKU", "sku_000087")
 
 
 def _signal(signal_id, code, status=SIGNAL_ABNORMAL, direction="DOWN"):
@@ -186,3 +194,64 @@ def test_supporting_evidence_and_signal_ids_recorded():
     assert causes[0].supporting_evidence_ids == ("ev_REVIEW_RATING",)
     assert causes[0].rule_id == "r1"
     assert causes[0].rule_version == "1.0"
+
+
+def test_cross_subject_evidence_not_combined():
+    # Evidence for a different SKU must not support a Store-level cause.
+    rules = [
+        _rule("r1", [RuleCondition("CVR_DROP", "ABNORMAL")],
+              RuleConsequent("PRODUCT_REPUTATION_DETERIORATION", ROLE_PRIMARY,
+                             SUPPORT_CONFIRMED, required_evidence=("REVIEW_RATING",)))
+    ]
+    engine = RuleEngine()
+    cross_subject_evidence = Evidence(
+        evidence_id="ev_other", subject=OTHER_SUBJECT, evidence_type="METRIC",
+        code="REVIEW_RATING",
+    )
+    causes = engine.evaluate(
+        signals=[_signal("s1", "CVR_DROP")],
+        evidence=[cross_subject_evidence],
+        rule_set=_ruleset(rules), subject=SUBJECT,
+    )
+    # Required evidence not present for THIS subject -> downgraded.
+    assert causes[0].support_level == SUPPORT_INSUFFICIENT_EVIDENCE
+    assert causes[0].supporting_evidence_ids == ()
+
+
+def test_cross_subject_signal_not_combined():
+    rules = [
+        _rule("r1", [RuleCondition("CVR_DROP", "ABNORMAL", "DOWN")],
+              RuleConsequent("X", ROLE_PRIMARY, SUPPORT_CONFIRMED))
+    ]
+    engine = RuleEngine()
+    # The only CVR_DROP signal is for a different SKU -> no match -> UNKNOWN.
+    causes = engine.evaluate(
+        signals=[Signal(signal_id="s_other", signal_code="CVR_DROP", domain="conversion",
+                        subject=OTHER_SUBJECT, status=SIGNAL_ABNORMAL, direction="DOWN")],
+        evidence=[], rule_set=_ruleset(rules), subject=SUBJECT,
+    )
+    assert causes[0].cause_code == "UNKNOWN"
+
+
+def test_minimum_status_rejects_non_severity_values():
+    with pytest.raises(ValueError):
+        RuleCondition("CVR_DROP", SIGNAL_INSUFFICIENT_DATA)
+    with pytest.raises(ValueError):
+        RuleCondition("CVR_DROP", SIGNAL_UNKNOWN)
+    with pytest.raises(ValueError):
+        RuleCondition("CVR_DROP", SIGNAL_NOT_APPLICABLE)
+
+
+def test_non_severity_signal_never_satisfies_threshold():
+    rules = [
+        _rule("r1", [RuleCondition("CVR_DROP", "WARNING")],
+              RuleConsequent("X", ROLE_PRIMARY, SUPPORT_CONFIRMED))
+    ]
+    engine = RuleEngine()
+    # INSUFFICIENT_DATA / UNKNOWN / NOT_APPLICABLE can never satisfy a threshold.
+    for status in (SIGNAL_INSUFFICIENT_DATA, SIGNAL_UNKNOWN, SIGNAL_NOT_APPLICABLE):
+        causes = engine.evaluate(
+            signals=[_signal("s1", "CVR_DROP", status)],
+            evidence=[], rule_set=_ruleset(rules), subject=SUBJECT,
+        )
+        assert causes[0].cause_code == "UNKNOWN"

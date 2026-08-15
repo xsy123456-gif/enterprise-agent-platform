@@ -9,6 +9,19 @@ INSUFFICIENT_EVIDENCE handling.
 
 from dataclasses import dataclass, field
 
+from app.commerce.contracts.signal import (
+    SIGNAL_ABNORMAL,
+    SIGNAL_CRITICAL,
+    SIGNAL_NORMAL,
+    SIGNAL_WARNING,
+)
+
+# Severity thresholds that participate in ordered comparison.  INSUFFICIENT_DATA /
+# UNKNOWN / NOT_APPLICABLE are not severity levels and can never satisfy a rule.
+SEVERITY_STATUSES = frozenset({
+    SIGNAL_NORMAL, SIGNAL_WARNING, SIGNAL_ABNORMAL, SIGNAL_CRITICAL,
+})
+
 
 @dataclass(frozen=True)
 class RuleCondition:
@@ -18,6 +31,13 @@ class RuleCondition:
     signal_code: str
     minimum_status: str = "ABNORMAL"
     direction: str | None = None
+
+    def __post_init__(self):
+        if self.minimum_status not in SEVERITY_STATUSES:
+            raise ValueError(
+                f"minimum_status {self.minimum_status!r} is not a severity level; "
+                "expected NORMAL, WARNING, ABNORMAL or CRITICAL"
+            )
 
     def to_dict(self) -> dict:
         return {

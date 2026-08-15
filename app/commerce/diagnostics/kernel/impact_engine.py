@@ -1,8 +1,9 @@
 """ImpactEngine — evaluates a versioned ImpactFormula.
 
 Uses the same safe arithmetic parser as MetricEngine (no eval).  The impact
-type is carried through from the formula and validated by the ``Impact``
-contract, which strictly separates OBSERVED / ESTIMATED / PROJECTED.
+type (business impact code) and classification (OBSERVED / ESTIMATED /
+PROJECTED) are carried through from the formula and validated by the ``Impact``
+contract.
 """
 
 import uuid

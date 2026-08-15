@@ -109,3 +109,18 @@ def test_algorithm_version_recorded(engine, policy):
     result = _detect(engine, policy, 150.0, 100.0)
     assert result.algorithm_version == "relative_change_zscore_v1"
     assert result.policy_version == "1.0"
+
+
+def test_absolute_materiality_floor(engine):
+    # Without a materiality floor, a 100% relative change flags CRITICAL.
+    no_floor = DiagnosticPolicy(policy_id="p", version="1.0",
+                                min_baseline_volume=0.0, min_sample_size=0)
+    result = _detect(engine, no_floor, 2.0, 1.0, series=[1.0] * 7)
+    assert result.status == SIGNAL_CRITICAL
+
+    # With a materiality floor of 50, the same absolute change (+1.0) is immaterial.
+    floor = DiagnosticPolicy(policy_id="p", version="1.0",
+                             min_baseline_volume=0.0, min_sample_size=0,
+                             minimum_absolute_change=50.0)
+    result = _detect(engine, floor, 2.0, 1.0, series=[1.0] * 7)
+    assert result.status == SIGNAL_NORMAL

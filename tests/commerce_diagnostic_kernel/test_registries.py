@@ -56,10 +56,10 @@ def test_ruleset_registry_version_coexistence():
 def test_impact_registry_version_coexistence():
     registry = ImpactFormulaRegistry()
     registry.register(ImpactFormula(formula_id="est_revenue_loss", version="1.0",
-                                    impact_type="ESTIMATED", classification="REVENUE_LOSS",
+                                    impact_type="REVENUE_LOSS", classification="ESTIMATED",
                                     expression="X * 1", dependencies=("X",)))
     registry.register(ImpactFormula(formula_id="est_revenue_loss", version="2.0",
-                                    impact_type="ESTIMATED", classification="REVENUE_LOSS",
+                                    impact_type="REVENUE_LOSS", classification="ESTIMATED",
                                     expression="X * 2", dependencies=("X",)))
     assert set(registry.versions("est_revenue_loss")) == {"1.0", "2.0"}
 

@@ -168,10 +168,20 @@ class ContributionResult:
 
 @dataclass(frozen=True)
 class ContributionAnalysis:
-    """Attribution result: ranked contributions + coverage."""
+    """Attribution result: ranked contributions + coverage.
+
+    ``explained_change`` is the signed sum of child changes (net explanation);
+    ``unexplained_change`` is the parent change not explained by children;
+    ``coverage`` is the net explanation coverage in [0, 1];
+    ``gross_movement_ratio`` is sum(|child change|) / |parent change| (may be
+    > 1 when children overlap).
+    """
 
     items: tuple[ContributionResult, ...] = ()
+    explained_change: float = 0.0
+    unexplained_change: float = 0.0
     coverage: float | None = None
+    gross_movement_ratio: float | None = None
     algorithm_version: str = ""
 
     def __post_init__(self):
@@ -180,7 +190,10 @@ class ContributionAnalysis:
     def to_dict(self) -> dict:
         return {
             "items": [item.to_dict() for item in self.items],
+            "explained_change": self.explained_change,
+            "unexplained_change": self.unexplained_change,
             "coverage": self.coverage,
+            "gross_movement_ratio": self.gross_movement_ratio,
             "algorithm_version": self.algorithm_version,
         }
 
@@ -188,7 +201,10 @@ class ContributionAnalysis:
     def from_dict(cls, data: dict) -> "ContributionAnalysis":
         return cls(
             items=tuple(ContributionResult.from_dict(i) for i in data.get("items", ())),
+            explained_change=data.get("explained_change", 0.0),
+            unexplained_change=data.get("unexplained_change", 0.0),
             coverage=data.get("coverage"),
+            gross_movement_ratio=data.get("gross_movement_ratio"),
             algorithm_version=data.get("algorithm_version", ""),
         )
 
