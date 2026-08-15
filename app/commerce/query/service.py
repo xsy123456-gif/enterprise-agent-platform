@@ -60,6 +60,11 @@ class CommerceQueryService:
         store = self.repository.find_store_by_external(tenant_id, platform, external_store_id)
         return self._assemble(tenant_id, [store] if store else [], "updated_at", request_id)
 
+    def resolve_store_id_by_external(self, tenant_id, platform, external_store_id):
+        return self.repository.resolve_store_id_by_external(
+            tenant_id, platform, external_store_id
+        )
+
     # ── Catalog ───────────────────────────────────────────────
 
     def list_products(self, tenant_id, request_id=None):
@@ -101,6 +106,10 @@ class CommerceQueryService:
     def list_reviews_by_listing(self, tenant_id, listing_id, request_id=None):
         reviews = self.repository.list_reviews_by_listing(tenant_id, listing_id)
         return self._assemble(tenant_id, reviews, "updated_at", request_id)
+
+    def list_review_insights_by_review(self, tenant_id, review_id, request_id=None):
+        insights = self.repository.list_review_insights_by_review(tenant_id, review_id)
+        return self._assemble(tenant_id, insights, "generated_at", request_id)
 
     # ── Advertising ───────────────────────────────────────────
 

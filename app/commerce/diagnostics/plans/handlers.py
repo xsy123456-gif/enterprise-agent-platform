@@ -76,6 +76,9 @@ def handle_fact_query(step, state, context):
         )
     state.max_drill_depth = max(state.max_drill_depth, drill_depth)
     result = context.fact_executor.execute(spec, context.trusted_context)
+    if getattr(result, "error", None) is not None:
+        from app.commerce.diagnostics.plans.ports import FactQueryExecutionError
+        raise FactQueryExecutionError(result.error)
     code = params.get("evidence_code", spec.capability)
     state.query_quality[code] = result.quality
     state.freshness[code] = result.freshness

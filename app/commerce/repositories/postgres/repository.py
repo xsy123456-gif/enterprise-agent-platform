@@ -193,6 +193,14 @@ class PostgresCommerceRepository(CommerceRepository):
         )
         return Store.from_dict(row) if row else None
 
+    def resolve_store_id_by_external(self, tenant_id, platform, external_store_id):
+        row = self._fetch_row(
+            "SELECT store_id FROM commerce_stores WHERE tenant_id=%s AND platform=%s "
+            "AND external_store_id=%s",
+            (tenant_id, platform, external_store_id),
+        )
+        return row["store_id"] if row else None
+
     # ── Catalog ───────────────────────────────────────────────
 
     def upsert_product(self, tenant_id, product):

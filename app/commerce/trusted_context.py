@@ -30,7 +30,13 @@ def current_trusted_context():
 
 def project_trusted_context(subject, metadata=None):
     """Project a resolved ``PermissionSubject`` + runtime metadata into a
-    ``TrustedExecutionContext``.  Scopes are flattened to ``dimension:value``."""
+    ``TrustedExecutionContext``.  Scopes are flattened to ``dimension:value``.
+
+    ``permissions`` is left EMPTY: the Platform currently does not expose a
+    static effective-permission grant list on the subject, so Commerce must NOT
+    derive permissions from roles.  Actual authorization remains with the
+    Platform PermissionSubject / ExecutionSecurityGate.
+    """
     metadata = metadata or {}
     scopes = []
     for grant in getattr(subject.scopes, "grants", ()) or ():
@@ -41,7 +47,7 @@ def project_trusted_context(subject, metadata=None):
         principal_id=subject.subject_id,
         organization_id=metadata.get("organization_id", ""),
         scopes=tuple(scopes),
-        permissions=tuple(sorted(getattr(subject, "roles", ()) or ())),
+        permissions=(),
         trace_id=metadata.get("trace_id", ""),
         execution_id=metadata.get("execution_id", ""),
         environment=metadata.get("environment", ""),

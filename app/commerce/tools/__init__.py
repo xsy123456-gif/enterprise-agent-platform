@@ -189,9 +189,20 @@ class StoreGetTool(CommerceReadTool):
     def _query(self, arguments, trusted):
         if arguments.get("store_id"):
             return self.query_service.get_store(trusted.tenant_id, arguments["store_id"])
-        return self.query_service.find_store_by_external(
+        # External reference: resolve -> STRICT scope -> read business record.
+        store_id = self.query_service.resolve_store_id_by_external(
             trusted.tenant_id, arguments["platform"], arguments["external_store_id"],
         )
+        if store_id is None:
+            return ToolError.from_code(
+                "SUBJECT_NOT_FOUND", message_key="store not found",
+                details_safe={"platform": arguments["platform"],
+                              "external_store_id": arguments["external_store_id"]},
+            )
+        denied = self._require_store_scope(store_id, trusted)
+        if denied is not None:
+            return denied
+        return self.query_service.get_store(trusted.tenant_id, store_id)
 
 
 # ── catalog.query ───────────────────────────────────────────
@@ -304,13 +315,27 @@ class ReviewQueryTool(CommerceReadTool):
     description = "读取评价/评价洞察（默认不含原始评价内容）"
 
     def _validate(self, arguments):
-        if not arguments.get("listing_id"):
-            raise CommerceValidationError("review.query requires listing_id")
+        subject_type = arguments.get("subject_type", "REVIEW")
+        if subject_type not in ("REVIEW", "REVIEW_INSIGHT"):
+            raise CommerceValidationError(
+                f"unsupported review subject_type: {subject_type!r}"
+            )
+        if subject_type == "REVIEW" and not arguments.get("listing_id"):
+            raise CommerceValidationError("review.query REVIEW requires listing_id")
+        if subject_type == "REVIEW_INSIGHT" and not arguments.get("review_id"):
+            raise CommerceValidationError(
+                "review.query REVIEW_INSIGHT requires review_id"
+            )
 
     def _check_scope(self, arguments, trusted):
         return self._require_store_scope(arguments.get("store_id"), trusted)
 
     def _query(self, arguments, trusted):
+        if arguments.get("subject_type") == "REVIEW_INSIGHT":
+            # AI-derived insight: model/extractor/confidence provenance preserved.
+            return self.query_service.list_review_insights_by_review(
+                trusted.tenant_id, arguments["review_id"],
+            )
         result = self.query_service.list_reviews_by_listing(
             trusted.tenant_id, arguments["listing_id"],
         )
@@ -318,9 +343,10 @@ class ReviewQueryTool(CommerceReadTool):
         if not include_raw:
             data = []
             for review in result.data:
-                data.append(review.to_dict())
-                data[-1].pop("content", None)
-                data[-1].pop("title", None)
+                item = review.to_dict()
+                item.pop("content", None)
+                item.pop("title", None)
+                data.append(item)
             return self._rebuild(result, data, result.page)
         return result
 

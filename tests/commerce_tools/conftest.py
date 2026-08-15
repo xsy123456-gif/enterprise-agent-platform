@@ -6,11 +6,16 @@ import pytest
 
 from app.commerce.diagnostics import build_core_metric_registry
 from app.commerce.domain import (
+    Ad,
+    AdGroup,
+    AdPromotedItem,
+    Campaign,
     InventorySnapshot,
     Listing,
     MetricSeries,
     Product,
     Review,
+    ReviewInsight,
     SKU,
     Store,
 )
@@ -79,9 +84,16 @@ def _seed(repository):
         external_store_id="ext-JP01", name="Japan Store 01", currency="JPY",
         timezone="Asia/Tokyo",
     ))
-    repository.upsert_product("company_A", Product(
-        product_id="product_1", tenant_id="company_A", title="Wireless Mouse",
+    repository.upsert_store("company_A", Store(
+        store_id="US01", tenant_id="company_A", platform="amazon", marketplace="US",
+        external_store_id="ext-US01", name="US Store 01", currency="USD",
+        timezone="America/New_York",
     ))
+    for i in range(1, 6):
+        repository.upsert_product("company_A", Product(
+            product_id=f"product_{i}", tenant_id="company_A",
+            title=f"Product {i}", brand="Acme",
+        ))
     repository.upsert_sku("company_A", SKU(
         sku_id="sku_1", tenant_id="company_A", product_id="product_1",
         merchant_sku="SKU-1",
@@ -110,6 +122,25 @@ def _seed(repository):
     repository.upsert_review("company_A", Review(
         review_id="rev1", tenant_id="company_A", store_id="JP01", listing_id="listing_1",
         platform="amazon", external_review_id="R1", rating=4.0, content="good product",
+    ))
+    repository.upsert_review_insight("company_A", ReviewInsight(
+        review_insight_id="ri1", review_id="rev1", sentiment="positive",
+        model_provider="openai", model_version="gpt-4o", extractor_version="1.0",
+        confidence=0.92,
+    ))
+    repository.upsert_campaign("company_A", Campaign(
+        campaign_id="campaign_1", tenant_id="company_A", store_id="JP01",
+        platform="amazon", external_campaign_id="C1", name="SP Main",
+    ))
+    repository.upsert_ad_group("company_A", AdGroup(
+        ad_group_id="ag1", campaign_id="campaign_1", external_ad_group_id="AG1",
+        name="Group", targeting_type="KEYWORD",
+    ))
+    repository.upsert_ad("company_A", Ad(
+        ad_id="ad1", ad_group_id="ag1", external_ad_id="AD1",
+    ))
+    repository.upsert_ad_promoted_item("company_A", AdPromotedItem(
+        ad_promoted_item_id="api1", ad_id="ad1", listing_id="listing_1",
     ))
 
 
@@ -152,6 +183,11 @@ def trusted_u001(security):
 
 
 @pytest.fixture
+def trusted_u003(security):
+    return trusted_for(security, "U003")
+
+
+@pytest.fixture
 def trusted_u006(security):
     return trusted_for(security, "U006")
 
@@ -159,5 +195,5 @@ def trusted_u006(security):
 __all__ = [
     "ROOT", "CountingRepository", "identity", "permission", "security",
     "counting_repository", "query_service", "metric_registry", "surface",
-    "trusted_u001", "trusted_u006", "trusted_for",
+    "trusted_u001", "trusted_u003", "trusted_u006", "trusted_for",
 ]

@@ -1,0 +1,27 @@
+policies:
+  # Capability-specific authorization: a principal with general "execute" and a
+  # Store Scope does NOT automatically get every Commerce capability.  Here the
+  # advertising department may read metrics/advertising entities but is denied
+  # customer-voice reviews (commerce.review.read).
+  - policy_id: commerce.capability.review.deny.advertising
+    version: 1
+    status: active
+    scope:
+      type: tenant
+      tenant_id: company_A
+    effect: deny
+    target:
+      resource_types: [tool]
+      resource_match:
+        type: any
+      actions: [execute]
+    condition:
+      all:
+        - field: resource.attributes.capability
+          operator: exists
+        - field: resource.attributes.capability
+          operator: equals
+          value: commerce.review.read
+        - field: subject.department_id
+          operator: equals
+          value: advertising

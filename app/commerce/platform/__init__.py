@@ -6,12 +6,15 @@ and a production ``FactQueryExecutorPort`` that goes through
 Capability -> ToolBinding -> ToolRunner -> Tool (never the QueryService /
 Repository directly).  The STRICT scope and permission checks happen inside the
 tool and the governance gate before any canonical query.
+
+Typed errors (PERMISSION_DENIED / INVALID_REQUEST / SUBJECT_NOT_FOUND / ...) are
+propagated as ``FactQueryResult.error`` — never folded into data insufficiency.
 """
 
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 from app.audit.logger import AuditLogger
-from app.capabilities.catalog import CapabilityCatalog
 from app.capabilities.models import CapabilityDefinition
 from app.commerce.diagnostics.plans.ports import (
     FACT_QUALITY_INSUFFICIENT,
@@ -69,7 +72,6 @@ COMMERCE_BINDINGS = tuple(
     for cap in COMMERCE_CAPABILITIES
 )
 
-# capability_id -> tool name (derived from the capability definitions above).
 CAPABILITY_TOOL = {
     "commerce.store.read": "store.get",
     "commerce.catalog.read": "catalog.query",
@@ -94,28 +96,57 @@ _FRESHNESS_MAP = {
     "UNKNOWN": "UNKNOWN",
 }
 
+_audit_context: ContextVar = ContextVar("commerce_audit_context", default=None)
+
+
+class CommerceAuditLogger(AuditLogger):
+    """Audit logger that enriches every record with the current request context
+    (capability / principal / tenant / trace / execution / subject)."""
+
+    def record(self, user, agent, tool, action, detail):
+        item = super().record(user, agent, tool, action, detail)
+        ctx = _audit_context.get()
+        if ctx:
+            item.update(ctx)
+        return item
+
+
+def set_audit_context(ctx):
+    return _audit_context.set(ctx)
+
+
+def reset_audit_context(token):
+    _audit_context.reset(token)
+
+
+def _is_tool_error(output):
+    if isinstance(output, dict):
+        return bool(output.get("code")) and "category" in output
+    return bool(getattr(output, "code", None)) and bool(getattr(output, "category", None))
+
 
 class ToolRunnerFactQueryExecutor(FactQueryExecutorPort):
     """Production FactQueryExecutorPort: Capability -> ToolRunner -> Tool.
 
     It never calls CommerceQueryService / Repository directly; the governed
-    read tools do that behind the STRICT scope and permission checks.
+    read tools do that behind the STRICT scope and permission checks.  Tool
+    errors are propagated as ``FactQueryResult.error`` (typed), never folded
+    into INSUFFICIENT.
     """
 
-    def __init__(self, tool_runner, governance_gate=None,
+    def __init__(self, tool_runner, governance_gate=None, audit=None,
                  capability_tool=None, agent_id="commerce.read"):
         self.tool_runner = tool_runner
         self.governance_gate = governance_gate
+        self.audit = audit
         self.capability_tool = capability_tool or CAPABILITY_TOOL
         self.agent_id = agent_id
 
     def execute(self, spec: FactQuerySpec, trusted_context):
         tool_name = self.capability_tool.get(spec.capability)
         if tool_name is None:
-            return FactQueryResult(
-                query_id=spec.query_id, records=(),
-                quality=FACT_QUALITY_INSUFFICIENT,
-            )
+            return FactQueryResult(query_id=spec.query_id, records=(),
+                                   error="PERMISSION_DENIED")
         request = ToolCallRequest(
             tool_name=tool_name,
             arguments=self._arguments(spec),
@@ -126,34 +157,40 @@ class ToolRunnerFactQueryExecutor(FactQueryExecutorPort):
             tenant_id=trusted_context.tenant_id,
             capability=spec.capability,
         )
+        audit_ctx = {
+            "capability": spec.capability,
+            "tool": tool_name,
+            "principal_id": trusted_context.principal_id,
+            "tenant_id": trusted_context.tenant_id,
+            "trace_id": request.trace_id,
+            "execution_id": request.execution_id,
+            "subject": spec.subject.to_dict() if spec.subject else None,
+        }
         token = set_trusted_context(trusted_context)
+        audit_token = set_audit_context(audit_ctx)
         try:
             if self.governance_gate is not None:
                 allowed, _decision = self.governance_gate.check(request)
                 if not allowed:
-                    return FactQueryResult(
-                        query_id=spec.query_id, records=(),
-                        quality=FACT_QUALITY_INSUFFICIENT,
-                    )
+                    if self.audit is not None:
+                        self.audit.record(
+                            user=request.user_id, agent=request.agent_id,
+                            tool=request.tool_name, action="deny",
+                            detail=request.arguments,
+                        )
+                    return FactQueryResult(query_id=spec.query_id, records=(),
+                                           error="PERMISSION_DENIED")
             result = self.tool_runner.execute(request)
         finally:
+            reset_audit_context(audit_token)
             reset_trusted_context(token)
         if not result.success:
-            return FactQueryResult(
-                query_id=spec.query_id, records=(),
-                quality=FACT_QUALITY_INSUFFICIENT,
-            )
+            return FactQueryResult(query_id=spec.query_id, records=(),
+                                   error="INTERNAL_ERROR")
         output = result.output
-        if isinstance(output, dict) and output.get("code") and "category" in output:
-            return FactQueryResult(
-                query_id=spec.query_id, records=(),
-                quality=FACT_QUALITY_INSUFFICIENT,
-            )
-        if hasattr(output, "code") and getattr(output, "category", None):
-            return FactQueryResult(
-                query_id=spec.query_id, records=(),
-                quality=FACT_QUALITY_INSUFFICIENT,
-            )
+        if _is_tool_error(output):
+            code = output.get("code") if isinstance(output, dict) else output.code
+            return FactQueryResult(query_id=spec.query_id, records=(), error=code)
         return self._to_fact_result(spec, output)
 
     @staticmethod
@@ -211,7 +248,7 @@ def build_commerce_tool_surface(query_service, metric_registry=None,
     for name, tool in tools.items():
         tool_registry.register(name, tool)
 
-    audit = AuditLogger()
+    audit = CommerceAuditLogger()
     tool_runner = ToolRunner(
         tool_registry, StructuralPermission(), audit,
         event_bus or _null_event_bus(), agent_registry=agent_registry,
@@ -221,7 +258,7 @@ def build_commerce_tool_surface(query_service, metric_registry=None,
             agent_registry.bind_tool(binding)
 
     fact_executor = ToolRunnerFactQueryExecutor(
-        tool_runner, governance_gate=governance_gate,
+        tool_runner, governance_gate=governance_gate, audit=audit,
         capability_tool=CAPABILITY_TOOL,
     )
     return CommerceToolSurface(
@@ -250,5 +287,6 @@ __all__ = [
     "CAPABILITY_TOOL",
     "ToolRunnerFactQueryExecutor",
     "CommerceToolSurface",
+    "CommerceAuditLogger",
     "build_commerce_tool_surface",
 ]

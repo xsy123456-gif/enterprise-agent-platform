@@ -99,6 +99,13 @@ class InMemoryCommerceRepository(CommerceRepository):
                 return store
         return None
 
+    def resolve_store_id_by_external(self, tenant_id, platform, external_store_id):
+        for store in self._stores.values():
+            if (store.tenant_id == tenant_id and store.platform == platform
+                    and store.external_store_id == external_store_id):
+                return store.store_id
+        return None
+
     # ── Catalog ───────────────────────────────────────────────
 
     def upsert_product(self, tenant_id, product):

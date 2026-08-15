@@ -55,6 +55,12 @@ class CommerceRepository(ABC):
     ) -> Store | None:
         pass
 
+    @abstractmethod
+    def resolve_store_id_by_external(
+        self, tenant_id: str, platform: str, external_store_id: str,
+    ) -> str | None:
+        pass
+
     # ── Catalog: Product / SKU / Listing / ListingItem ─────
     @abstractmethod
     def upsert_product(self, tenant_id: str, product: Product) -> Product:

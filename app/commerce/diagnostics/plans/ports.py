@@ -10,6 +10,7 @@ trusted context, never from the plan, step params, the spec, or an LLM.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+from app.commerce.contracts.errors import CommerceError
 from app.commerce.contracts.subject import SubjectRef
 
 FACT_QUALITY_VALID = "VALID"
@@ -19,6 +20,16 @@ FACT_QUALITY_INSUFFICIENT = "INSUFFICIENT"
 FRESHNESS_FRESH = "FRESH"
 FRESHNESS_STALE = "STALE"
 FRESHNESS_UNKNOWN = "UNKNOWN"
+
+
+class FactQueryExecutionError(CommerceError):
+    """A typed fact-query execution error (PERMISSION_DENIED, INVALID_REQUEST,
+    SUBJECT_NOT_FOUND, ...).  It is NOT data insufficiency and must never be
+    interpreted as such by the plan / DataQualityGate."""
+
+    def __init__(self, code, message=""):
+        self.code = code
+        super().__init__(message or code)
 
 
 @dataclass(frozen=True)
@@ -73,6 +84,7 @@ class FactQueryResult:
     quality: str = FACT_QUALITY_VALID
     freshness: str = FRESHNESS_UNKNOWN
     provenance: dict | None = None
+    error: str | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "records", tuple(dict(r) for r in (self.records or ())))
@@ -117,6 +129,7 @@ __all__ = [
     "FactQueryResult",
     "FakeFactQueryExecutor",
     "TrustedExecutionContext",
+    "FactQueryExecutionError",
     "FACT_QUALITY_VALID",
     "FACT_QUALITY_PARTIAL",
     "FACT_QUALITY_INSUFFICIENT",
