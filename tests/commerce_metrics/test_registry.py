@@ -18,9 +18,9 @@ from app.commerce.domain.metrics import (
 )
 
 
-def _derived(metric, deps, formula):
+def _derived(metric, deps, formula, version="1.0"):
     return MetricDefinition(
-        metric=metric, metric_class=METRIC_CLASS_DERIVED, version="1.0",
+        metric=metric, metric_class=METRIC_CLASS_DERIVED, version=version,
         dependencies=tuple(deps), formula=formula,
     )
 
@@ -32,11 +32,52 @@ def test_register_and_get():
     assert registry.get("ROAS", "1.0").version == "1.0"
 
 
-def test_duplicate_metric_rejected():
+def test_duplicate_same_version_rejected():
     registry = MetricDefinitionRegistry()
     registry.register(_derived("ROAS", ("AD_SALES", "AD_SPEND"), "AD_SALES / AD_SPEND"))
     with pytest.raises(DuplicateMetricDefinitionError):
         registry.register(_derived("ROAS", ("A", "B"), "A / B"))
+
+
+def test_same_name_different_version_coexist():
+    registry = MetricDefinitionRegistry()
+    registry.register(_derived("ROAS", ("AD_SALES", "AD_SPEND"), "AD_SALES / AD_SPEND",
+                               version="1.0"))
+    registry.register(_derived("ROAS", ("AD_SALES", "AD_SPEND"), "AD_SALES / AD_SPEND",
+                               version="2.0"))
+    assert set(registry.versions("ROAS")) == {"1.0", "2.0"}
+
+
+def test_active_version_is_first_registered():
+    registry = MetricDefinitionRegistry()
+    registry.register(_derived("ROAS", ("AD_SALES", "AD_SPEND"), "AD_SALES / AD_SPEND",
+                               version="1.0"))
+    registry.register(_derived("ROAS", ("AD_SALES", "AD_SPEND"), "AD_SALES / AD_SPEND",
+                               version="2.0"))
+    # Registering a later version must not silently change the active version.
+    assert registry.active_version("ROAS") == "1.0"
+    assert registry.get("ROAS").version == "1.0"
+
+
+def test_get_historical_version():
+    registry = MetricDefinitionRegistry()
+    registry.register(_derived("ROAS", ("AD_SALES", "AD_SPEND"), "AD_SALES / AD_SPEND",
+                               version="1.0"))
+    registry.register(_derived("ROAS", ("AD_SALES", "AD_SPEND"), "AD_SALES / AD_SPEND",
+                               version="2.0"))
+    assert registry.get("ROAS", "1.0").version == "1.0"
+    assert registry.get("ROAS", "2.0").version == "2.0"
+
+
+def test_explicit_activate():
+    registry = MetricDefinitionRegistry()
+    registry.register(_derived("ROAS", ("AD_SALES", "AD_SPEND"), "AD_SALES / AD_SPEND",
+                               version="1.0"))
+    registry.register(_derived("ROAS", ("AD_SALES", "AD_SPEND"), "AD_SALES / AD_SPEND",
+                               version="2.0"))
+    registry.activate("ROAS", "2.0")
+    assert registry.active_version("ROAS") == "2.0"
+    assert registry.get("ROAS").version == "2.0"
 
 
 def test_unknown_metric():

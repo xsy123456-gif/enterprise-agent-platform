@@ -4,6 +4,11 @@ Every DERIVED metric has exactly one definition here — no Skill re-implements
 a formula.  Leaf SOURCE / AGGREGATED metrics are also registered so the
 resolver can distinguish them from DERIVED metrics and reject unknown
 dependencies.
+
+``SALES_VELOCITY`` is DERIVED (UNITS / PERIOD_DAYS), never a platform SOURCE
+fact: it is computed from canonical sales facts plus period context, and no
+fixed observation window is hard-coded.  ``DAYS_OF_SUPPLY`` depends on it and
+pins its version so replay never drifts.
 """
 
 from app.commerce.diagnostics.registry.metric_registry import MetricDefinitionRegistry
@@ -30,7 +35,7 @@ def _aggregated(metric, unit=""):
 
 
 def _derived(metric, dependencies, formula, unit="ratio", precision=4,
-             zero_policy="NULL"):
+             zero_policy="NULL", dependency_versions=None):
     return MetricDefinition(
         metric=metric,
         metric_class=METRIC_CLASS_DERIVED,
@@ -40,6 +45,7 @@ def _derived(metric, dependencies, formula, unit="ratio", precision=4,
         unit=unit,
         precision=precision,
         zero_policy=zero_policy,
+        dependency_versions=dependency_versions or {},
     )
 
 
@@ -53,13 +59,14 @@ def build_core_metric_definitions():
         _source("AD_SALES", "currency"),
         _source("AD_CLICKS", "count"),
         _source("AVAILABLE_INVENTORY", "units"),
+        # Period context for velocity; supplied by the plan from period start/end.
+        _source("PERIOD_DAYS", "days"),
         _aggregated("GMV", "currency"),
         _aggregated("NET_SALES", "currency"),
         _aggregated("ORDERS", "count"),
         _aggregated("UNITS", "count"),
         _aggregated("AD_ORDERS", "count"),
         _aggregated("ADD_TO_CARTS", "count"),
-        _aggregated("SALES_VELOCITY", "units/day"),
         _aggregated("REFUND_AMOUNT", "currency"),
     ]
     derived_metrics = [
@@ -78,8 +85,11 @@ def build_core_metric_definitions():
         _derived("ACOS", ("AD_SPEND", "AD_SALES"), "AD_SPEND / AD_SALES"),
         _derived("AD_CVR", ("AD_ORDERS", "AD_CLICKS"), "AD_ORDERS / AD_CLICKS"),
         # Inventory
+        _derived("SALES_VELOCITY", ("UNITS", "PERIOD_DAYS"), "UNITS / PERIOD_DAYS",
+                 unit="units/day", precision=2),
         _derived("DAYS_OF_SUPPLY", ("AVAILABLE_INVENTORY", "SALES_VELOCITY"),
-                 "AVAILABLE_INVENTORY / SALES_VELOCITY", unit="days", precision=2),
+                 "AVAILABLE_INVENTORY / SALES_VELOCITY", unit="days", precision=2,
+                 dependency_versions={"SALES_VELOCITY": _VERSION}),
     ]
     return source_metrics + derived_metrics
 

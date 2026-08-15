@@ -29,7 +29,17 @@ class UnknownMetricVersionError(MetricError):
 
 
 class MissingDependencyError(MetricError):
-    """A required dependency value was not supplied at compute time."""
+    """A required dependency value was not supplied at compute time.
+
+    .. deprecated:: Phase 3 hardening
+       Missing *runtime business facts* now yield an INSUFFICIENT
+       ``MetricResult`` instead of raising.  This error is retained only for
+       definition/configuration contexts.
+    """
+
+
+class UnpinnedDependencyError(MetricError):
+    """A DERIVED dependency is not pinned to a version (would drift)."""
 
 
 class CyclicDependencyError(MetricError):
@@ -51,6 +61,7 @@ __all__ = [
     "UnknownMetricError",
     "UnknownMetricVersionError",
     "MissingDependencyError",
+    "UnpinnedDependencyError",
     "CyclicDependencyError",
     "MetricEvaluationError",
     "DivisionByZeroError",

@@ -3,14 +3,11 @@
 import pytest
 
 from app.commerce.diagnostics import (
+    METRIC_STATUS_INSUFFICIENT,
     MetricEngine,
-    MetricRequirementResolver,
     build_core_metric_registry,
 )
-from app.commerce.diagnostics.errors import (
-    MetricDefinitionError,
-    MissingDependencyError,
-)
+from app.commerce.diagnostics.errors import MetricDefinitionError
 from app.commerce.diagnostics.registry.metric_registry import MetricDefinitionRegistry
 from app.commerce.domain.metrics import (
     METRIC_CLASS_DERIVED,
@@ -38,7 +35,8 @@ def test_compute_core_metrics(engine):
     assert engine.compute("ACOS", {"AD_SPEND": 50.0, "AD_SALES": 100.0}).value == 0.5
     assert engine.compute("AOV", {"GMV": 1000.0, "ORDERS": 40}).value == 25.0
     assert engine.compute(
-        "DAYS_OF_SUPPLY", {"AVAILABLE_INVENTORY": 300, "SALES_VELOCITY": 10}
+        "DAYS_OF_SUPPLY",
+        {"AVAILABLE_INVENTORY": 300, "UNITS": 100, "PERIOD_DAYS": 10},
     ).value == 30.0
 
 
@@ -70,12 +68,15 @@ def test_zero_policy_zero():
 
 
 def test_missing_dependency_value(engine):
-    with pytest.raises(MissingDependencyError):
-        engine.compute("ROAS", {"AD_SALES": 100.0})
+    result = engine.compute("ROAS", {"AD_SALES": 100.0})
+    assert result.status == METRIC_STATUS_INSUFFICIENT
+    assert result.value is None
+    assert result.missing_dependencies == ("AD_SPEND",)
 
 
 def test_none_dependency_value(engine):
     result = engine.compute("ROAS", {"AD_SALES": 100.0, "AD_SPEND": None})
+    assert result.status == METRIC_STATUS_INSUFFICIENT
     assert result.value is None
     assert result.missing_dependencies == ("AD_SPEND",)
 
@@ -97,7 +98,7 @@ def test_nested_derived_computation():
     ))
     registry.register(MetricDefinition(
         metric="B", metric_class=METRIC_CLASS_DERIVED, version="1.0",
-        dependencies=("A",), formula="A * 2",
+        dependencies=("A",), formula="A * 2", dependency_versions={"A": "1.0"},
     ))
     engine = MetricEngine(registry)
     result = engine.compute("B", {"X": 10.0, "Y": 2.0})

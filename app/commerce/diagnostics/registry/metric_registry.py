@@ -1,8 +1,10 @@
 """MetricDefinitionRegistry — the single source of truth for metric formulas.
 
-One metric name maps to exactly one definition (one formula).  Duplicate
-registration is rejected, and every definition is structurally validated at
-registration time.
+Definition identity is ``(metric_name, version)``: multiple versions of the
+same metric may coexist, while registering the same ``(name, version)`` twice
+fails closed.  Each metric has an explicit *active* version used when no
+version is requested; registering a later version never silently changes the
+active version.
 """
 
 from app.commerce.diagnostics.errors import (
@@ -41,6 +43,13 @@ def validate_definition(definition):
         raise MetricDefinitionError(
             f"precision must be >= 0 for {definition.metric!r}"
         )
+    pinned = set(definition.dependency_versions)
+    unknown_pins = pinned - set(definition.dependencies)
+    if unknown_pins:
+        raise MetricDefinitionError(
+            f"metric {definition.metric!r} pins undeclared dependencies: "
+            f"{sorted(unknown_pins)}"
+        )
     if definition.metric_class == METRIC_CLASS_DERIVED:
         if not definition.formula:
             raise MetricDefinitionError(
@@ -65,18 +74,24 @@ def validate_definition(definition):
 
 
 class MetricDefinitionRegistry:
-    """Registers and serves metric definitions keyed by metric name."""
+    """Registers and serves metric definitions keyed by ``(name, version)``."""
 
     def __init__(self):
         self._definitions = {}
+        self._active = {}
 
     def register(self, definition):
         validate_definition(definition)
-        if definition.metric in self._definitions:
+        key = (definition.metric, definition.version)
+        if key in self._definitions:
             raise DuplicateMetricDefinitionError(
-                f"metric {definition.metric!r} is already defined"
+                f"metric {definition.metric!r} version {definition.version!r} "
+                "is already defined"
             )
-        self._definitions[definition.metric] = definition
+        self._definitions[key] = definition
+        # First version becomes active; later versions never auto-activate.
+        if definition.metric not in self._active:
+            self._active[definition.metric] = definition.version
         return definition
 
     def register_many(self, definitions):
@@ -85,24 +100,47 @@ class MetricDefinitionRegistry:
         return self
 
     def get(self, metric, version=None):
-        definition = self._definitions.get(metric)
+        """Return the requested version, or the active version when ``None``."""
+        if version is None:
+            active = self._active.get(metric)
+            if active is None:
+                raise UnknownMetricError(f"metric {metric!r} is not defined")
+            return self._definitions[(metric, active)]
+        definition = self._definitions.get((metric, version))
         if definition is None:
-            raise UnknownMetricError(f"metric {metric!r} is not defined")
-        if version is not None and definition.version != version:
+            if metric not in self._active:
+                raise UnknownMetricError(f"metric {metric!r} is not defined")
             raise UnknownMetricVersionError(
-                f"metric {metric!r} has version {definition.version!r}, "
-                f"not {version!r}"
+                f"metric {metric!r} has no version {version!r}"
             )
         return definition
 
+    def activate(self, metric, version):
+        """Explicitly promote ``version`` to the active version of ``metric``."""
+        definition = self._definitions.get((metric, version))
+        if definition is None:
+            raise UnknownMetricVersionError(
+                f"metric {metric!r} has no version {version!r}"
+            )
+        self._active[metric] = version
+        return definition
+
+    def active_version(self, metric):
+        return self._active.get(metric)
+
+    def versions(self, metric):
+        return sorted(
+            version for (name, version) in self._definitions if name == metric
+        )
+
     def has(self, metric):
-        return metric in self._definitions
+        return metric in self._active
 
     def list_definitions(self):
-        return sorted(self._definitions.values(), key=lambda d: d.metric)
+        return sorted(self._definitions.values(), key=lambda d: (d.metric, d.version))
 
     def __contains__(self, metric):
-        return metric in self._definitions
+        return metric in self._active
 
     def __len__(self):
         return len(self._definitions)

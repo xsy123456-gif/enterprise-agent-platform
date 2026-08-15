@@ -12,7 +12,14 @@ from app.commerce.diagnostics.definitions.metrics import (
 )
 from app.commerce.diagnostics.kernel.comparison_engine import ComparisonEngine
 from app.commerce.diagnostics.kernel.metric_engine import MetricEngine
-from app.commerce.diagnostics.models import ComparisonResult, MetricResult
+from app.commerce.diagnostics.models import (
+    METRIC_STATUS_COMPLETE,
+    METRIC_STATUS_INSUFFICIENT,
+    METRIC_STATUS_NULL_RESULT,
+    METRIC_STATUSES,
+    ComparisonResult,
+    MetricResult,
+)
 from app.commerce.diagnostics.registry.metric_registry import (
     MetricDefinitionRegistry,
 )
@@ -27,4 +34,8 @@ __all__ = [
     "MetricRequirementResolver",
     "build_core_metric_definitions",
     "build_core_metric_registry",
+    "METRIC_STATUS_COMPLETE",
+    "METRIC_STATUS_INSUFFICIENT",
+    "METRIC_STATUS_NULL_RESULT",
+    "METRIC_STATUSES",
 ]

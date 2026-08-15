@@ -116,9 +116,12 @@ class MetricSeries:
 class MetricDefinition:
     """Single source of truth for a metric, especially DERIVED metrics.
 
-    ``dependencies`` name the SOURCE / AGGREGATED metrics required to compute a
-    DERIVED metric; ``MetricRequirementResolver`` (Phase 3) walks them so a
-    DiagnosticPlan only declares ``ROAS`` without knowing its dependencies.
+    ``dependencies`` name the metrics required to compute a DERIVED metric;
+    ``MetricRequirementResolver`` (Phase 3) walks them so a DiagnosticPlan only
+    declares ``ROAS`` without knowing its dependencies.
+
+    ``dependency_versions`` pins the version of any DERIVED dependency so that
+    replaying a historical definition never drifts to the latest version.
     """
 
     metric: str
@@ -129,9 +132,11 @@ class MetricDefinition:
     zero_policy: str = "NULL"
     precision: int = 4
     unit: str = ""
+    dependency_versions: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self):
         object.__setattr__(self, "dependencies", tuple(self.dependencies or ()))
+        object.__setattr__(self, "dependency_versions", dict(self.dependency_versions or {}))
 
     def to_dict(self) -> dict:
         return {
@@ -143,6 +148,7 @@ class MetricDefinition:
             "zero_policy": self.zero_policy,
             "precision": self.precision,
             "unit": self.unit,
+            "dependency_versions": dict(self.dependency_versions),
         }
 
     @classmethod
@@ -156,6 +162,7 @@ class MetricDefinition:
             zero_policy=data.get("zero_policy", "NULL"),
             precision=data.get("precision", 4),
             unit=data.get("unit", ""),
+            dependency_versions=data.get("dependency_versions", {}),
         )
 
 

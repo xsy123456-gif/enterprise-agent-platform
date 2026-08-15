@@ -8,6 +8,15 @@ later phases.
 
 from dataclasses import dataclass
 
+METRIC_STATUS_COMPLETE = "COMPLETE"
+METRIC_STATUS_INSUFFICIENT = "INSUFFICIENT"
+METRIC_STATUS_NULL_RESULT = "NULL_RESULT"
+METRIC_STATUSES = frozenset({
+    METRIC_STATUS_COMPLETE,
+    METRIC_STATUS_INSUFFICIENT,
+    METRIC_STATUS_NULL_RESULT,
+})
+
 
 @dataclass(frozen=True)
 class MetricResult:
@@ -16,6 +25,7 @@ class MetricResult:
     value: float | None
     unit: str
     precision: int
+    status: str = METRIC_STATUS_COMPLETE
     dependencies_used: tuple[str, ...] = ()
     zero_policy_applied: bool = False
     missing_dependencies: tuple[str, ...] = ()
@@ -23,6 +33,8 @@ class MetricResult:
     def __post_init__(self):
         object.__setattr__(self, "dependencies_used", tuple(self.dependencies_used or ()))
         object.__setattr__(self, "missing_dependencies", tuple(self.missing_dependencies or ()))
+        if self.status not in METRIC_STATUSES:
+            raise ValueError(f"unknown metric status: {self.status}")
 
     def to_dict(self) -> dict:
         return {
@@ -31,6 +43,7 @@ class MetricResult:
             "value": self.value,
             "unit": self.unit,
             "precision": self.precision,
+            "status": self.status,
             "dependencies_used": list(self.dependencies_used),
             "zero_policy_applied": self.zero_policy_applied,
             "missing_dependencies": list(self.missing_dependencies),
@@ -44,6 +57,7 @@ class MetricResult:
             value=data.get("value"),
             unit=data.get("unit", ""),
             precision=data.get("precision", 4),
+            status=data.get("status", METRIC_STATUS_COMPLETE),
             dependencies_used=tuple(data.get("dependencies_used", ())),
             zero_policy_applied=data.get("zero_policy_applied", False),
             missing_dependencies=tuple(data.get("missing_dependencies", ())),
@@ -75,4 +89,11 @@ class ComparisonResult:
         )
 
 
-__all__ = ["MetricResult", "ComparisonResult"]
+__all__ = [
+    "MetricResult",
+    "ComparisonResult",
+    "METRIC_STATUS_COMPLETE",
+    "METRIC_STATUS_INSUFFICIENT",
+    "METRIC_STATUS_NULL_RESULT",
+    "METRIC_STATUSES",
+]
