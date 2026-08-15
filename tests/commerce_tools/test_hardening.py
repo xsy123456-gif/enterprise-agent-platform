@@ -219,15 +219,17 @@ def test_catalog_pagination_contracts(surface, trusted_u001):
     assert not (ids1 & ids2)  # deterministic, no overlap
 
 
-def test_catalog_pagination_malformed_cursor(surface, trusted_u001):
+def test_catalog_pagination_malformed_cursor(surface, counting_repository, trusted_u001):
     tool = surface.tools["catalog.query"]
     token = set_trusted_context(trusted_u001)
     try:
-        result = tool.execute({"subject_type": "PRODUCT", "page": {"limit": 2, "cursor": "opaque-not-a-number"}})
+        result = tool.execute({"subject_type": "PRODUCT",
+                               "page": {"limit": 2, "cursor": "opaque-not-a-number"}})
     finally:
         reset_trusted_context(token)
-    # Malformed cursor is treated as offset 0 (fail-safe first page).
-    assert result.page.returned_count == 2
+    # Malformed cursor is a typed INVALID_REQUEST, never a silent reset.
+    assert result.code == "INVALID_REQUEST"
+    assert counting_repository.query_count == 0
 
 
 def test_review_query_returns_insight_with_provenance(surface, trusted_u001):

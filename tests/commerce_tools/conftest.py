@@ -114,24 +114,38 @@ def _seed(repository):
         granularity="DAILY", period_start="2026-08-01", period_end="2026-08-02",
         value=40.0,
     ))
-    repository.append_inventory_snapshot("company_A", InventorySnapshot(
-        inventory_snapshot_id="inv1", tenant_id="company_A", store_id="JP01",
-        sku_id="sku_1", available_quantity=100, snapshot_at="2026-08-01T00:00:00+00:00",
-        source_metadata={"source": "amazon"},
-    ))
-    repository.upsert_review("company_A", Review(
-        review_id="rev1", tenant_id="company_A", store_id="JP01", listing_id="listing_1",
-        platform="amazon", external_review_id="R1", rating=4.0, content="good product",
-    ))
+    for day in range(1, 6):
+        repository.upsert_metric("company_A", MetricSeries(
+            metric_record_id=f"gmv_day{day}", tenant_id="company_A",
+            subject_type="STORE", subject_id="JP01", metric_name="GMV",
+            metric_class="AGGREGATED", granularity="DAILY",
+            period_start=f"2026-08-{day:02d}", period_end=f"2026-08-{day + 1:02d}",
+            value=1000.0 * day,
+        ))
+    for i, snap_at in enumerate(("2026-08-01T00:00:00+00:00",
+                                 "2026-08-02T00:00:00+00:00",
+                                 "2026-08-03T00:00:00+00:00")):
+        repository.append_inventory_snapshot("company_A", InventorySnapshot(
+            inventory_snapshot_id=f"inv{i + 1}", tenant_id="company_A",
+            store_id="JP01", sku_id="sku_1", available_quantity=100 - i * 10,
+            snapshot_at=snap_at, source_metadata={"source": "amazon"},
+        ))
+    for i in range(1, 4):
+        repository.upsert_review("company_A", Review(
+            review_id=f"rev{i}", tenant_id="company_A", store_id="JP01",
+            listing_id="listing_1", platform="amazon", external_review_id=f"R{i}",
+            rating=4.0, content=f"review {i}",
+        ))
     repository.upsert_review_insight("company_A", ReviewInsight(
         review_insight_id="ri1", review_id="rev1", sentiment="positive",
         model_provider="openai", model_version="gpt-4o", extractor_version="1.0",
         confidence=0.92,
     ))
-    repository.upsert_campaign("company_A", Campaign(
-        campaign_id="campaign_1", tenant_id="company_A", store_id="JP01",
-        platform="amazon", external_campaign_id="C1", name="SP Main",
-    ))
+    for i in range(1, 4):
+        repository.upsert_campaign("company_A", Campaign(
+            campaign_id=f"campaign_{i}", tenant_id="company_A", store_id="JP01",
+            platform="amazon", external_campaign_id=f"C{i}", name=f"Campaign {i}",
+        ))
     repository.upsert_ad_group("company_A", AdGroup(
         ad_group_id="ag1", campaign_id="campaign_1", external_ad_group_id="AG1",
         name="Group", targeting_type="KEYWORD",

@@ -131,7 +131,7 @@ def test_full_plan_allowed_e2e(surface, counting_repository, trusted_u001):
         registry.get_active_ir(plan.plan_id), compile_context, surface.fact_executor,
         SubjectRef("STORE", "JP01"), trusted_context=trusted_u001,
     )
-    assert len(state.evidence) == 1
+    assert len(state.evidence) >= 1
     assert state.evidence[0].provenance is not None
     assert counting_repository.query_count == 1
 

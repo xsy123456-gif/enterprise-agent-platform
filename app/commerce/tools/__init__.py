@@ -7,6 +7,10 @@ query, and use the typed Filter / TimeRange / Cursor Pagination / QueryResult /
 ToolError contracts.  metric.query only serves SOURCE/AGGREGATED facts;
 inventory.query returns inventory facts only; advertising.query returns
 advertising *entities* only; review.query defaults to ``include_raw=false``.
+
+Pagination uses a single shared cursor codec (``app.commerce.cursor``):
+malformed / cross-resource cursors and over-limit pages fail with a typed
+INVALID_REQUEST before any canonical query.
 """
 
 import uuid
@@ -15,6 +19,7 @@ from app.tools.base import BaseTool
 
 from app.commerce.contracts.errors import CommerceValidationError, ToolError
 from app.commerce.contracts.query import Filter, PageInfo, PageRequest, QueryResult, TimeRange
+from app.commerce.cursor import decode_cursor, paginate, validate_page
 from app.commerce.trusted_context import current_trusted_context, store_in_scope
 
 
@@ -25,6 +30,7 @@ class CommerceReadTool(BaseTool):
     capability = ""
     scope_policy = "STRICT"
     allowed_filter_fields = frozenset()
+    paginated = True
 
     def __init__(self, query_service, allowed_filter_fields=None):
         self.query_service = query_service
@@ -43,6 +49,7 @@ class CommerceReadTool(BaseTool):
             )
         try:
             self._validate(arguments)
+            self._validate_pagination(arguments)
         except CommerceValidationError as error:
             return ToolError.from_code(
                 "INVALID_REQUEST", message_key=str(error),
@@ -74,6 +81,18 @@ class CommerceReadTool(BaseTool):
 
     def _query(self, arguments, trusted):
         raise NotImplementedError
+
+    def _context_key(self, arguments):
+        return ""
+
+    # ── pagination (shared cursor codec) ─────────────────────
+
+    def _validate_pagination(self, arguments):
+        if not self.paginated:
+            return
+        page = self._parse_page(arguments)
+        validate_page(page)
+        decode_cursor(page.cursor, self._context_key(arguments))
 
     # ── shared helpers ───────────────────────────────────────
 
@@ -118,19 +137,10 @@ class CommerceReadTool(BaseTool):
             boundary_policy=raw.get("boundary_policy", "INCLUSIVE"),
         )
 
-    @staticmethod
-    def _apply(items, filters, page):
-        result = list(items)
-        for f in filters:
-            result = [item for item in result if _filter_match(item, f)]
-        offset = int(page.cursor) if page.cursor and str(page.cursor).isdigit() else 0
-        page_items = result[offset: offset + page.limit]
-        next_offset = offset + len(page_items)
-        next_cursor = str(next_offset) if next_offset < len(result) else None
-        return page_items, PageInfo(
-            next_cursor=next_cursor, has_more=next_cursor is not None,
-            returned_count=len(page_items),
-        )
+    def _apply(self, items, filters, page, context_key):
+        result = [item for item in items if all(_filter_match(item, f) for f in filters)]
+        page_items, page_info = paginate(result, page, context_key)
+        return page_items, page_info
 
     @staticmethod
     def _rebuild(result, data, page_info):
@@ -166,12 +176,13 @@ def _filter_match(item, f):
     return True
 
 
-# ── store.get ───────────────────────────────────────────────
+# ── store.get (single record; no pagination) ────────────────
 
 class StoreGetTool(CommerceReadTool):
     name = "store.get"
     capability = "commerce.store.read"
     description = "读取店铺身份与元数据"
+    paginated = False
 
     def _validate(self, arguments):
         if not arguments.get("store_id") and not (
@@ -226,6 +237,12 @@ class CatalogQueryTool(CommerceReadTool):
             return self._require_store_scope(arguments.get("store_id"), trusted)
         return None
 
+    def _context_key(self, arguments):
+        return (
+            f"catalog:{arguments['subject_type']}:"
+            f"{arguments.get('product_id') or arguments.get('store_id') or arguments.get('listing_id') or ''}"
+        )
+
     def _query(self, arguments, trusted):
         subject_type = arguments["subject_type"]
         filters = self._parse_filters(arguments, self.allowed_filter_fields)
@@ -244,7 +261,7 @@ class CatalogQueryTool(CommerceReadTool):
             result = self.query_service.list_listing_items_by_listing(
                 trusted.tenant_id, arguments["listing_id"]
             )
-        items, page_info = self._apply(result.data, filters, page)
+        items, page_info = self._apply(result.data, filters, page, self._context_key(arguments))
         return self._rebuild(result, items, page_info)
 
 
@@ -275,14 +292,24 @@ class MetricQueryTool(CommerceReadTool):
             return self._require_store_scope(arguments["subject_id"], trusted)
         return None
 
+    def _context_key(self, arguments):
+        return (
+            f"metric:{arguments['subject_type']}:{arguments['subject_id']}:"
+            f"{arguments.get('granularity') or ''}:"
+            f"{','.join(sorted(arguments.get('metric_names') or []))}"
+        )
+
     def _query(self, arguments, trusted):
         time_range = self._parse_time_range(arguments)
-        return self.query_service.query_metrics(
+        result = self.query_service.query_metrics(
             trusted.tenant_id, arguments["subject_type"], arguments["subject_id"],
             metric_names=arguments.get("metric_names"),
             granularity=arguments.get("granularity"),
             time_range=time_range,
         )
+        page = self._parse_page(arguments)
+        items, page_info = self._apply(result.data, [], page, self._context_key(arguments))
+        return self._rebuild(result, items, page_info)
 
 
 # ── inventory.query ─────────────────────────────────────────
@@ -301,10 +328,16 @@ class InventoryQueryTool(CommerceReadTool):
     def _check_scope(self, arguments, trusted):
         return self._require_store_scope(arguments["store_id"], trusted)
 
+    def _context_key(self, arguments):
+        return f"inventory:{arguments['store_id']}:{arguments['sku_id']}"
+
     def _query(self, arguments, trusted):
-        return self.query_service.query_inventory(
+        result = self.query_service.query_inventory(
             trusted.tenant_id, arguments["store_id"], arguments["sku_id"],
         )
+        page = self._parse_page(arguments)
+        items, page_info = self._apply(result.data, [], page, self._context_key(arguments))
+        return self._rebuild(result, items, page_info)
 
 
 # ── review.query ────────────────────────────────────────────
@@ -330,12 +363,20 @@ class ReviewQueryTool(CommerceReadTool):
     def _check_scope(self, arguments, trusted):
         return self._require_store_scope(arguments.get("store_id"), trusted)
 
+    def _context_key(self, arguments):
+        return (
+            f"review:{arguments.get('subject_type', 'REVIEW')}:"
+            f"{arguments.get('review_id') or arguments.get('listing_id') or ''}"
+        )
+
     def _query(self, arguments, trusted):
         if arguments.get("subject_type") == "REVIEW_INSIGHT":
-            # AI-derived insight: model/extractor/confidence provenance preserved.
-            return self.query_service.list_review_insights_by_review(
+            result = self.query_service.list_review_insights_by_review(
                 trusted.tenant_id, arguments["review_id"],
             )
+            page = self._parse_page(arguments)
+            items, page_info = self._apply(result.data, [], page, self._context_key(arguments))
+            return self._rebuild(result, items, page_info)
         result = self.query_service.list_reviews_by_listing(
             trusted.tenant_id, arguments["listing_id"],
         )
@@ -347,8 +388,10 @@ class ReviewQueryTool(CommerceReadTool):
                 item.pop("content", None)
                 item.pop("title", None)
                 data.append(item)
-            return self._rebuild(result, data, result.page)
-        return result
+            result = self._rebuild(result, data, result.page)
+        page = self._parse_page(arguments)
+        items, page_info = self._apply(result.data, [], page, self._context_key(arguments))
+        return self._rebuild(result, items, page_info)
 
 
 # ── advertising.query ───────────────────────────────────────
@@ -370,31 +413,41 @@ class AdvertisingQueryTool(CommerceReadTool):
     def _check_scope(self, arguments, trusted):
         return self._require_store_scope(arguments.get("store_id"), trusted)
 
+    def _context_key(self, arguments):
+        return (
+            f"advertising:{arguments['subject_type']}:"
+            f"{arguments.get('store_id') or arguments.get('campaign_id') or arguments.get('ad_group_id') or arguments.get('ad_id') or ''}"
+        )
+
     def _query(self, arguments, trusted):
         subject_type = arguments["subject_type"]
         if subject_type == "CAMPAIGN":
-            return self.query_service.list_campaigns_by_store(
+            result = self.query_service.list_campaigns_by_store(
                 trusted.tenant_id, arguments["store_id"],
             )
-        if subject_type == "AD_GROUP":
-            return self.query_service.list_ad_groups_by_campaign(
+        elif subject_type == "AD_GROUP":
+            result = self.query_service.list_ad_groups_by_campaign(
                 trusted.tenant_id, arguments["campaign_id"],
             )
-        if subject_type == "AD":
-            return self.query_service.list_ads_by_ad_group(
+        elif subject_type == "AD":
+            result = self.query_service.list_ads_by_ad_group(
                 trusted.tenant_id, arguments["ad_group_id"],
             )
-        if subject_type == "KEYWORD":
-            return self.query_service.list_keywords_by_ad_group(
+        elif subject_type == "KEYWORD":
+            result = self.query_service.list_keywords_by_ad_group(
                 trusted.tenant_id, arguments["ad_group_id"],
             )
-        if subject_type == "SEARCH_TERM":
-            return self.query_service.list_search_terms_by_ad_group(
+        elif subject_type == "SEARCH_TERM":
+            result = self.query_service.list_search_terms_by_ad_group(
                 trusted.tenant_id, arguments["ad_group_id"],
             )
-        return self.query_service.list_promoted_items_by_ad(
-            trusted.tenant_id, arguments["ad_id"],
-        )
+        else:
+            result = self.query_service.list_promoted_items_by_ad(
+                trusted.tenant_id, arguments["ad_id"],
+            )
+        page = self._parse_page(arguments)
+        items, page_info = self._apply(result.data, [], page, self._context_key(arguments))
+        return self._rebuild(result, items, page_info)
 
 
 def build_commerce_tools(query_service, metric_registry=None):
