@@ -94,9 +94,11 @@ class PlanCompiler:
             steps=tuple(compiled_steps),
             dependencies=tuple(sorted(dependencies.values(),
                                       key=lambda r: (r.kind, r.id, r.version))),
+            required_capabilities=definition.required_capabilities,
             required_evidence=definition.required_evidence,
             optional_evidence=definition.optional_evidence,
             max_depth=definition.max_depth,
+            entry_step_id=definition.entry_step_id(),
             analysis_period=definition.analysis_period,
             comparison_period=definition.comparison_period,
         )

@@ -23,14 +23,19 @@ from app.commerce.diagnostics.plans.ir import (
     REF_PRIORITY_POLICY,
 )
 from app.commerce.diagnostics.plans.parser import parse_plan
+from app.commerce.diagnostics.plans.period import resolve_period
 from app.commerce.diagnostics.plans.ports import (
     FACT_QUALITY_INSUFFICIENT,
     FACT_QUALITY_PARTIAL,
     FACT_QUALITY_VALID,
+    FRESHNESS_FRESH,
+    FRESHNESS_STALE,
+    FRESHNESS_UNKNOWN,
     FactQueryExecutorPort,
     FactQueryResult,
     FactQuerySpec,
     FakeFactQueryExecutor,
+    TrustedExecutionContext,
 )
 from app.commerce.diagnostics.plans.registry import DiagnosticPlanRegistry
 from app.commerce.diagnostics.plans.schema import (
@@ -67,9 +72,11 @@ from app.commerce.diagnostics.plans.schema import (
     PlanDefinition,
     StepDefinition,
     WhenCondition,
+    DataQualityRequirement,
 )
 from app.commerce.diagnostics.plans.state import PlanExecutionState, StepTrace
 from app.commerce.diagnostics.plans.validator import (
+    MaxDepthExceededError,
     PlanValidationError,
     validate_plan,
 )
@@ -89,6 +96,7 @@ __all__ = [
     "PlanDefinition",
     "StepDefinition",
     "WhenCondition",
+    "DataQualityRequirement",
     "PlanIR",
     "PinnedRef",
     "CompiledStep",
@@ -103,13 +111,19 @@ __all__ = [
     "parse_plan",
     "validate_plan",
     "PlanValidationError",
+    "MaxDepthExceededError",
+    "resolve_period",
     "FactQueryExecutorPort",
     "FactQuerySpec",
     "FactQueryResult",
     "FakeFactQueryExecutor",
+    "TrustedExecutionContext",
     "FACT_QUALITY_VALID",
     "FACT_QUALITY_PARTIAL",
     "FACT_QUALITY_INSUFFICIENT",
+    "FRESHNESS_FRESH",
+    "FRESHNESS_STALE",
+    "FRESHNESS_UNKNOWN",
     "REF_KINDS",
     "REF_METRIC",
     "REF_POLICY",

@@ -68,9 +68,11 @@ class PlanIR:
     skill_version: str = ""
     steps: tuple[CompiledStep, ...] = ()
     dependencies: tuple[PinnedRef, ...] = ()
+    required_capabilities: tuple[str, ...] = ()
     required_evidence: tuple[str, ...] = ()
     optional_evidence: tuple[str, ...] = ()
     max_depth: int = 3
+    entry_step_id: str = ""
     analysis_period: dict | None = None
     comparison_period: dict | None = None
     checksum: str = ""
@@ -79,6 +81,7 @@ class PlanIR:
     def __post_init__(self):
         object.__setattr__(self, "steps", tuple(self.steps or ()))
         object.__setattr__(self, "dependencies", tuple(self.dependencies or ()))
+        object.__setattr__(self, "required_capabilities", tuple(self.required_capabilities or ()))
         object.__setattr__(self, "required_evidence", tuple(self.required_evidence or ()))
         object.__setattr__(self, "optional_evidence", tuple(self.optional_evidence or ()))
 
@@ -93,9 +96,11 @@ class PlanIR:
             "steps": [s.to_dict() for s in self.steps],
             "dependencies": sorted((d.to_dict() for d in self.dependencies),
                                    key=lambda d: (d["kind"], d["id"], d["version"])),
+            "required_capabilities": sorted(self.required_capabilities),
             "required_evidence": sorted(self.required_evidence),
             "optional_evidence": sorted(self.optional_evidence),
             "max_depth": self.max_depth,
+            "entry_step_id": self.entry_step_id,
             "analysis_period": self.analysis_period,
             "comparison_period": self.comparison_period,
         }

@@ -76,6 +76,7 @@ def test_unsupported_operator_rejected():
 def test_fact_query_spec_has_no_sql():
     from app.commerce.diagnostics.plans import FactQuerySpec
     from tests.commerce_diagnostic_plans.conftest import SUBJECT
-    spec = FactQuerySpec(query_id="q", resource="metric", subject=SUBJECT,
+    spec = FactQuerySpec(query_id="q", capability="commerce.metrics.read",
+                         resource="metric", subject=SUBJECT,
                          params={"metric_name": "ORDERS"})
     assert "sql" not in spec.to_dict()

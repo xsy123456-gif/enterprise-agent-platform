@@ -15,35 +15,37 @@ from app.commerce.diagnostics.plans import (
     STEP_RESULT_ASSEMBLE,
     STEP_RULE_EVALUATE,
     STOP_SUCCESS,
+    TrustedExecutionContext,
 )
 from tests.commerce_diagnostic_plans.conftest import SUBJECT
+
+CAP = "commerce.metrics.read"
+
+
+def _fact(step_id, code, next_ids):
+    return StepDefinition(step_id, STEP_FACT_QUERY,
+                          {"capability": CAP, "resource": code, "evidence_code": code},
+                          next=tuple(next_ids))
 
 
 def _full_plan():
     return PlanDefinition(
         plan_id="full_chain_mini", version="1.0", domain="conversion",
         skill_id="store_performance_diagnosis", skill_version="1.0",
+        required_capabilities=(CAP,),
         required_evidence=("REVIEW_RATING",),
         steps=(
-            StepDefinition("q_sessions", STEP_FACT_QUERY,
-                           {"resource": "SESSIONS", "evidence_code": "SESSIONS"},
-                           next=("q_orders",)),
-            StepDefinition("q_orders", STEP_FACT_QUERY,
-                           {"resource": "ORDERS", "evidence_code": "ORDERS"},
-                           next=("q_review",)),
-            StepDefinition("q_review", STEP_FACT_QUERY,
-                           {"resource": "REVIEW_RATING", "evidence_code": "REVIEW_RATING"},
-                           next=("q_gmv",)),
-            StepDefinition("q_gmv", STEP_FACT_QUERY,
-                           {"resource": "GMV_BASELINE", "evidence_code": "GMV_BASELINE"},
-                           next=("cvr",)),
+            _fact("q_sessions", "SESSIONS", ("q_orders",)),
+            _fact("q_orders", "ORDERS", ("q_review",)),
+            _fact("q_review", "REVIEW_RATING", ("q_gmv",)),
+            _fact("q_gmv", "GMV_BASELINE", ("cvr",)),
             StepDefinition("cvr", STEP_METRIC_COMPUTE,
                            {"metric": "CVR",
                             "inputs": {"ORDERS": "evidence:ORDERS",
                                        "SESSIONS": "evidence:SESSIONS"}},
                            next=("gate",)),
             StepDefinition("gate", STEP_DATA_QUALITY_GATE,
-                           {"required_codes": ["REVIEW_RATING"]},
+                           {"requirement": {"required_evidence_codes": ["REVIEW_RATING"]}},
                            next=("detect",)),
             StepDefinition("detect", STEP_ANOMALY_DETECT,
                            {"policy": "commerce.anomaly.v1", "metric": "CVR",
@@ -74,10 +76,10 @@ def _full_plan():
 
 def _facts():
     return FakeFactQueryExecutor({
-        ("SESSIONS", "store_amazon_001"): {"records": [{"value": 1000.0}]},
-        ("ORDERS", "store_amazon_001"): {"records": [{"value": 20.0}]},
-        ("REVIEW_RATING", "store_amazon_001"): {"records": [{"value": 3.2}]},
-        ("GMV_BASELINE", "store_amazon_001"): {"records": [{"value": 100000.0}]},
+        (CAP, "SESSIONS", "store_amazon_001"): {"records": [{"value": 1000.0}]},
+        (CAP, "ORDERS", "store_amazon_001"): {"records": [{"value": 20.0}]},
+        (CAP, "REVIEW_RATING", "store_amazon_001"): {"records": [{"value": 3.2}]},
+        (CAP, "GMV_BASELINE", "store_amazon_001"): {"records": [{"value": 100000.0}]},
     })
 
 
@@ -86,6 +88,7 @@ def test_full_chain_all_handlers(plan_registry, compile_context):
     plan_registry.activate("full_chain_mini")
     state = PlanExecutor().execute(
         plan_registry.get_active_ir("full_chain_mini"), compile_context, _facts(), SUBJECT,
+        trusted_context=TrustedExecutionContext(tenant_id="company_A"),
     )
     assert state.outcome == STOP_SUCCESS
     assert state.metric_value("CVR") == 0.02

@@ -116,7 +116,7 @@ def test_data_quality_gate_stops_on_insufficient(plan_registry, compile_context,
         required_evidence=("REVIEW_RATING",),
         steps=(
             StepDefinition("gate", STEP_DATA_QUALITY_GATE,
-                           {"required_codes": ["REVIEW_RATING"],
+                           {"requirement": {"required_evidence_codes": ["REVIEW_RATING"]},
                             "stop_on_insufficient": True}, next=("assemble",)),
             StepDefinition("assemble", STEP_RESULT_ASSEMBLE, {}),
         ),

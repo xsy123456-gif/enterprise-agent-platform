@@ -16,12 +16,15 @@ def _roas_plan():
     return PlanDefinition(
         plan_id="roas_mini", version="1.0", domain="advertising",
         skill_id="advertising_performance_diagnosis", skill_version="1.0",
+        required_capabilities=("commerce.metrics.read",),
         steps=(
             StepDefinition("q_ad_sales", STEP_FACT_QUERY,
-                           {"resource": "AD_SALES", "evidence_code": "AD_SALES"},
+                           {"capability": "commerce.metrics.read",
+                            "resource": "AD_SALES", "evidence_code": "AD_SALES"},
                            next=("q_ad_spend",)),
             StepDefinition("q_ad_spend", STEP_FACT_QUERY,
-                           {"resource": "AD_SPEND", "evidence_code": "AD_SPEND"},
+                           {"capability": "commerce.metrics.read",
+                            "resource": "AD_SPEND", "evidence_code": "AD_SPEND"},
                            next=("roas",)),
             StepDefinition("roas", STEP_METRIC_COMPUTE,
                            {"metric": "ROAS",
@@ -36,8 +39,8 @@ def _roas_plan():
 def _facts():
     from app.commerce.diagnostics.plans import FakeFactQueryExecutor
     return FakeFactQueryExecutor({
-        ("AD_SALES", "store_amazon_001"): {"records": [{"value": 100.0}]},
-        ("AD_SPEND", "store_amazon_001"): {"records": [{"value": 30.0}]},
+        ("commerce.metrics.read", "AD_SALES", "store_amazon_001"): {"records": [{"value": 100.0}]},
+        ("commerce.metrics.read", "AD_SPEND", "store_amazon_001"): {"records": [{"value": 30.0}]},
     })
 
 

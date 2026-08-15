@@ -3,6 +3,7 @@
 from app.commerce.diagnostics.errors import MetricError
 from app.commerce.diagnostics.plans.schema import (
     FAILURE_POLICIES,
+    STEP_FACT_QUERY,
     STEP_RESULT_ASSEMBLE,
     STEP_TYPES,
 )
@@ -14,6 +15,10 @@ from app.commerce.diagnostics.plans.when import (
 
 class PlanValidationError(MetricError):
     """A DiagnosticPlan definition is invalid."""
+
+
+class MaxDepthExceededError(PlanValidationError):
+    """A plan's drill-down depth exceeds its declared ``max_depth``."""
 
 
 def validate_plan(definition):
@@ -56,8 +61,39 @@ def validate_plan(definition):
                     f"step {step.step_id!r} references unknown next step {target!r}"
                 )
 
+    _check_capabilities(definition)
     _check_acyclic(definition)
     _check_result_assemble(definition)
+    _check_drill_depth(definition)
+
+
+def _check_capabilities(definition):
+    declared = set(definition.required_capabilities)
+    for step in definition.steps:
+        if step.type != STEP_FACT_QUERY:
+            continue
+        capability = step.params.get("capability")
+        if not capability:
+            raise PlanValidationError(
+                f"FACT_QUERY step {step.step_id!r} must declare a capability"
+            )
+        if capability not in declared:
+            raise PlanValidationError(
+                f"FACT_QUERY step {step.step_id!r} references undeclared "
+                f"capability {capability!r}"
+            )
+
+
+def _check_drill_depth(definition):
+    for step in definition.steps:
+        if step.type != STEP_FACT_QUERY:
+            continue
+        depth = step.params.get("drill_depth", 1)
+        if depth > definition.max_depth:
+            raise MaxDepthExceededError(
+                f"FACT_QUERY step {step.step_id!r} drill_depth {depth} exceeds "
+                f"plan max_depth {definition.max_depth}"
+            )
 
 
 def _check_acyclic(definition):
@@ -90,4 +126,4 @@ def _check_result_assemble(definition):
         raise PlanValidationError("RESULT_ASSEMBLE must be a terminal step")
 
 
-__all__ = ["validate_plan", "PlanValidationError"]
+__all__ = ["validate_plan", "PlanValidationError", "MaxDepthExceededError"]

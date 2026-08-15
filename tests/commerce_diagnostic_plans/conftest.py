@@ -28,9 +28,20 @@ from app.commerce.diagnostics.plans import (
     STEP_METRIC_COMPUTE,
     STEP_RESULT_ASSEMBLE,
     STEP_RULE_EVALUATE,
+    TrustedExecutionContext,
 )
 
 SUBJECT = SubjectRef("STORE", "store_amazon_001")
+CAP_METRICS = "commerce.metrics.read"
+TRUSTED_CONTEXT = TrustedExecutionContext(
+    tenant_id="company_A", principal_id="user_001", organization_id="org_A",
+    scopes=("store_amazon_001",), trace_id="trace-1", execution_id="exec-1",
+)
+
+
+@pytest.fixture
+def trusted_context():
+    return TRUSTED_CONTEXT
 
 
 @pytest.fixture
@@ -80,25 +91,25 @@ def plan_registry(compile_context):
 @pytest.fixture
 def facts():
     return FakeFactQueryExecutor({
-        ("SESSIONS", "store_amazon_001"): {"records": [{"value": 1000.0}]},
-        ("ORDERS", "store_amazon_001"): {"records": [{"value": 20.0}]},
-        ("REVIEW_RATING", "store_amazon_001"): {"records": [{"value": 3.2}]},
+        (CAP_METRICS, "SESSIONS", "store_amazon_001"): {"records": [{"value": 1000.0}]},
+        (CAP_METRICS, "ORDERS", "store_amazon_001"): {"records": [{"value": 20.0}]},
+        (CAP_METRICS, "REVIEW_RATING", "store_amazon_001"): {"records": [{"value": 3.2}]},
     })
 
 
+def _fact_step(step_id, code, next_ids, capability=CAP_METRICS, **extra):
+    params = {"capability": capability, "resource": code, "evidence_code": code}
+    params.update(extra)
+    return StepDefinition(step_id, STEP_FACT_QUERY, params, next=tuple(next_ids))
+
+
 def make_conversion_plan(required_evidence=("REVIEW_RATING",), baseline_value=0.04,
-                         when=None, failure_step=None):
+                         when=None, required_capabilities=(CAP_METRICS,)):
     """A minimal conversion-decline diagnosis plan."""
     steps = [
-        StepDefinition("q_sessions", STEP_FACT_QUERY,
-                       {"resource": "SESSIONS", "evidence_code": "SESSIONS"},
-                       next=("q_orders",)),
-        StepDefinition("q_orders", STEP_FACT_QUERY,
-                       {"resource": "ORDERS", "evidence_code": "ORDERS"},
-                       next=("q_review",)),
-        StepDefinition("q_review", STEP_FACT_QUERY,
-                       {"resource": "REVIEW_RATING", "evidence_code": "REVIEW_RATING"},
-                       next=("cvr",)),
+        _fact_step("q_sessions", "SESSIONS", ("q_orders",)),
+        _fact_step("q_orders", "ORDERS", ("q_review",)),
+        _fact_step("q_review", "REVIEW_RATING", ("cvr",)),
         StepDefinition("cvr", STEP_METRIC_COMPUTE,
                        {"metric": "CVR",
                         "inputs": {"ORDERS": "evidence:ORDERS",
@@ -116,12 +127,13 @@ def make_conversion_plan(required_evidence=("REVIEW_RATING",), baseline_value=0.
     return PlanDefinition(
         plan_id="conversion_decline_mini", version="1.0", domain="conversion",
         skill_id="store_performance_diagnosis", skill_version="1.0",
+        required_capabilities=tuple(required_capabilities),
         required_evidence=tuple(required_evidence),
         steps=tuple(steps),
     )
 
 
 __all__ = [
-    "SUBJECT", "compile_context", "plan_registry", "facts",
-    "make_conversion_plan",
+    "SUBJECT", "CAP_METRICS", "TRUSTED_CONTEXT", "compile_context",
+    "plan_registry", "facts", "trusted_context", "make_conversion_plan",
 ]

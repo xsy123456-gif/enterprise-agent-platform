@@ -36,6 +36,17 @@ class PlanExecutionState:
     priority: object = None
     diagnostic_result: object = None
 
+    # query metadata (freshness / quality) consumed by DataQualityGate
+    query_quality: dict = field(default_factory=dict)
+    freshness: dict = field(default_factory=dict)
+
+    # resolved periods (execution input/state, not plan version)
+    analysis_period: object = None
+    comparison_period: object = None
+
+    # drill-down tracking
+    max_drill_depth: int = 0
+
     # control
     step_statuses: dict = field(default_factory=dict)
     coverage: float = 1.0

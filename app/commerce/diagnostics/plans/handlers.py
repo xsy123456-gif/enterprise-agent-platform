@@ -2,8 +2,8 @@
 
 Each handler receives ``(step, state, context)`` and mutates ``state`` with a
 typed output.  Handlers only call the deterministic Phase 3-4 engines and the
-``FactQueryExecutorPort``; they never touch Repository / QueryService /
-PostgreSQL and never invoke an LLM.
+``FactQueryExecutorPort`` (invoked with the Runtime-injected trusted context);
+they never touch Repository / QueryService / PostgreSQL and never invoke an LLM.
 """
 
 import uuid
@@ -14,7 +14,7 @@ from app.commerce.contracts.diagnostic_result import (
     DiagnosticResult,
 )
 from app.commerce.contracts.evidence import Evidence
-from app.commerce.contracts.query import DataQuality, TimeRange
+from app.commerce.contracts.query import DataQuality
 from app.commerce.diagnostics.kernel.anomaly_engine import AnomalyEngine
 from app.commerce.diagnostics.kernel.contribution_engine import ContributionEngine
 from app.commerce.diagnostics.kernel.impact_engine import ImpactEngine
@@ -24,6 +24,7 @@ from app.commerce.diagnostics.kernel.rule_engine import RuleEngine
 from app.commerce.diagnostics.models import PriorityFactors
 from app.commerce.diagnostics.plans.ports import FactQuerySpec
 from app.commerce.diagnostics.plans.schema import (
+    DataQualityRequirement,
     STEP_ANOMALY_DETECT,
     STEP_CONTRIBUTION_ANALYZE,
     STEP_DATA_QUALITY_GATE,
@@ -37,6 +38,7 @@ from app.commerce.diagnostics.plans.schema import (
     STOP_NORMAL,
     STOP_SUCCESS,
 )
+from app.commerce.diagnostics.plans.validator import MaxDepthExceededError
 
 _EVIDENCE_QUALITY_MAP = {
     "VALID": "VALID",
@@ -61,12 +63,22 @@ def handle_fact_query(step, state, context):
     params = step.params
     spec = FactQuerySpec(
         query_id=step.step_id,
-        resource=params["resource"],
+        capability=params["capability"],
+        resource=params.get("resource", ""),
         subject=state.subject,
         params=params.get("query_params", {}),
     )
-    result = context.fact_executor.execute(spec)
-    code = params.get("evidence_code", spec.resource)
+    drill_depth = params.get("drill_depth", 1)
+    if drill_depth > context.plan_ir.max_depth:
+        raise MaxDepthExceededError(
+            f"FACT_QUERY step {step.step_id!r} drill_depth {drill_depth} exceeds "
+            f"plan max_depth {context.plan_ir.max_depth}"
+        )
+    state.max_drill_depth = max(state.max_drill_depth, drill_depth)
+    result = context.fact_executor.execute(spec, context.trusted_context)
+    code = params.get("evidence_code", spec.capability)
+    state.query_quality[code] = result.quality
+    state.freshness[code] = result.freshness
     for record in result.records:
         evidence = Evidence(
             evidence_id=uuid.uuid4().hex,
@@ -96,17 +108,33 @@ def handle_metric_compute(step, state, context):
 # ── DATA_QUALITY_GATE ───────────────────────────────────────
 
 def handle_data_quality_gate(step, state, context):
-    required_codes = step.params.get("required_codes", ())
-    missing = [code for code in required_codes if not state.has_evidence(code)]
-    if missing:
-        quality = DataQuality(
-            status="INSUFFICIENT", completeness=0.0,
-            missing_fields=tuple(missing),
-        )
-    else:
-        quality = DataQuality(status="VALID", completeness=1.0)
+    requirement = DataQualityRequirement.from_dict(step.params.get("requirement"))
+    issues = []
+    missing = [
+        code for code in requirement.required_evidence_codes
+        if not state.has_evidence(code)
+    ]
+    issues.extend(f"missing evidence {code}" for code in missing)
+    for evidence in state.evidence:
+        if evidence.quality in requirement.unacceptable_evidence_qualities:
+            issues.append(f"evidence {evidence.code} quality {evidence.quality}")
+    for name, result in state.metric_results.items():
+        if result.status in requirement.unacceptable_metric_statuses:
+            issues.append(f"metric {name} status {result.status}")
+    for code, freshness in state.freshness.items():
+        if freshness in requirement.unacceptable_freshness:
+            issues.append(f"freshness {code} {freshness}")
+    if state.coverage < requirement.min_coverage:
+        issues.append(f"coverage {state.coverage} below {requirement.min_coverage}")
+
+    quality = DataQuality(
+        status="INSUFFICIENT" if issues else "VALID",
+        completeness=1.0 if not issues else max(0.0, 1.0 - len(issues) / max(len(requirement.required_evidence_codes), 1)),
+        missing_fields=tuple(missing),
+        issues=tuple(issues),
+    )
     state.data_quality = quality
-    if missing and step.params.get("stop_on_insufficient", False):
+    if issues and step.params.get("stop_on_insufficient", False):
         state.outcome = STOP_INSUFFICIENT_DATA
         state.unavailable_evidence.extend(missing)
         state._terminated = True
@@ -206,13 +234,6 @@ def handle_result_assemble(step, state, context):
         )
         outcome = STOP_SUCCESS if (state.causes or abnormal) else STOP_NORMAL
 
-    analysis_period = None
-    if ir.analysis_period:
-        analysis_period = TimeRange(
-            start=ir.analysis_period.get("start"),
-            end=ir.analysis_period.get("end"),
-            timezone=ir.analysis_period.get("timezone", "UTC"),
-        )
     result = DiagnosticResult(
         diagnostic_id=uuid.uuid4().hex,
         skill_id=ir.skill_id,
@@ -220,7 +241,8 @@ def handle_result_assemble(step, state, context):
         plan_id=ir.plan_id,
         plan_version=ir.version,
         subject=state.subject,
-        analysis_period=analysis_period or TimeRange(),
+        analysis_period=state.analysis_period,
+        comparison_period=state.comparison_period,
         status=status,
         evidence=tuple(state.evidence),
         signals=tuple(state.signals),

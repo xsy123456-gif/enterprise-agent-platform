@@ -126,14 +126,17 @@ class PlanDefinition:
     skill_id: str = ""
     skill_version: str = ""
     steps: tuple[StepDefinition, ...] = ()
+    required_capabilities: tuple[str, ...] = ()
     required_evidence: tuple[str, ...] = ()
     optional_evidence: tuple[str, ...] = ()
     max_depth: int = 3
+    # Period *specification* (e.g. {"days": 7}), not a resolved runtime TimeRange.
     analysis_period: dict | None = None
     comparison_period: dict | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "steps", tuple(self.steps or ()))
+        object.__setattr__(self, "required_capabilities", tuple(self.required_capabilities or ()))
         object.__setattr__(self, "required_evidence", tuple(self.required_evidence or ()))
         object.__setattr__(self, "optional_evidence", tuple(self.optional_evidence or ()))
 
@@ -146,6 +149,9 @@ class PlanDefinition:
                 return step
         return None
 
+    def entry_step_id(self):
+        return self.steps[0].step_id if self.steps else ""
+
     def to_dict(self) -> dict:
         return {
             "plan_id": self.plan_id,
@@ -154,6 +160,7 @@ class PlanDefinition:
             "skill_id": self.skill_id,
             "skill_version": self.skill_version,
             "steps": [s.to_dict() for s in self.steps],
+            "required_capabilities": list(self.required_capabilities),
             "required_evidence": list(self.required_evidence),
             "optional_evidence": list(self.optional_evidence),
             "max_depth": self.max_depth,
@@ -170,6 +177,7 @@ class PlanDefinition:
             skill_id=data.get("skill_id", ""),
             skill_version=data.get("skill_version", ""),
             steps=tuple(StepDefinition.from_dict(s) for s in data.get("steps", ())),
+            required_capabilities=tuple(data.get("required_capabilities", ())),
             required_evidence=tuple(data.get("required_evidence", ())),
             optional_evidence=tuple(data.get("optional_evidence", ())),
             max_depth=data.get("max_depth", 3),
@@ -178,10 +186,45 @@ class PlanDefinition:
         )
 
 
+@dataclass(frozen=True)
+class DataQualityRequirement:
+    """Typed quality gate policy.  The handler applies it verbatim — no
+    thresholds are hard-coded in the handler."""
+
+    requirement_id: str = ""
+    version: str = ""
+    required_evidence_codes: tuple[str, ...] = ()
+    min_coverage: float = 1.0
+    unacceptable_evidence_qualities: tuple[str, ...] = ("STALE", "MISSING", "INVALID")
+    unacceptable_metric_statuses: tuple[str, ...] = ("INSUFFICIENT", "NULL_RESULT")
+    unacceptable_freshness: tuple[str, ...] = ("STALE",)
+
+    def __post_init__(self):
+        object.__setattr__(self, "required_evidence_codes", tuple(self.required_evidence_codes or ()))
+        object.__setattr__(self, "unacceptable_evidence_qualities", tuple(self.unacceptable_evidence_qualities or ()))
+        object.__setattr__(self, "unacceptable_metric_statuses", tuple(self.unacceptable_metric_statuses or ()))
+        object.__setattr__(self, "unacceptable_freshness", tuple(self.unacceptable_freshness or ()))
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "DataQualityRequirement":
+        if data is None:
+            return cls()
+        return cls(
+            requirement_id=data.get("requirement_id", ""),
+            version=data.get("version", ""),
+            required_evidence_codes=tuple(data.get("required_evidence_codes", ())),
+            min_coverage=data.get("min_coverage", 1.0),
+            unacceptable_evidence_qualities=tuple(data.get("unacceptable_evidence_qualities", ("STALE", "MISSING", "INVALID"))),
+            unacceptable_metric_statuses=tuple(data.get("unacceptable_metric_statuses", ("INSUFFICIENT", "NULL_RESULT"))),
+            unacceptable_freshness=tuple(data.get("unacceptable_freshness", ("STALE",))),
+        )
+
+
 __all__ = [
     "WhenCondition",
     "StepDefinition",
     "PlanDefinition",
+    "DataQualityRequirement",
     "STEP_TYPES",
     "STEP_FACT_QUERY",
     "STEP_METRIC_COMPUTE",
