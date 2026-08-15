@@ -112,6 +112,26 @@ class CommerceQueryService:
         groups = self.repository.list_ad_groups_by_campaign(tenant_id, campaign_id)
         return self._assemble(tenant_id, groups, "updated_at", request_id)
 
+    def list_ads_by_ad_group(self, tenant_id, ad_group_id, request_id=None):
+        ads = self.repository.list_ads_by_ad_group(tenant_id, ad_group_id)
+        return self._assemble(tenant_id, ads, "updated_at", request_id)
+
+    def list_promoted_items_by_ad(self, tenant_id, ad_id, request_id=None):
+        items = self.repository.list_promoted_items_by_ad(tenant_id, ad_id)
+        return self._assemble(tenant_id, items, "updated_at", request_id)
+
+    def list_keywords_by_ad_group(self, tenant_id, ad_group_id, request_id=None):
+        keywords = self.repository.list_keywords_by_ad_group(tenant_id, ad_group_id)
+        return self._assemble(tenant_id, keywords, "updated_at", request_id)
+
+    def list_search_terms_by_ad_group(self, tenant_id, ad_group_id, request_id=None):
+        terms = self.repository.list_search_terms_by_ad_group(tenant_id, ad_group_id)
+        return self._assemble(tenant_id, terms, "updated_at", request_id)
+
+    def list_listing_items_by_listing(self, tenant_id, listing_id, request_id=None):
+        items = self.repository.list_listing_items_by_listing(tenant_id, listing_id)
+        return self._assemble(tenant_id, items, "updated_at", request_id)
+
     # ── Assembly ──────────────────────────────────────────────
 
     def _assemble(self, tenant_id, data, fresh_field, request_id=None):

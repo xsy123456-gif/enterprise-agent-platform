@@ -72,9 +72,12 @@ class FactQueryResult:
     records: tuple[dict, ...] = ()
     quality: str = FACT_QUALITY_VALID
     freshness: str = FRESHNESS_UNKNOWN
+    provenance: dict | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "records", tuple(dict(r) for r in (self.records or ())))
+        if self.provenance is not None:
+            object.__setattr__(self, "provenance", dict(self.provenance))
 
 
 class FactQueryExecutorPort(ABC):

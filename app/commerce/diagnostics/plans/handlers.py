@@ -79,6 +79,10 @@ def handle_fact_query(step, state, context):
     code = params.get("evidence_code", spec.capability)
     state.query_quality[code] = result.quality
     state.freshness[code] = result.freshness
+    provenance = None
+    if getattr(result, "provenance", None):
+        from app.commerce.contracts.query import DataProvenance
+        provenance = DataProvenance.from_dict(result.provenance)
     for record in result.records:
         evidence = Evidence(
             evidence_id=uuid.uuid4().hex,
@@ -87,6 +91,7 @@ def handle_fact_query(step, state, context):
             code=code,
             value=record.get("value"),
             quality=_EVIDENCE_QUALITY_MAP.get(result.quality, result.quality),
+            provenance=provenance,
         )
         state.evidence.append(evidence)
 
