@@ -54,6 +54,19 @@ class DivisionByZeroError(MetricEvaluationError):
     """A formula divided by zero (handled by the engine's zero policy)."""
 
 
+class DuplicateDefinitionError(CommerceError):
+    """A versioned diagnostic definition (policy/rule/formula) was registered
+    more than once under the same (id, version)."""
+
+
+class UnknownDefinitionError(CommerceError):
+    """A versioned diagnostic definition id is not registered."""
+
+
+class UnknownDefinitionVersionError(CommerceError):
+    """A versioned diagnostic definition id has no such version."""
+
+
 __all__ = [
     "MetricError",
     "MetricDefinitionError",
@@ -65,4 +78,7 @@ __all__ = [
     "CyclicDependencyError",
     "MetricEvaluationError",
     "DivisionByZeroError",
+    "DuplicateDefinitionError",
+    "UnknownDefinitionError",
+    "UnknownDefinitionVersionError",
 ]

@@ -1,8 +1,4 @@
-"""Core metric definitions."""
-
-from app.commerce.diagnostics.definitions.metrics import (
-    build_core_metric_definitions,
-    build_core_metric_registry,
-)
-
-__all__ = ["build_core_metric_definitions", "build_core_metric_registry"]
+"""Versioned diagnostic definitions (metrics / policies / rules / impact /
+priority).  Import leaf modules directly to avoid import cycles; see
+``app.commerce.diagnostics`` for the public surface.
+"""
