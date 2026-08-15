@@ -4,6 +4,19 @@ The single read boundary above the canonical store.  ``tenant_id`` is always
 the *trusted* tenant from the execution context; the service never derives it
 from request data.  Every response is a ``QueryResult`` carrying freshness,
 quality and provenance metadata.
+
+Responsibilities (v1):
+
+- resolve external ids to canonical ids via the identity map;
+- read Store / Catalog / Inventory / Review / Advertising *facts*;
+- return stored SOURCE / AGGREGATED metric records only.
+
+Explicitly NOT done here (deferred to later phases):
+
+- DERIVED metric computation (ROAS / CVR / CPC / AOV / DaysOfSupply ...);
+- period comparison (current vs baseline);
+- anomaly / trend detection;
+- root cause reasoning or priority assignment.
 """
 
 import uuid

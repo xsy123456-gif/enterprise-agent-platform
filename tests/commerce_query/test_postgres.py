@@ -18,7 +18,10 @@ from app.commerce.domain import (
     Store,
 )
 from app.commerce.query.service import CommerceQueryService
-from app.commerce.repositories.errors import TenantIsolationViolation
+from app.commerce.repositories.errors import (
+    ExternalIdentityConflict,
+    TenantIsolationViolation,
+)
 from app.commerce.repositories.factory import build_identity_map, build_repository
 
 pytestmark = pytest.mark.skipif(
@@ -145,14 +148,76 @@ def test_external_identity_map_stable(postgres_identity_map, repo, tenant):
         resource_type="PRODUCT", external_id="ASIN1", canonical_id="product_000021",
     )
     assert postgres_identity_map.register(tenant, ext) == "product_000021"
-    ext2 = ExternalIdentity(
+    same = ExternalIdentity(
         tenant_id=tenant, platform="amazon", store_id="store_amazon_001",
-        resource_type="PRODUCT", external_id="ASIN1", canonical_id="product_999",
+        resource_type="PRODUCT", external_id="ASIN1", canonical_id="product_000021",
     )
-    assert postgres_identity_map.register(tenant, ext2) == "product_000021"
+    assert postgres_identity_map.register(tenant, same) == "product_000021"
     assert postgres_identity_map.resolve(
         tenant, "amazon", "store_amazon_001", "PRODUCT", "ASIN1"
     ) == "product_000021"
+
+
+def test_external_identity_conflict_fails_closed(postgres_identity_map, repo, tenant):
+    postgres_identity_map.register(tenant, ExternalIdentity(
+        tenant_id=tenant, platform="amazon", store_id="store_amazon_001",
+        resource_type="PRODUCT", external_id="ASIN1", canonical_id="product_000021",
+    ))
+    conflict = ExternalIdentity(
+        tenant_id=tenant, platform="amazon", store_id="store_amazon_001",
+        resource_type="PRODUCT", external_id="ASIN1", canonical_id="product_999",
+    )
+    with pytest.raises(ExternalIdentityConflict):
+        postgres_identity_map.register(tenant, conflict)
+    assert postgres_identity_map.resolve(
+        tenant, "amazon", "store_amazon_001", "PRODUCT", "ASIN1"
+    ) == "product_000021"
+
+
+def test_inventory_distinct_sources_coexist(repo, tenant):
+    repo.upsert_store(tenant, _store(tenant))
+    repo.upsert_product(tenant, Product(product_id="p1", tenant_id=tenant, title="x"))
+    repo.upsert_sku(tenant, SKU(sku_id="s1", tenant_id=tenant, product_id="p1",
+                                merchant_sku="m"))
+    snap_a = InventorySnapshot(
+        inventory_snapshot_id="inv_a", tenant_id=tenant, store_id="store_amazon_001",
+        sku_id="s1", available_quantity=10, snapshot_at="2026-08-01T00:00:00+00:00",
+        source_metadata={"source": "amazon"},
+    )
+    snap_b = InventorySnapshot(
+        inventory_snapshot_id="inv_b", tenant_id=tenant, store_id="store_amazon_001",
+        sku_id="s1", available_quantity=7, snapshot_at="2026-08-01T00:00:00+00:00",
+        source_metadata={"source": "tiktok"},
+    )
+    assert repo.append_inventory_snapshot(tenant, snap_a) is True
+    assert repo.append_inventory_snapshot(tenant, snap_b) is True
+    history = repo.list_inventory_history(tenant, "store_amazon_001", "s1")
+    assert sorted(s.inventory_snapshot_id for s in history) == ["inv_a", "inv_b"]
+
+
+def test_metric_dimensions_reorder_idempotent(repo, tenant):
+    repo.upsert_metric(tenant, MetricSeries(
+        metric_record_id="mr1", tenant_id=tenant, subject_type="STORE",
+        subject_id="store_amazon_001", metric_name="GMV", metric_class="AGGREGATED",
+        granularity="DAILY", period_start="2026-08-01", period_end="2026-08-02",
+        value=100.0, dimensions={"a": 1, "b": 2},
+    ))
+    second = repo.upsert_metric(tenant, MetricSeries(
+        metric_record_id="mr2", tenant_id=tenant, subject_type="STORE",
+        subject_id="store_amazon_001", metric_name="GMV", metric_class="AGGREGATED",
+        granularity="DAILY", period_start="2026-08-01", period_end="2026-08-02",
+        value=150.0, dimensions={"b": 2, "a": 1},
+    ))
+    assert second.metric_record_id == "mr1"
+    assert len(repo.query_metrics(tenant, "STORE", "store_amazon_001", ["GMV"], "DAILY")) == 1
+
+
+def test_schema_migrations_versioned(postgres_repository):
+    # migrate() records the schema version; re-applying is idempotent.
+    postgres_repository.migrate()
+    assert postgres_repository.schema_version() == 1
+    postgres_repository.migrate()
+    assert postgres_repository.schema_version() == 1
 
 
 def test_query_service_end_to_end(repo, tenant):

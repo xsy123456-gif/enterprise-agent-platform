@@ -1,6 +1,7 @@
 """PostgreSQL implementation of the external-id -> canonical-id map."""
 
 from app.commerce.domain import ExternalIdentity
+from app.commerce.repositories.errors import ExternalIdentityConflict
 from app.commerce.repositories.ports import ExternalIdentityMap
 
 
@@ -33,12 +34,24 @@ class PostgresExternalIdentityMap(ExternalIdentityMap):
                     (identity.tenant_id, identity.platform, identity.store_id,
                      identity.resource_type, identity.external_id, identity.canonical_id),
                 )
-        # First-write-wins: return the canonical id actually stored, so repeated
-        # sync of the same external object never produces a new canonical id.
-        return self.resolve(
+                inserted = cursor.rowcount == 1
+        if inserted:
+            return identity.canonical_id
+        # Idempotent success: same external key + same canonical id.
+        # Conflict: same external key + different canonical id -> fail closed,
+        # the original mapping is left unchanged.
+        existing = self.resolve(
             identity.tenant_id, identity.platform, identity.store_id,
             identity.resource_type, identity.external_id,
         )
+        if existing != identity.canonical_id:
+            raise ExternalIdentityConflict(
+                f"external identity conflict for "
+                f"{identity.resource_type}:{identity.external_id}: "
+                f"canonical_id {existing!r} already mapped, "
+                f"cannot remap to {identity.canonical_id!r}"
+            )
+        return existing
 
     def list(self, tenant_id):
         with self.connection_factory() as conn:

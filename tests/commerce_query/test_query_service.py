@@ -93,3 +93,36 @@ def test_tenant_scope_never_from_request(service):
     result = service.get_store("company_B", "store_amazon_001")
     assert result.data == ()
     assert result.effective_scope == {"tenant_id": "company_B"}
+
+
+def test_service_does_not_compute_derived_metrics(service):
+    repo = service.repository
+    repo.upsert_metric(TENANT, MetricSeries(
+        metric_record_id="spend", tenant_id=TENANT, subject_type="STORE",
+        subject_id="store_amazon_001", metric_name="SPEND", metric_class="SOURCE",
+        granularity="DAILY", period_start="2026-08-01", period_end="2026-08-02",
+        value=100.0,
+    ))
+    repo.upsert_metric(TENANT, MetricSeries(
+        metric_record_id="sales", tenant_id=TENANT, subject_type="STORE",
+        subject_id="store_amazon_001", metric_name="SALES", metric_class="SOURCE",
+        granularity="DAILY", period_start="2026-08-01", period_end="2026-08-02",
+        value=300.0,
+    ))
+    # ROAS is a DERIVED metric; the query service must never compute it.
+    result = service.query_metrics(TENANT, "STORE", "store_amazon_001", ["ROAS"], "DAILY")
+    assert result.data == ()
+
+
+def test_service_returns_only_stored_facts(service):
+    repo = service.repository
+    repo.upsert_metric(TENANT, MetricSeries(
+        metric_record_id="gmv", tenant_id=TENANT, subject_type="STORE",
+        subject_id="store_amazon_001", metric_name="GMV", metric_class="AGGREGATED",
+        granularity="DAILY", period_start="2026-08-01", period_end="2026-08-02",
+        value=500.0,
+    ))
+    result = service.query_metrics(TENANT, "STORE", "store_amazon_001", ["GMV"], "DAILY")
+    assert result.page.returned_count == 1
+    assert result.data[0].metric_name == "GMV"
+    assert result.data[0].metric_class == "AGGREGATED"

@@ -11,4 +11,15 @@ class TenantIsolationViolation(CommerceStorageError):
     """A cross-tenant write was attempted (fail-closed)."""
 
 
-__all__ = ["CommerceStorageError", "TenantIsolationViolation"]
+class ExternalIdentityConflict(CommerceStorageError):
+    """The same external key maps to a different canonical id (fail-closed).
+
+    The existing mapping is left unchanged.
+    """
+
+
+__all__ = [
+    "CommerceStorageError",
+    "TenantIsolationViolation",
+    "ExternalIdentityConflict",
+]

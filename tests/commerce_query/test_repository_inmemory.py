@@ -23,6 +23,7 @@ from app.commerce.domain import (
 )
 from app.commerce.repositories.errors import (
     CommerceStorageError,
+    ExternalIdentityConflict,
     TenantIsolationViolation,
 )
 from app.commerce.repositories.inmemory import (
@@ -223,12 +224,27 @@ def test_external_identity_stable(identity_map):
         resource_type="PRODUCT", external_id="ASIN1", canonical_id="product_000021",
     )
     assert identity_map.register(TENANT_A, ext) == "product_000021"
-    # second register with a different canonical id must not change the mapping
-    ext2 = ExternalIdentity(
+    # same external key + same canonical id -> idempotent success
+    same = ExternalIdentity(
+        tenant_id=TENANT_A, platform="amazon", store_id="store_amazon_001",
+        resource_type="PRODUCT", external_id="ASIN1", canonical_id="product_000021",
+    )
+    assert identity_map.register(TENANT_A, same) == "product_000021"
+    assert identity_map.resolve(TENANT_A, "amazon", "store_amazon_001", "PRODUCT", "ASIN1") == "product_000021"
+
+
+def test_external_identity_conflict_fails_closed(identity_map):
+    identity_map.register(TENANT_A, ExternalIdentity(
+        tenant_id=TENANT_A, platform="amazon", store_id="store_amazon_001",
+        resource_type="PRODUCT", external_id="ASIN1", canonical_id="product_000021",
+    ))
+    conflict = ExternalIdentity(
         tenant_id=TENANT_A, platform="amazon", store_id="store_amazon_001",
         resource_type="PRODUCT", external_id="ASIN1", canonical_id="product_999",
     )
-    assert identity_map.register(TENANT_A, ext2) == "product_000021"
+    with pytest.raises(ExternalIdentityConflict):
+        identity_map.register(TENANT_A, conflict)
+    # original mapping unchanged
     assert identity_map.resolve(TENANT_A, "amazon", "store_amazon_001", "PRODUCT", "ASIN1") == "product_000021"
 
 

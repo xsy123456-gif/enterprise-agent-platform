@@ -9,6 +9,7 @@ natural key; inventory snapshots are append-only on theirs.
 import json
 from contextlib import contextmanager
 
+from app.commerce.contracts.errors import CommerceValidationError
 from app.commerce.domain import (
     Ad,
     AdGroup,
@@ -26,13 +27,17 @@ from app.commerce.domain import (
     SearchTerm,
     Store,
 )
+from app.commerce.domain.metrics import canonical_dimensions_hash
 from app.commerce.repositories.errors import (
     CommerceStorageError,
     TenantIsolationViolation,
 )
 from app.commerce.repositories.ports import CommerceRepository
+from app.commerce.repositories.postgres.migrations import (
+    apply_migrations,
+    current_schema_version,
+)
 from app.commerce.repositories.postgres.schema import (
-    METRIC_NATURAL_KEY,
     REQUIRED_COLUMNS,
     TABLES,
     build_schema_sql,
@@ -51,6 +56,30 @@ def _to_tuple(value):
     return (value,)
 
 
+def _inventory_source(snapshot):
+    """Source identity for an inventory snapshot (part of its natural key).
+
+    Distinct sources for the same (store, sku, snapshot_at) must not overwrite
+    each other.
+    """
+    return (snapshot.source_metadata or {}).get("source", "default")
+
+
+def _metric_dimensions_hash(series):
+    """Canonical, deterministic dimensions hash for the metric natural key.
+
+    A caller-supplied hash must equal the canonical hash, otherwise the write is
+    rejected (fail-closed) so the natural key can never be non-deterministic.
+    """
+    computed = canonical_dimensions_hash(series.dimensions)
+    if series.dimensions_hash and series.dimensions_hash != computed:
+        raise CommerceValidationError(
+            f"dimensions_hash {series.dimensions_hash!r} does not match canonical "
+            f"hash {computed!r} for dimensions {series.dimensions!r}"
+        )
+    return computed
+
+
 class PostgresCommerceRepository(CommerceRepository):
 
     def __init__(self, connection_factory):
@@ -59,10 +88,25 @@ class PostgresCommerceRepository(CommerceRepository):
     # ── Lifecycle / schema ────────────────────────────────────
 
     def initialize(self):
+        """Development/test bootstrap: apply the idempotent DDL directly.
+
+        Production must not use this for schema evolution; it should use
+        ``migrate()`` so every schema change is versioned and recorded.
+        """
         with self._connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(build_schema_sql())
         self.validate_schema()
+
+    def migrate(self):
+        """Apply pending versioned migrations (production schema evolution)."""
+        with self._connection() as conn:
+            apply_migrations(conn)
+        self.validate_schema()
+
+    def schema_version(self) -> int:
+        with self._connection() as conn:
+            return current_schema_version(conn)
 
     def healthcheck(self):
         with self._connection() as conn:
@@ -295,7 +339,7 @@ class PostgresCommerceRepository(CommerceRepository):
         self._require_tenant(tenant_id, snapshot.tenant_id)
         self._verify_parent_tenant(tenant_id, "commerce_stores", "store_id", snapshot.store_id)
         self._verify_parent_tenant(tenant_id, "commerce_skus", "sku_id", snapshot.sku_id)
-        source = (snapshot.source_metadata or {}).get("source", "default")
+        source = _inventory_source(snapshot)
         with self._connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -586,6 +630,7 @@ class PostgresCommerceRepository(CommerceRepository):
 
     def upsert_metric(self, tenant_id, series):
         self._require_tenant(tenant_id, series.tenant_id)
+        dimensions_hash = _metric_dimensions_hash(series)
         with self._connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -604,7 +649,7 @@ class PostgresCommerceRepository(CommerceRepository):
                      series.subject_id, series.metric_name, series.metric_class,
                      series.granularity, series.period_start, series.period_end,
                      series.value, series.unit, _json(series.dimensions),
-                     series.dimensions_hash, _json(series.source_metadata),
+                     dimensions_hash, _json(series.source_metadata),
                      series.updated_at),
                 )
         # Return the canonical row so the caller observes the stable id.
@@ -613,7 +658,7 @@ class PostgresCommerceRepository(CommerceRepository):
             [series.metric_name], series.granularity,
             series.period_start, series.period_end,
         )
-        matches = [r for r in rows if r.dimensions_hash == series.dimensions_hash]
+        matches = [r for r in rows if r.dimensions_hash == dimensions_hash]
         return matches[0] if matches else series
 
     def query_metrics(self, tenant_id, subject_type, subject_id,

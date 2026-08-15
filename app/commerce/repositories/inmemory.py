@@ -5,6 +5,7 @@ implementation exactly: tenant isolation, parent-tenant verification, metric
 natural-key idempotency and append-only inventory.
 """
 
+from app.commerce.contracts.errors import CommerceValidationError
 from app.commerce.domain import (
     Ad,
     AdGroup,
@@ -23,11 +24,23 @@ from app.commerce.domain import (
     SearchTerm,
     Store,
 )
+from app.commerce.domain.metrics import canonical_dimensions_hash
 from app.commerce.repositories.errors import (
     CommerceStorageError,
+    ExternalIdentityConflict,
     TenantIsolationViolation,
 )
 from app.commerce.repositories.ports import CommerceRepository, ExternalIdentityMap
+
+
+def _metric_dimensions_hash(series):
+    computed = canonical_dimensions_hash(series.dimensions)
+    if series.dimensions_hash and series.dimensions_hash != computed:
+        raise CommerceValidationError(
+            f"dimensions_hash {series.dimensions_hash!r} does not match canonical "
+            f"hash {computed!r} for dimensions {series.dimensions!r}"
+        )
+    return computed
 
 
 class InMemoryCommerceRepository(CommerceRepository):
@@ -300,7 +313,17 @@ class InMemoryCommerceRepository(CommerceRepository):
 
     def upsert_metric(self, tenant_id, series):
         self._require_tenant(tenant_id, series.tenant_id)
-        key = self._metric_key(series)
+        dimensions_hash = _metric_dimensions_hash(series)
+        normalized = MetricSeries(
+            metric_record_id=series.metric_record_id, tenant_id=series.tenant_id,
+            subject_type=series.subject_type, subject_id=series.subject_id,
+            metric_name=series.metric_name, metric_class=series.metric_class,
+            granularity=series.granularity, period_start=series.period_start,
+            period_end=series.period_end, value=series.value, unit=series.unit,
+            dimensions=dict(series.dimensions), dimensions_hash=dimensions_hash,
+            source_metadata=dict(series.source_metadata), updated_at=series.updated_at,
+        )
+        key = self._metric_key(normalized)
         existing = self._metrics.get(key)
         if existing is not None:
             updated = MetricSeries(
@@ -309,21 +332,21 @@ class InMemoryCommerceRepository(CommerceRepository):
                 subject_type=existing.subject_type,
                 subject_id=existing.subject_id,
                 metric_name=existing.metric_name,
-                metric_class=series.metric_class,
+                metric_class=normalized.metric_class,
                 granularity=existing.granularity,
                 period_start=existing.period_start,
                 period_end=existing.period_end,
-                value=series.value,
-                unit=series.unit,
-                dimensions=dict(series.dimensions),
+                value=normalized.value,
+                unit=normalized.unit,
+                dimensions=dict(normalized.dimensions),
                 dimensions_hash=existing.dimensions_hash,
-                source_metadata=dict(series.source_metadata),
-                updated_at=series.updated_at,
+                source_metadata=dict(normalized.source_metadata),
+                updated_at=normalized.updated_at,
             )
             self._metrics[key] = updated
             return updated
-        self._metrics[key] = series
-        return series
+        self._metrics[key] = normalized
+        return normalized
 
     def query_metrics(self, tenant_id, subject_type, subject_id,
                       metric_names=None, granularity=None,
@@ -391,9 +414,18 @@ class InMemoryExternalIdentityMap(ExternalIdentityMap):
     def register(self, tenant_id, identity):
         key = (identity.tenant_id, identity.platform, identity.store_id,
                identity.resource_type, identity.external_id)
-        if key not in self._identities:
+        existing = self._identities.get(key)
+        if existing is None:
             self._identities[key] = identity
-        return self._identities[key].canonical_id
+            return identity.canonical_id
+        if existing.canonical_id != identity.canonical_id:
+            raise ExternalIdentityConflict(
+                f"external identity conflict for "
+                f"{identity.resource_type}:{identity.external_id}: "
+                f"canonical_id {existing.canonical_id!r} already mapped, "
+                f"cannot remap to {identity.canonical_id!r}"
+            )
+        return existing.canonical_id
 
     def list(self, tenant_id):
         return sorted(

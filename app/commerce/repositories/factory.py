@@ -25,13 +25,18 @@ def _connection_factory(url):
 
 
 def build_repository(url=None, initialize=False):
-    """Build a ``CommerceRepository`` (Postgres when ``url`` is set)."""
+    """Build a ``CommerceRepository`` (Postgres when ``url`` is set).
+
+    With a URL, ``initialize=True`` applies the *versioned* migrations
+    (production schema evolution); ``initialize=False`` only validates the
+    existing schema.  Without a URL the in-memory implementation is returned.
+    """
     if not url:
         return InMemoryCommerceRepository()
     repository = PostgresCommerceRepository(_connection_factory(url))
     repository.healthcheck()
     if initialize:
-        repository.initialize()
+        repository.migrate()
     else:
         repository.validate_schema()
     return repository

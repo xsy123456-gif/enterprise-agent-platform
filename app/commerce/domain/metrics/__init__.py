@@ -8,6 +8,8 @@ a formula.
 """
 
 from dataclasses import dataclass, field
+import hashlib
+import json
 from typing import Any
 
 from app.commerce.domain.base import utc_now
@@ -17,6 +19,30 @@ METRIC_CLASS_SOURCE = "SOURCE"
 METRIC_CLASS_AGGREGATED = "AGGREGATED"
 METRIC_CLASS_DERIVED = "DERIVED"
 METRIC_CLASSES = frozenset({METRIC_CLASS_SOURCE, METRIC_CLASS_AGGREGATED, METRIC_CLASS_DERIVED})
+
+
+def _canonical(value):
+    """Recursively sort dict keys so serialization is order-independent."""
+    if isinstance(value, dict):
+        return {key: _canonical(value[key]) for key in sorted(value)}
+    if isinstance(value, (list, tuple)):
+        return [_canonical(item) for item in value]
+    return value
+
+
+def canonical_dimensions_hash(dimensions) -> str:
+    """Deterministic SHA-256 over a canonical (dict-order-independent) JSON
+    serialization of ``dimensions``.
+
+    This is the single source of truth for the ``dimensions_hash`` used in the
+    MetricSeries natural key, so two records with the same dimensions always
+    collapse to the same hash regardless of dictionary insertion order.
+    """
+    payload = _canonical(dimensions or {})
+    serialized = json.dumps(
+        payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+    )
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -135,4 +161,5 @@ __all__ = [
     "METRIC_CLASS_AGGREGATED",
     "METRIC_CLASS_DERIVED",
     "METRIC_CLASSES",
+    "canonical_dimensions_hash",
 ]
