@@ -107,9 +107,17 @@ class RuleEngine:
                 continue
             causes.append(self._build_cause(rule, matched_ids, evidence_index,
                                             rule_set, subject))
-        if not causes:
+        if not causes and self._has_candidate(signal_index):
             causes.append(self._unknown_cause(rule_set, subject))
         return causes
+
+    @staticmethod
+    def _has_candidate(signal_index):
+        """A WARNING+ signal exists (so UNKNOWN is meaningful), else no cause."""
+        return any(
+            _SIGNAL_STATUS_ORDER.get(signal.status, -1) >= _SIGNAL_STATUS_ORDER[SIGNAL_WARNING]
+            for signals in signal_index.values() for signal in signals
+        )
 
     def _match(self, rule, signal_index):
         matched_ids = []

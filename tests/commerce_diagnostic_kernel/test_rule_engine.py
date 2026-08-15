@@ -224,13 +224,13 @@ def test_cross_subject_signal_not_combined():
               RuleConsequent("X", ROLE_PRIMARY, SUPPORT_CONFIRMED))
     ]
     engine = RuleEngine()
-    # The only CVR_DROP signal is for a different SKU -> no match -> UNKNOWN.
+    # The only CVR_DROP signal is for a different SKU -> no cause for this subject.
     causes = engine.evaluate(
         signals=[Signal(signal_id="s_other", signal_code="CVR_DROP", domain="conversion",
                         subject=OTHER_SUBJECT, status=SIGNAL_ABNORMAL, direction="DOWN")],
         evidence=[], rule_set=_ruleset(rules), subject=SUBJECT,
     )
-    assert causes[0].cause_code == "UNKNOWN"
+    assert causes == []
 
 
 def test_minimum_status_rejects_non_severity_values():
@@ -248,10 +248,11 @@ def test_non_severity_signal_never_satisfies_threshold():
               RuleConsequent("X", ROLE_PRIMARY, SUPPORT_CONFIRMED))
     ]
     engine = RuleEngine()
-    # INSUFFICIENT_DATA / UNKNOWN / NOT_APPLICABLE can never satisfy a threshold.
+    # INSUFFICIENT_DATA / UNKNOWN / NOT_APPLICABLE can never satisfy a threshold
+    # and, having no WARNING+ signal, produce no cause at all.
     for status in (SIGNAL_INSUFFICIENT_DATA, SIGNAL_UNKNOWN, SIGNAL_NOT_APPLICABLE):
         causes = engine.evaluate(
             signals=[_signal("s1", "CVR_DROP", status)],
             evidence=[], rule_set=_ruleset(rules), subject=SUBJECT,
         )
-        assert causes[0].cause_code == "UNKNOWN"
+        assert causes == []

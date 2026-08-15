@@ -1,0 +1,93 @@
+"""Plan Validator — structural + DAG + WHEN safety checks (fail-closed)."""
+
+from app.commerce.diagnostics.errors import MetricError
+from app.commerce.diagnostics.plans.schema import (
+    FAILURE_POLICIES,
+    STEP_RESULT_ASSEMBLE,
+    STEP_TYPES,
+)
+from app.commerce.diagnostics.plans.when import (
+    WHEN_OPERATORS,
+    is_allowed_path,
+)
+
+
+class PlanValidationError(MetricError):
+    """A DiagnosticPlan definition is invalid."""
+
+
+def validate_plan(definition):
+    if not definition.plan_id:
+        raise PlanValidationError("plan_id is required")
+    if not definition.version:
+        raise PlanValidationError(f"plan {definition.plan_id!r} requires a version")
+    if not definition.domain:
+        raise PlanValidationError(f"plan {definition.plan_id!r} requires a domain")
+    if not definition.steps:
+        raise PlanValidationError(f"plan {definition.plan_id!r} has no steps")
+
+    all_ids = {step.step_id for step in definition.steps}
+    if len(all_ids) != len(definition.steps):
+        raise PlanValidationError(f"plan {definition.plan_id!r} has duplicate step ids")
+
+    for step in definition.steps:
+        if step.type not in STEP_TYPES:
+            raise PlanValidationError(
+                f"step {step.step_id!r} has unknown type {step.type!r}"
+            )
+        if step.on_failure not in FAILURE_POLICIES:
+            raise PlanValidationError(
+                f"step {step.step_id!r} has unknown on_failure {step.on_failure!r}"
+            )
+        for condition in step.when:
+            if not is_allowed_path(condition.path):
+                raise PlanValidationError(
+                    f"step {step.step_id!r} has unsupported WHEN path "
+                    f"{condition.path!r}"
+                )
+            if condition.operator not in WHEN_OPERATORS:
+                raise PlanValidationError(
+                    f"step {step.step_id!r} has unsupported WHEN operator "
+                    f"{condition.operator!r}"
+                )
+        for target in step.next:
+            if target not in all_ids:
+                raise PlanValidationError(
+                    f"step {step.step_id!r} references unknown next step {target!r}"
+                )
+
+    _check_acyclic(definition)
+    _check_result_assemble(definition)
+
+
+def _check_acyclic(definition):
+    steps = {s.step_id: s for s in definition.steps}
+    state = {}
+
+    def visit(step_id, stack):
+        if state.get(step_id) == 2:
+            return
+        if state.get(step_id) == 1:
+            raise PlanValidationError(
+                f"plan {definition.plan_id!r} has a cycle at {step_id!r}"
+            )
+        state[step_id] = 1
+        for target in steps[step_id].next:
+            visit(target, stack | {step_id})
+        state[step_id] = 2
+
+    for step_id in steps:
+        visit(step_id, frozenset())
+
+
+def _check_result_assemble(definition):
+    assembles = [s for s in definition.steps if s.type == STEP_RESULT_ASSEMBLE]
+    if len(assembles) != 1:
+        raise PlanValidationError(
+            f"plan {definition.plan_id!r} must have exactly one RESULT_ASSEMBLE step"
+        )
+    if assembles[0].next:
+        raise PlanValidationError("RESULT_ASSEMBLE must be a terminal step")
+
+
+__all__ = ["validate_plan", "PlanValidationError"]
