@@ -1,8 +1,10 @@
-"""Business action runtime (Phase 16.3).
+"""Business action runtime (Phase 16.3 + 18.3).
 
-The concrete ``ActionExecutor``: validate -> permission -> approval -> execute
--> audit.  Fail-closed on every gate; a denied/unauthorized action never
-reaches the handler.
+Governance runtime: validate -> permission -> approval -> (idempotency +
+precondition) -> dispatch -> audit.  The *actual* external execution goes
+through ``ActionExecutionPort`` (fulfilled by the Runtime Foundation), never
+through a private ``action_handler`` in production.  ``action_handler`` remains
+only as a test/development convenience.
 """
 
 import uuid
@@ -26,11 +28,15 @@ from app.platform.business.errors import (
 class BusinessActionRuntime(ActionExecutor):
 
     def __init__(self, approval_engine=None, permission_checker=None,
-                 action_handler=None, audit=None):
+                 action_handler=None, audit=None, execution_port=None,
+                 idempotency_store=None, precondition_checker=None):
         self.approval_engine = approval_engine
         self.permission_checker = permission_checker
         self.action_handler = action_handler
         self.audit = audit
+        self.execution_port = execution_port
+        self.idempotency_store = idempotency_store
+        self.precondition_checker = precondition_checker
 
     def create_action(self, proposal) -> BusinessAction:
         action = BusinessAction(
@@ -58,19 +64,49 @@ class BusinessActionRuntime(ActionExecutor):
             raise ApprovalRequiredError(
                 f"action {action.action_id!r} requires approval"
             )
+        existing = self._idempotent_result(action)
+        if existing is not None:
+            return existing
+        self._check_precondition(action, context)
         running = replace(action, status=ACTION_EXECUTING)
         try:
-            if self.action_handler is not None:
-                self.action_handler(running, context)
+            self._dispatch(running, context)
             result = replace(running, status=ACTION_SUCCEEDED)
         except Exception as error:  # noqa: BLE001 - recorded in audit
             result = replace(running, status=ACTION_FAILED)
             if self.audit is not None:
                 self.audit.record(action.action_id, "Failed", str(error))
             raise ActionExecutionError(str(error))
+        self._record_idempotency(action, result)
         if self.audit is not None:
             self.audit.record(action.action_id, "Executed", "")
         return result
+
+    def _dispatch(self, action, context):
+        if self.execution_port is not None:
+            self.execution_port.execute(action, context)
+        elif self.action_handler is not None:
+            self.action_handler(action, context)
+        else:
+            raise ActionExecutionError("no execution port configured")
+
+    def _idempotent_result(self, action):
+        if self.idempotency_store is None or not action.idempotency_key:
+            return None
+        return self.idempotency_store.get(action.idempotency_key)
+
+    def _record_idempotency(self, action, result):
+        if self.idempotency_store is not None and action.idempotency_key:
+            self.idempotency_store.put(action.idempotency_key, result)
+
+    def _check_precondition(self, action, context):
+        if self.precondition_checker is None or not action.expected_resource_version:
+            return
+        ok, detail = self.precondition_checker(action, context)
+        if not ok:
+            raise ActionExecutionError(
+                f"precondition failed for {action.target!r}: {detail}"
+            )
 
     def _needs_approval(self, action):
         if self.approval_engine is None:
@@ -79,4 +115,16 @@ class BusinessActionRuntime(ActionExecutor):
                                                       action.risk_level)
 
 
-__all__ = ["BusinessActionRuntime"]
+class InMemoryIdempotencyStore:
+
+    def __init__(self):
+        self._results = {}
+
+    def get(self, key):
+        return self._results.get(key)
+
+    def put(self, key, result):
+        self._results[key] = result
+
+
+__all__ = ["BusinessActionRuntime", "InMemoryIdempotencyStore"]

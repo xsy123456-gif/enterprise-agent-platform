@@ -64,6 +64,10 @@ class BusinessAction:
     risk_level: str = RISK_LOW
     created_by: str = ""
     status: str = ACTION_CREATED
+    # Phase 18.3: external write safety (idempotency + optimistic concurrency)
+    idempotency_key: str = ""
+    external_correlation_id: str = ""
+    expected_resource_version: str = ""
 
     def __post_init__(self):
         object.__setattr__(self, "parameters", dict(self.parameters or {}))
@@ -83,6 +87,9 @@ class BusinessAction:
             "risk_level": self.risk_level,
             "created_by": self.created_by,
             "status": self.status,
+            "idempotency_key": self.idempotency_key,
+            "external_correlation_id": self.external_correlation_id,
+            "expected_resource_version": self.expected_resource_version,
         }
 
 

@@ -52,7 +52,8 @@ def test_low_risk_action_auto_approved_and_executed():
 
 
 def test_high_risk_action_requires_approval():
-    runtime = BusinessActionRuntime(approval_engine=_approval_engine())
+    runtime = BusinessActionRuntime(approval_engine=_approval_engine(),
+                                    action_handler=lambda a, c: None)
     proposal = ActionProposal(
         proposal_id="p1", agent_id="commerce_agent",
         action_type="UPDATE_AD_BUDGET", target="campaign_A", risk_level="HIGH")
