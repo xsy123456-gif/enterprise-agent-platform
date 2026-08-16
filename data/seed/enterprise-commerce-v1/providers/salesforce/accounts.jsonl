@@ -1,0 +1,12 @@
+{"Id": "0010001000", "Name": "Tesla", "Industry": "Electronics", "AnnualRevenue": 1000000.0, "Type": "Customer"}
+{"Id": "0010001001", "Name": "Panasonic", "Industry": "Electronics", "AnnualRevenue": 2000000.0, "Type": "Customer"}
+{"Id": "0010001002", "Name": "Sony", "Industry": "Electronics", "AnnualRevenue": 3000000.0, "Type": "Customer"}
+{"Id": "0010001003", "Name": "Nintendo", "Industry": "Electronics", "AnnualRevenue": 4000000.0, "Type": "Customer"}
+{"Id": "0010001004", "Name": "Canon", "Industry": "Electronics", "AnnualRevenue": 5000000.0, "Type": "Customer"}
+{"Id": "0010001005", "Name": "Nikon", "Industry": "Electronics", "AnnualRevenue": 6000000.0, "Type": "Customer"}
+{"Id": "0010001006", "Name": "Dell", "Industry": "Electronics", "AnnualRevenue": 7000000.0, "Type": "Customer"}
+{"Id": "0010001007", "Name": "Lenovo", "Industry": "Electronics", "AnnualRevenue": 8000000.0, "Type": "Customer"}
+{"Id": "0010001008", "Name": "HP", "Industry": "Electronics", "AnnualRevenue": 9000000.0, "Type": "Customer"}
+{"Id": "0010001009", "Name": "Samsung", "Industry": "Electronics", "AnnualRevenue": 10000000.0, "Type": "Customer"}
+{"Id": "0010001010", "Name": "LG", "Industry": "Electronics", "AnnualRevenue": 11000000.0, "Type": "Customer"}
+{"Id": "0010001011", "Name": "Fujitsu", "Industry": "Electronics", "AnnualRevenue": 12000000.0, "Type": "Customer"}

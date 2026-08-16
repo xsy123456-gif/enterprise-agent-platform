@@ -1,0 +1,10 @@
+{"Id": "0060001000", "AccountId": "0010001000", "Name": "Deal 1", "StageName": "Closed Won", "Amount": 50000.0, "CloseDate": "2026-09-15"}
+{"Id": "0060001001", "AccountId": "0010001001", "Name": "Deal 2", "StageName": "Negotiation", "Amount": 100000.0, "CloseDate": "2026-09-15"}
+{"Id": "0060001002", "AccountId": "0010001002", "Name": "Deal 3", "StageName": "Negotiation", "Amount": 150000.0, "CloseDate": "2026-09-15"}
+{"Id": "0060001003", "AccountId": "0010001003", "Name": "Deal 4", "StageName": "Closed Won", "Amount": 200000.0, "CloseDate": "2026-09-15"}
+{"Id": "0060001004", "AccountId": "0010001004", "Name": "Deal 5", "StageName": "Negotiation", "Amount": 250000.0, "CloseDate": "2026-09-15"}
+{"Id": "0060001005", "AccountId": "0010001005", "Name": "Deal 6", "StageName": "Negotiation", "Amount": 300000.0, "CloseDate": "2026-09-15"}
+{"Id": "0060001006", "AccountId": "0010001006", "Name": "Deal 7", "StageName": "Closed Won", "Amount": 350000.0, "CloseDate": "2026-09-15"}
+{"Id": "0060001007", "AccountId": "0010001007", "Name": "Deal 8", "StageName": "Negotiation", "Amount": 400000.0, "CloseDate": "2026-09-15"}
+{"Id": "0060001008", "AccountId": "0010001008", "Name": "Deal 9", "StageName": "Negotiation", "Amount": 450000.0, "CloseDate": "2026-09-15"}
+{"Id": "0060001009", "AccountId": "0010001009", "Name": "Deal 10", "StageName": "Closed Won", "Amount": 500000.0, "CloseDate": "2026-09-15"}
