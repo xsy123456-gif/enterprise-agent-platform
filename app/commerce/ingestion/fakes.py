@@ -2,7 +2,8 @@
 
 The FakeConnector serves in-memory source records (paginated), and can inject
 failures.  The FakeAdapter maps the simple source-record schema into canonical
-mutations.  Neither touches the Canonical Store or the network.
+mutations.  Neither touches the Canonical Store or the network.  Both record
+their real provenance (connector/adapter id+version, fetch/adapter timestamps).
 """
 
 from app.commerce.ingestion.envelope import (
@@ -12,6 +13,7 @@ from app.commerce.ingestion.envelope import (
     CanonicalMutation,
     SourceRecordEnvelope,
 )
+from app.commerce.ingestion.models import utc_now
 from app.commerce.ingestion.ports import (
     AdapterMappingError,
     AdapterPort,
@@ -93,6 +95,12 @@ class FakeConnector(ConnectorPort):
             payload=dict(record),
             sequence=record.get("sequence"),
             deleted=bool(record.get("deleted")),
+            source_external_id=record.get("external_id", ""),
+            source_observed_at=record.get("observed_at", ""),
+            source_updated_at=record.get("updated_at", ""),
+            fetched_at=utc_now(),
+            connector_id="fake",
+            connector_version=self.version,
         )
 
 
@@ -105,9 +113,10 @@ class FakeAdapter(AdapterPort):
          "external_id": "...", "deleted": bool, "invalid": bool}
     """
 
-    def __init__(self, tenant_id="company_A", store_id=""):
+    def __init__(self, tenant_id="company_A", store_id="", version="1.0"):
         self.tenant_id = tenant_id
         self.store_id = store_id
+        self.version = version
 
     def adapt(self, envelope: SourceRecordEnvelope) -> list[CanonicalMutation]:
         payload = envelope.payload
@@ -124,6 +133,11 @@ class FakeAdapter(AdapterPort):
                 entity=dict(payload.get("data") or {}),
                 subject_id=payload.get("data", {}).get("id"),
                 source_record_id=envelope.source_record_id,
+                critical=bool(payload.get("critical")),
+                adapter_id="fake",
+                adapter_version=self.version,
+                source_external_id=envelope.source_external_id,
+                source_updated_at=envelope.source_updated_at,
             )]
         mutation_type = (
             MUTATION_APPEND if resource in _APPEND_RESOURCES else MUTATION_UPSERT
@@ -147,6 +161,11 @@ class FakeAdapter(AdapterPort):
             entity=entity,
             external_identity=external,
             source_record_id=envelope.source_record_id,
+            critical=bool(payload.get("critical")),
+            adapter_id="fake",
+            adapter_version=self.version,
+            source_external_id=envelope.source_external_id,
+            source_updated_at=envelope.source_updated_at,
         )]
 
 

@@ -7,7 +7,11 @@ only) -> committed watermark advance -> domain events.  at-least-once fetch +
 idempotent canonical write.
 """
 
-from app.commerce.ingestion.coordinator import SyncCoordinator, SyncLockError
+from app.commerce.ingestion.coordinator import (
+    SyncCoordinator,
+    SyncCriticalFailure,
+    SyncLockError,
+)
 from app.commerce.ingestion.envelope import (
     MUTATION_APPEND,
     MUTATION_TOMBSTONE,
@@ -90,6 +94,7 @@ __all__ = [
     "PublishManager",
     "SyncCoordinator",
     "SyncLockError",
+    "SyncCriticalFailure",
     "SyncEvents",
     "EVENT_SYNC_COMPLETED",
     "EVENT_DATA_PUBLISHED",

@@ -140,7 +140,7 @@ def test_adapter_failure_quarantined(harness):
         ],
     )
     run = coordinator.run("catalog.product")
-    assert run.status == RUN_SUCCEEDED
+    assert run.status == "PARTIAL"
     assert run.records_quarantined == 1
     assert run.records_published == 1
     assert harness.repository.get_product(TENANT, "product_A") is not None
@@ -172,11 +172,11 @@ def test_sync_lock_prevents_concurrent_writer(harness):
         "catalog.product", resource="product", mode=SYNC_FULL_SNAPSHOT,
         records=[product_record("s1", "product_A", "Widget")],
     )
-    # Manually hold the lock, then attempt to run.
-    token = harness.lock.acquire(definition.partition_key)
+    # Manually hold the lease, then attempt to run.
+    lease = harness.lock.acquire(definition.partition_key)
     with pytest.raises(SyncLockError):
         coordinator.run("catalog.product")
-    harness.lock.release(definition.partition_key, token)
+    harness.lock.release(definition.partition_key, lease.token)
     assert coordinator.run("catalog.product").status == RUN_SUCCEEDED
 
 

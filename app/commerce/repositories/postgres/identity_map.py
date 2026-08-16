@@ -1,8 +1,11 @@
 """PostgreSQL implementation of the external-id -> canonical-id map."""
 
+from contextlib import contextmanager
+
 from app.commerce.domain import ExternalIdentity
 from app.commerce.repositories.errors import ExternalIdentityConflict
 from app.commerce.repositories.ports import ExternalIdentityMap
+from app.commerce.repositories.postgres.tx import current_tx_connection
 
 
 class PostgresExternalIdentityMap(ExternalIdentityMap):
@@ -10,8 +13,17 @@ class PostgresExternalIdentityMap(ExternalIdentityMap):
     def __init__(self, connection_factory):
         self.connection_factory = connection_factory
 
-    def resolve(self, tenant_id, platform, store_id, resource_type, external_id):
+    @contextmanager
+    def _connection(self):
+        shared = current_tx_connection()
+        if shared is not None:
+            yield shared
+            return
         with self.connection_factory() as conn:
+            yield conn
+
+    def resolve(self, tenant_id, platform, store_id, resource_type, external_id):
+        with self._connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "SELECT canonical_id FROM commerce_external_identities "
@@ -23,7 +35,7 @@ class PostgresExternalIdentityMap(ExternalIdentityMap):
         return row[0] if row else None
 
     def register(self, tenant_id, identity):
-        with self.connection_factory() as conn:
+        with self._connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """INSERT INTO commerce_external_identities
@@ -54,7 +66,7 @@ class PostgresExternalIdentityMap(ExternalIdentityMap):
         return existing
 
     def list(self, tenant_id):
-        with self.connection_factory() as conn:
+        with self._connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "SELECT tenant_id, platform, store_id, resource_type, "

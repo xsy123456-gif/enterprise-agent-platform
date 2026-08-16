@@ -1,14 +1,19 @@
 """SyncCoordinator — drives the full sync pipeline.
 
 Pipeline: fetch (paginated) -> Raw Landing -> Adapter map -> Canonical Staging ->
-validate/referential -> atomic publish -> tombstone (complete full snapshot
-only) -> advance committed watermark (only on full success) -> publish events.
+validate/referential -> atomic publish (mutations + identity + tombstones in one
+unit) -> advance committed watermark (only on full success) -> publish events.
+
+Failure policy: a CRITICAL (required) record failure fails the whole partition
+(no publish, no watermark advance).  An OPTIONAL record failure is quarantined;
+valid records publish and the run completes PARTIAL.
 
 The committed watermark advances ONLY after a fully successful
 fetch + map + validate + publish; on failure the Last Known Good is retained.
 """
 
 import uuid
+from dataclasses import replace
 
 from app.commerce.ingestion.envelope import (
     MUTATION_TOMBSTONE,
@@ -24,6 +29,7 @@ from app.commerce.ingestion.models import (
     RUN_MAPPING,
     RUN_PUBLISHING,
     RUN_FAILED,
+    RUN_PARTIAL,
     RUN_SUCCEEDED,
     RUN_VALIDATING,
     SYNC_FULL_SNAPSHOT,
@@ -37,6 +43,10 @@ from app.commerce.ingestion.ports import AdapterMappingError, FetchRequest
 
 class SyncLockError(Exception):
     """The partition is already locked by another sync."""
+
+
+class SyncCriticalFailure(Exception):
+    """A critical (required) record failed to map/validate — partition fails."""
 
 
 class SyncCoordinator:
@@ -60,7 +70,7 @@ class SyncCoordinator:
         adapter = self.adapters[definition.adapter_id]
         partition_key = definition.partition_key
 
-        lease = self.lock.acquire(partition_key)
+        lease = self.lock.acquire(partition_key, owner=sync_id)
         if lease is None:
             raise SyncLockError(f"sync already running for {partition_key}")
 
@@ -88,7 +98,7 @@ class SyncCoordinator:
             run.completed_at = utc_now()
             # committed watermark NOT advanced; state NOT saved.
         finally:
-            self.lock.release(partition_key, lease)
+            self.lock.release(partition_key, lease.token)
         return run
 
     def _execute(self, definition, connector, adapter, run, state):
@@ -124,8 +134,15 @@ class SyncCoordinator:
         run.status = RUN_MAPPING
         mutations = []
         for envelope in envelopes:
+            critical = bool(envelope.payload.get("critical"))
             try:
-                mutations.extend(adapter.adapt(envelope))
+                for mutation in adapter.adapt(envelope):
+                    mutation = replace(
+                        mutation,
+                        sync_run_id=run.sync_run_id,
+                        canonical_schema_version=definition.schema_version,
+                    )
+                    mutations.append(mutation)
             except AdapterMappingError as error:
                 self.quarantine.record(QuarantineRecord(
                     sync_run_id=run.sync_run_id,
@@ -136,36 +153,46 @@ class SyncCoordinator:
                     raw_reference=envelope.source_payload_checksum,
                 ))
                 run.records_quarantined += 1
+                if critical:
+                    raise SyncCriticalFailure(
+                        f"critical source record failed to map: "
+                        f"{envelope.source_record_id}"
+                    )
         run.records_mapped = len(mutations)
 
         # ── STAGE + VALIDATE ──────────────────────────────────
         run.status = RUN_VALIDATING
         valid, invalid = self.staging.stage(mutations, definition)
-        for _mutation, reason in invalid:
+        for mutation, reason in invalid:
             self.quarantine.record(QuarantineRecord(
                 sync_run_id=run.sync_run_id,
-                source_record_id=_mutation.source_record_id,
-                resource=_mutation.resource,
+                source_record_id=mutation.source_record_id,
+                resource=mutation.resource,
                 error_code="VALIDATION",
-                adapter_version=getattr(adapter, "version", "1.0"),
+                adapter_version=mutation.adapter_version or getattr(adapter, "version", "1.0"),
                 raw_reference=reason,
             ))
             run.records_quarantined += 1
+            if mutation.critical:
+                raise SyncCriticalFailure(
+                    f"critical record failed validation: "
+                    f"{mutation.source_record_id or mutation.resource}"
+                )
         run.records_staged = len(valid)
+
+        # ── TOMBSTONE (complete full snapshot only) ───────────
+        tombstones = ()
+        if definition.mode == SYNC_FULL_SNAPSHOT and run.full_snapshot_complete:
+            current_ids = self.publish.current_ids(valid)
+            tombstones = self._tombstones(state, current_ids, definition)
+        elif definition.mode == SYNC_FULL_SNAPSHOT and not run.full_snapshot_complete:
+            run.error_summary = (
+                "incomplete full snapshot; tombstone generation suppressed"
+            )
 
         # ── PUBLISH (atomic) ──────────────────────────────────
         run.status = RUN_PUBLISHING
-        current_ids = self.publish.apply(valid, definition, run)
-
-        # ── TOMBSTONE (complete full snapshot only) ───────────
-        if definition.mode == SYNC_FULL_SNAPSHOT:
-            if run.full_snapshot_complete:
-                tombstones = self._tombstones(state, current_ids, definition)
-                self.publish.apply_tombstones(tombstones, definition, run)
-            else:
-                run.error_summary = (
-                    "incomplete full snapshot; tombstone generation suppressed"
-                )
+        self.publish.publish(valid, tombstones, definition, run)
 
         # ── ADVANCE COMMITTED WATERMARK (only after full success)
         if definition.mode == SYNC_INCREMENTAL:
@@ -173,13 +200,14 @@ class SyncCoordinator:
         state.working_cursor = cursor
         state.checkpoint_cursor = cursor
         state.last_snapshot_ids = {
-            resource: frozenset(ids) for resource, ids in current_ids.items()
+            resource: frozenset(ids)
+            for resource, ids in self.publish.current_ids(valid).items()
         }
         state.last_full_snapshot_complete = run.full_snapshot_complete
         self.state_store.save(state)
         run.committed_watermark_after = state.committed_watermark
 
-        run.status = RUN_SUCCEEDED
+        run.status = RUN_PARTIAL if run.records_quarantined else RUN_SUCCEEDED
         run.completed_at = utc_now()
 
         # ── EVENTS ────────────────────────────────────────────
@@ -210,4 +238,4 @@ class SyncCoordinator:
         ]
 
 
-__all__ = ["SyncCoordinator", "SyncLockError"]
+__all__ = ["SyncCoordinator", "SyncLockError", "SyncCriticalFailure"]

@@ -1,6 +1,7 @@
 """Sync infrastructure: Raw Landing, Quarantine, Sync Lock/Lease, State store."""
 
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 
@@ -48,32 +49,62 @@ class Quarantine:
         return list(self.records)
 
 
-class SyncLock:
-    """Per-partition lock: no concurrent writer for the same
-    (tenant, source, store, resource)."""
+@dataclass(frozen=True)
+class Lease:
+    partition_key: str
+    token: str
+    owner: str
+    expires_at: float
 
-    def __init__(self):
-        self._locks = {}
+
+class SyncLock:
+    """Per-partition lease: no concurrent writer for the same
+    (tenant, source, store, resource).  Leases expire; an expired lease can be
+    re-acquired, and a stale owner/token can neither renew, release, nor publish
+    a new lease."""
+
+    def __init__(self, clock=None):
+        self._clock = clock or time.monotonic
+        self._leases = {}
         self._guard = threading.Lock()
 
-    def acquire(self, partition_key, lease_seconds=300):
+    def acquire(self, partition_key, owner="default", lease_seconds=300):
+        now = self._clock()
         with self._guard:
-            if partition_key in self._locks:
+            existing = self._leases.get(partition_key)
+            if existing is not None and existing.expires_at > now:
                 return None
-            token = uuid.uuid4().hex
-            self._locks[partition_key] = token
-            return token
+            lease = Lease(partition_key, uuid.uuid4().hex, owner,
+                          now + lease_seconds)
+            self._leases[partition_key] = lease
+            return lease
+
+    def renew(self, partition_key, token, lease_seconds=300):
+        now = self._clock()
+        with self._guard:
+            lease = self._leases.get(partition_key)
+            if lease is None or lease.token != token:
+                return False
+            if lease.expires_at <= now:
+                return False
+            self._leases[partition_key] = Lease(
+                partition_key, token, lease.owner, now + lease_seconds,
+            )
+            return True
 
     def release(self, partition_key, token):
         with self._guard:
-            if self._locks.get(partition_key) == token:
-                del self._locks[partition_key]
-                return True
-            return False
+            lease = self._leases.get(partition_key)
+            if lease is None or lease.token != token:
+                return False
+            del self._leases[partition_key]
+            return True
 
     def is_locked(self, partition_key):
+        now = self._clock()
         with self._guard:
-            return partition_key in self._locks
+            lease = self._leases.get(partition_key)
+            return lease is not None and lease.expires_at > now
 
 
 class SyncStateStore:
@@ -93,6 +124,7 @@ __all__ = [
     "RawLanding",
     "Quarantine",
     "QuarantineRecord",
+    "Lease",
     "SyncLock",
     "SyncStateStore",
 ]

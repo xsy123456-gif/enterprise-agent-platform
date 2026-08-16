@@ -142,69 +142,100 @@ class Staging:
 
 
 class PublishManager:
-    """Applies canonical mutations to the Repository + ExternalIdentityMap."""
+    """Applies canonical mutations to the Repository + ExternalIdentityMap.
+
+    ``publish`` performs the whole partition unit (mutations + identity updates
+    + tombstones) atomically: on PostgreSQL it runs in a single transaction so a
+    mid-unit failure rolls back everything (Last Known Good preserved).
+    """
 
     def __init__(self, repository, identity_map=None):
         self.repository = repository
         self.identity_map = identity_map
         self.tombstones = set()
 
-    def apply(self, mutations, definition, run):
+    def publish(self, mutations, tombstones, definition, run):
+        transaction = getattr(self.repository, "transaction", None)
+        if transaction is not None:
+            with transaction():
+                return self._publish(mutations, tombstones, definition, run)
+        return self._publish(mutations, tombstones, definition, run)
+
+    def _publish(self, mutations, tombstones, definition, run):
         current_ids = {}
         for mutation in mutations:
-            if mutation.mutation_type == MUTATION_TOMBSTONE:
-                continue  # tombstones applied separately by the Coordinator
-            cls = _RESOURCE_CLASSES[mutation.resource]
-            method = getattr(self.repository, _RESOURCE_METHODS[mutation.resource])
-            entity = cls.from_dict(mutation.entity)
-            if mutation.mutation_type == MUTATION_APPEND:
-                method(definition.tenant_id, entity)
-            else:
-                method(definition.tenant_id, entity)
-            if mutation.external_identity and self.identity_map is not None:
-                from app.commerce.domain import ExternalIdentity
-                self.identity_map.register(
-                    definition.tenant_id,
-                    ExternalIdentity(
-                        tenant_id=definition.tenant_id,
-                        platform=mutation.external_identity["platform"],
-                        store_id=mutation.external_identity["store_id"],
-                        resource_type=mutation.external_identity["resource_type"],
-                        external_id=mutation.external_identity["external_id"],
-                        canonical_id=mutation.external_identity["canonical_id"],
-                    ),
-                )
-            id_field = _RESOURCE_ID_FIELDS.get(mutation.resource)
-            if id_field and id_field in mutation.entity:
-                current_ids.setdefault(mutation.resource, set()).add(
-                    mutation.entity[id_field]
-                )
-            run.records_published += 1
+            self._apply_mutation(mutation, definition, run, current_ids)
+        for mutation in tombstones:
+            self._apply_tombstone(mutation, definition, run)
         return {r: frozenset(ids) for r, ids in current_ids.items()}
 
-    def apply_tombstones(self, tombstones, definition, run):
-        for mutation in tombstones:
-            if mutation.mutation_type != MUTATION_TOMBSTONE:
-                continue
-            resource = mutation.resource
-            subject_id = mutation.subject_id or (mutation.entity or {}).get("id")
-            if subject_id is None:
-                continue
-            self.tombstones.add((resource, subject_id))
-            # Mark status="deleted" for status-bearing resources with a getter.
-            getter = _GETTERS.get(resource)
-            if getter is not None:
-                current = getattr(self.repository, getter)(
-                    definition.tenant_id, subject_id
+    def apply(self, mutations, definition, run):
+        """Backward-compatible single-apply (used by replay tests)."""
+        return self.publish(mutations, (), definition, run)
+
+    @staticmethod
+    def current_ids(mutations):
+        """Canonical subject ids produced by the mutations (without applying)."""
+        current = {}
+        for mutation in mutations:
+            id_field = _RESOURCE_ID_FIELDS.get(mutation.resource)
+            if id_field and id_field in (mutation.entity or {}):
+                current.setdefault(mutation.resource, set()).add(
+                    mutation.entity[id_field]
                 )
-                if current is not None:
-                    payload = current.to_dict()
-                    if "status" in payload:
-                        payload["status"] = "deleted"
-                        cls = _RESOURCE_CLASSES[resource]
-                        method = getattr(self.repository, _RESOURCE_METHODS[resource])
-                        method(definition.tenant_id, cls.from_dict(payload))
-            run.tombstones_generated += 1
+        return {r: frozenset(ids) for r, ids in current.items()}
+
+    def apply_tombstones(self, tombstones, definition, run):
+        self.publish((), tombstones, definition, run)
+
+    def _apply_mutation(self, mutation, definition, run, current_ids):
+        if mutation.mutation_type == MUTATION_TOMBSTONE:
+            return
+        cls = _RESOURCE_CLASSES[mutation.resource]
+        method = getattr(self.repository, _RESOURCE_METHODS[mutation.resource])
+        entity = cls.from_dict(mutation.entity)
+        method(definition.tenant_id, entity)
+        if mutation.external_identity and self.identity_map is not None:
+            from app.commerce.domain import ExternalIdentity
+            self.identity_map.register(
+                definition.tenant_id,
+                ExternalIdentity(
+                    tenant_id=definition.tenant_id,
+                    platform=mutation.external_identity["platform"],
+                    store_id=mutation.external_identity["store_id"],
+                    resource_type=mutation.external_identity["resource_type"],
+                    external_id=mutation.external_identity["external_id"],
+                    canonical_id=mutation.external_identity["canonical_id"],
+                ),
+            )
+        id_field = _RESOURCE_ID_FIELDS.get(mutation.resource)
+        if id_field and id_field in mutation.entity:
+            current_ids.setdefault(mutation.resource, set()).add(
+                mutation.entity[id_field]
+            )
+        run.records_published += 1
+
+    def _apply_tombstone(self, mutation, definition, run):
+        if mutation.mutation_type != MUTATION_TOMBSTONE:
+            return
+        resource = mutation.resource
+        subject_id = mutation.subject_id or (mutation.entity or {}).get("id")
+        if subject_id is None:
+            return
+        self.tombstones.add((resource, subject_id))
+        getter = _GETTERS.get(resource)
+        if getter is not None:
+            current = getattr(self.repository, getter)(
+                definition.tenant_id, subject_id
+            )
+            if current is not None:
+                payload = current.to_dict()
+                if "status" in payload:
+                    payload["status"] = "deleted"
+                    cls = _RESOURCE_CLASSES[resource]
+                    method = getattr(self.repository, _RESOURCE_METHODS[resource])
+                    method(definition.tenant_id, cls.from_dict(payload))
+        run.tombstones_generated += 1
 
 
 __all__ = ["Staging", "PublishManager", "_RESOURCE_CLASSES"]

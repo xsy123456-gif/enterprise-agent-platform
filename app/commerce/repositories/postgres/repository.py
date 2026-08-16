@@ -42,6 +42,7 @@ from app.commerce.repositories.postgres.schema import (
     TABLES,
     build_schema_sql,
 )
+from app.commerce.repositories.postgres.tx import current_tx_connection, transaction
 
 
 def _json(value):
@@ -717,8 +718,18 @@ class PostgresCommerceRepository(CommerceRepository):
 
     @contextmanager
     def _connection(self):
+        shared = current_tx_connection()
+        if shared is not None:
+            yield shared
+            return
         with self.connection_factory() as connection:
             yield connection
+
+    @contextmanager
+    def transaction(self):
+        """One atomic unit-of-work: all writes share one connection."""
+        with transaction(self.connection_factory):
+            yield
 
     @staticmethod
     def _execute(conn, sql, params):
