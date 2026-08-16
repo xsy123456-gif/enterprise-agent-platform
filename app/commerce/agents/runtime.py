@@ -22,7 +22,8 @@ from app.commerce.agents.router import (
 def build_employee_agent_runtime(agent_definition, manifest, skill_system,
                                  skill_bindings, llm=None, memory_port=None,
                                  knowledge_port=None, knowledge_enabled=False,
-                                 known_subjects=None) -> ConversationManager:
+                                 known_subjects=None,
+                                 execution_adapter=None) -> ConversationManager:
     binding_registry = SkillBindingRegistry(
         skill_registry=getattr(skill_system, "skill_registry", None))
     for binding in skill_bindings:
@@ -41,6 +42,7 @@ def build_employee_agent_runtime(agent_definition, manifest, skill_system,
         router=router, response_builder=ResponseBuilder(llm=llm),
         memory_port=memory_port, knowledge_port=knowledge_port,
         knowledge_enabled=knowledge_enabled,
+        execution_adapter=execution_adapter,
     )
 
 

@@ -282,7 +282,7 @@ class MetricQueryTool(CommerceReadTool):
         if not arguments.get("subject_type") or not arguments.get("subject_id"):
             raise CommerceValidationError("metric.query requires subject_type + subject_id")
         for name in arguments.get("metric_names") or []:
-            if self.metric_registry is not None:
+            if self.metric_registry is not None and self.metric_registry.has(name):
                 definition = self.metric_registry.get(name)
                 if definition.metric_class == "DERIVED":
                     raise CommerceValidationError(

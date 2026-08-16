@@ -199,6 +199,8 @@ class AgentResponse:
     evidence: tuple = ()
     citations: tuple = ()
     next_actions: tuple = ()
+    execution_id: str = ""
+    trace_id: str = ""
 
     def __post_init__(self):
         object.__setattr__(self, "evidence", tuple(self.evidence or ()))
@@ -225,6 +227,8 @@ class AgentResponse:
             ],
             "citations": list(self.citations),
             "next_actions": list(self.next_actions),
+            "execution_id": self.execution_id,
+            "trace_id": self.trace_id,
         }
 
     @classmethod
@@ -238,6 +242,8 @@ class AgentResponse:
             evidence=tuple(data.get("evidence", ())),
             citations=tuple(data.get("citations", ())),
             next_actions=tuple(data.get("next_actions", ())),
+            execution_id=data.get("execution_id", ""),
+            trace_id=data.get("trace_id", ""),
         )
 
 

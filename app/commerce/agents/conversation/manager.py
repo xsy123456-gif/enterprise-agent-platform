@@ -32,7 +32,8 @@ class ConversationManager:
     def __init__(self, agent_definition: AgentDefinition,
                  manifest: AgentManifest, binding_registry, skill_system,
                  router, response_builder=None, memory_port=None,
-                 knowledge_port=None, knowledge_enabled=False):
+                 knowledge_port=None, knowledge_enabled=False,
+                 execution_adapter=None):
         self.agent_definition = agent_definition
         self.manifest = manifest
         self.binding_registry = binding_registry
@@ -42,6 +43,7 @@ class ConversationManager:
         self.memory_port = memory_port
         self.knowledge_port = knowledge_port
         self.knowledge_enabled = knowledge_enabled
+        self.execution_adapter = execution_adapter
         self.history = ConversationHistory()
 
     def handle(self, request: AgentRequest, trusted_context,
@@ -61,12 +63,32 @@ class ConversationManager:
         if not skill_id or subject is None:
             return self._clarification(request)
 
+        execution_id = ""
+        trace_id = request.trace_id or ""
         try:
-            skill_result = self.skill_system.run(
-                skill_id, subject,
-                trusted_context=trusted_context,
-                fact_executor=fact_executor,
-            )
+            if self.execution_adapter is not None:
+                from app.commerce.skills import SkillExecutionContext
+                execution_context = SkillExecutionContext(
+                    execution_id=uuid.uuid4().hex,
+                    trace_id=trace_id or uuid.uuid4().hex,
+                    tenant_id=trusted_context.tenant_id,
+                    agent_id=self.agent_definition.agent_id,
+                    agent_version=self.agent_definition.version,
+                    principal_id=getattr(trusted_context, "principal_id", ""),
+                )
+                skill_result = self.execution_adapter.execute(
+                    execution_context, skill_id, subject,
+                    trusted_context=trusted_context,
+                    fact_executor=fact_executor,
+                )
+                execution_id = execution_context.execution_id
+                trace_id = execution_context.trace_id
+            else:
+                skill_result = self.skill_system.run(
+                    skill_id, subject,
+                    trusted_context=trusted_context,
+                    fact_executor=fact_executor,
+                )
         except Exception as error:  # noqa: BLE001 - surfaced as typed response
             return self._error(request, str(error))
 
@@ -74,6 +96,11 @@ class ConversationManager:
             skill_result.diagnostic_result, request=request,
             memory_snippets=memory_snippets,
         )
+
+        if execution_id or trace_id:
+            from dataclasses import replace
+            response = replace(response, execution_id=execution_id,
+                               trace_id=trace_id)
 
         if self.knowledge_enabled and self.knowledge_port is not None:
             response = self._attach_knowledge(response, request)

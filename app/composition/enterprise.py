@@ -78,7 +78,7 @@ def _build_commerce(environment, execution_manager=None):
     )
 
 
-def _build_employee_agents(skill_system):
+def _build_employee_agents(skill_system, execution_adapter=None):
     from app.commerce.agents import (
         AgentDefinition,
         AgentManifest,
@@ -142,6 +142,7 @@ def _build_employee_agents(skill_system):
     runtime = build_employee_agent_runtime(
         definition, manifest, skill_system, bindings,
         known_subjects={"JP01": SubjectRef(SUBJECT_STORE, "JP01")},
+        execution_adapter=execution_adapter,
     )
     return SimpleNamespace(definition=definition, manifest=manifest,
                            bindings=tuple(bindings), runtime=runtime)
@@ -226,18 +227,32 @@ def _build_business():
         InMemoryApprovalRepository,
         InMemoryBusinessActionRepository,
         PackageRegistry,
+    )
+    from app.platform.business.workflow import (
+        BusinessActionStepAdapter,
+        ConditionStepAdapter,
+        InMemoryWorkflowRunRepository,
+        NotificationStepAdapter,
+        WaitStepAdapter,
         WorkflowEngine,
     )
-    from app.platform.business.workflow import InMemoryWorkflowRunRepository
+    action_runtime = BusinessActionRuntime(
+        repository=InMemoryBusinessActionRepository(),
+    )
+    workflow_engine = WorkflowEngine(
+        run_repository=InMemoryWorkflowRunRepository(),
+        step_adapters=[
+            BusinessActionStepAdapter(action_runtime),
+            WaitStepAdapter(),
+            ConditionStepAdapter(),
+            NotificationStepAdapter(lambda step, ctx: {"notified": True}),
+        ],
+    )
     return SimpleNamespace(
         packages=PackageRegistry(),
         approval=ApprovalEngine(repository=InMemoryApprovalRepository()),
-        action_runtime=BusinessActionRuntime(
-            repository=InMemoryBusinessActionRepository(),
-        ),
-        workflow_engine=WorkflowEngine(
-            run_repository=InMemoryWorkflowRunRepository(),
-        ),
+        action_runtime=action_runtime,
+        workflow_engine=workflow_engine,
     )
 
 
@@ -280,7 +295,8 @@ def build_enterprise_application(environment=None, **overrides):
     return EnterpriseApplication(
         foundation=foundation,
         commerce=commerce,
-        agents=_build_employee_agents(skill_system),
+        agents=_build_employee_agents(skill_system,
+                                      execution_adapter=commerce.skill_execution),
         control_plane=_build_control_plane(),
         collaboration=_build_collaboration(),
         production=_build_production(
