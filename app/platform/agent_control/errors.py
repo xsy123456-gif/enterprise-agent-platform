@@ -1,0 +1,37 @@
+"""Enterprise Agent Control Plane errors (Phase 13)."""
+
+from app.commerce.contracts.errors import CommerceError
+
+
+class AgentControlError(CommerceError):
+    """Base error for the enterprise agent control plane."""
+
+
+class AgentValidationError(AgentControlError):
+    """An agent manifest / artifact failed validation."""
+
+
+class AgentNotActiveError(AgentControlError):
+    """The requested agent has no ACTIVE version."""
+
+
+class ManifestError(AgentControlError):
+    """An enterprise agent manifest is structurally invalid or unparsable."""
+
+
+class DeploymentError(AgentControlError):
+    """An agent deployment failed (unknown version / environment / not active)."""
+
+
+class AgentAccessDeniedError(AgentControlError):
+    """A subject is not authorized to access an agent."""
+
+
+__all__ = [
+    "AgentControlError",
+    "AgentValidationError",
+    "AgentNotActiveError",
+    "ManifestError",
+    "DeploymentError",
+    "AgentAccessDeniedError",
+]
