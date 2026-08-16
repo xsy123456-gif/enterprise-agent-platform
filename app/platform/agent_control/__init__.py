@@ -43,6 +43,10 @@ from app.platform.agent_control.lifecycle import (
     validate_manifest,
 )
 from app.platform.agent_control.manifest import AgentManifest
+from app.platform.agent_control.projection import (
+    AgentDeploymentProjector,
+    DeploymentProjection,
+)
 from app.platform.agent_control.registry import AgentRegistry
 from app.platform.agent_control.router import (
     AgentRoutingRequest,
@@ -61,6 +65,8 @@ __all__ = [
     "AgentArtifact",
     "AgentManifest",
     "AgentRegistry",
+    "AgentDeploymentProjector",
+    "DeploymentProjection",
     "AgentDeployment",
     "DeploymentManager",
     "AgentAccessPolicy",

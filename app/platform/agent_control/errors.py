@@ -27,6 +27,10 @@ class AgentAccessDeniedError(AgentControlError):
     """A subject is not authorized to access an agent."""
 
 
+class DeploymentVersionMismatchError(AgentControlError):
+    """A runtime projection version/checksum does not match the control plane."""
+
+
 __all__ = [
     "AgentControlError",
     "AgentValidationError",
@@ -34,4 +38,5 @@ __all__ = [
     "ManifestError",
     "DeploymentError",
     "AgentAccessDeniedError",
+    "DeploymentVersionMismatchError",
 ]
