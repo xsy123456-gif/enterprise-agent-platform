@@ -24,6 +24,10 @@ def build_app():
             "seller_id": schemas.SELLER_ID,
             "marketplace_id": schemas.MARKETPLACE_ID,
         },
+        "sim-amazon-store-002-token": {
+            "seller_id": "store-002",
+            "marketplace_id": schemas.MARKETPLACE_ID,
+        },
         "sim-amazon-key": {
             "seller_id": schemas.SELLER_ID,
             "marketplace_id": schemas.MARKETPLACE_ID,
