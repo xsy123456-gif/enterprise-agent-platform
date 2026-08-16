@@ -28,7 +28,15 @@ from app.commerce.review_insight.errors import (
     JobNotFoundError,
     ReviewInsightError,
 )
+from app.commerce.review_insight.evidence_adapter import (
+    EVIDENCE_CODE_PREFIX,
+    ReviewInsightEvidenceAdapter,
+)
 from app.commerce.review_insight.job import ReviewInsightJobManager
+from app.commerce.review_insight.metric_source_adapter import (
+    MetricSourceAdapter,
+    REVIEW_METRICS,
+)
 from app.commerce.review_insight.repository import (
     CanonicalReviewInsightRepository,
     ReviewInsightNaturalKey,
@@ -68,6 +76,10 @@ __all__ = [
     "ReviewInsightWorker",
     "EVENT_DATA_PUBLISHED",
     "EVENT_REVIEW_AVAILABLE",
+    "ReviewInsightEvidenceAdapter",
+    "EVIDENCE_CODE_PREFIX",
+    "MetricSourceAdapter",
+    "REVIEW_METRICS",
     "JOB_CREATED",
     "JOB_RUNNING",
     "JOB_PARTIAL",
