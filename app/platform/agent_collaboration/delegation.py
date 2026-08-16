@@ -20,7 +20,8 @@ class DelegationExecutor:
         self.access_control = access_control
 
     def execute(self, request: AgentDelegationRequest) -> AgentDelegationResult:
-        if self.access_control is not None:
+        if self.access_control is not None and \
+                request.from_agent_id != request.to_agent_id:
             self.access_control.authorize(request.from_agent_id,
                                           request.to_agent_id)
         try:
