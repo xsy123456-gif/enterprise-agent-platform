@@ -16,8 +16,9 @@ import uvicorn
 
 def _providers():
     from simulation.amazon.app import build_app as amazon
+    from simulation.tiktok.app import build_app as tiktok
 
-    return [("amazon", amazon())]
+    return [("amazon", amazon()), ("tiktok", tiktok())]
 
 
 def _run(app, host, port):

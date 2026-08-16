@@ -9,6 +9,7 @@ are registered by each provider module.
 import asyncio
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -86,6 +87,13 @@ def build_simulation_app(config: SimulationConfig, auth, store, injector,
     app.state.injector = injector
     app.state.auth = auth
 
+    @app.exception_handler(HTTPException)
+    async def _http_exception_handler(request: Request, exc: HTTPException):
+        # Return the provider error DTO verbatim (not FastAPI's {"detail": ...}
+        # wrapper) so each provider keeps its own external error shape.
+        return JSONResponse(status_code=exc.status_code, content=exc.detail,
+                            headers=getattr(exc, "headers", None))
+
     @app.get("/health")
     def health():
         return {"status": "ok", "provider": config.provider}
@@ -110,9 +118,9 @@ def build_simulation_app(config: SimulationConfig, auth, store, injector,
         return {"status": "ok"}
 
     @app.post("/__simulation__/control/delay-next")
-    def control_delay(request: Request):
+    async def control_delay(request: Request):
         require_admin(request, config.admin_key)
-        body = request.json() if request.headers.get("content-length") else {}
+        body = await request.json() if request.headers.get("content-length") else {}
         injector.delay_next_request(float(body.get("seconds", 1.0)))
         return {"status": "ok"}
 

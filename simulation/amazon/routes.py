@@ -71,8 +71,8 @@ def register_routes(app):
         return paginate(_records(request, "metric"), page_size, next_token)
 
     @app.patch("/amazon/v1/advertising/campaigns/{campaign_id}")
-    def update_campaign(request: Request, campaign_id: str, _=Depends(auth)):
-        body = request.json()
+    async def update_campaign(request: Request, campaign_id: str, _=Depends(auth)):
+        body = await request.json()
         _authorize_scope(request, body.get("sellerId", ""),
                          body.get("marketplaceId"))
         existing = request.app.state.store.get("campaign", "campaignId", campaign_id)
