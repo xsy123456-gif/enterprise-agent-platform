@@ -17,6 +17,36 @@ from app.commerce.integration.errors import (
     UnknownAdapterError,
     UnknownConnectorError,
 )
+from app.commerce.integration.credentials import (
+    Credential,
+    CredentialProvider,
+    SecretProvider,
+    SecretReference,
+)
+from app.commerce.integration.credentials.provider import (
+    InMemoryCredentialProvider,
+    InMemorySecretProvider,
+)
+from app.commerce.integration.connectors import (
+    AmazonConnector,
+    BaseConnector,
+    RetryPolicy,
+    TikTokConnector,
+)
+from app.commerce.integration.adapters import (
+    AmazonAdapter,
+    BaseAdapter,
+    TikTokAdapter,
+)
+from app.commerce.integration.registry import (
+    AdapterRegistry,
+    ConnectorRegistry,
+)
+from app.commerce.integration.sync import (
+    ConnectorBinding,
+    IntegrationSyncRuntime,
+    SyncScheduler,
+)
 
 __all__ = [
     "IntegrationError",
@@ -27,4 +57,22 @@ __all__ = [
     "SecretResolutionError",
     "UnknownConnectorError",
     "UnknownAdapterError",
+    "SecretReference",
+    "Credential",
+    "CredentialProvider",
+    "SecretProvider",
+    "InMemoryCredentialProvider",
+    "InMemorySecretProvider",
+    "BaseConnector",
+    "RetryPolicy",
+    "AmazonConnector",
+    "TikTokConnector",
+    "BaseAdapter",
+    "AmazonAdapter",
+    "TikTokAdapter",
+    "ConnectorRegistry",
+    "AdapterRegistry",
+    "ConnectorBinding",
+    "IntegrationSyncRuntime",
+    "SyncScheduler",
 ]

@@ -29,6 +29,8 @@ class IntegrationSyncRuntime:
         self.repository = repository
         self.identity_map = identity_map
         self.event_bus = event_bus
+        self.landing = RawLanding()
+        self.quarantine = Quarantine()
 
     def run(self, sync_definition, binding, trace_id=None):
         connector_cls = self.connector_registry.get(
@@ -59,8 +61,8 @@ class IntegrationSyncRuntime:
             registry=registry,
             connectors={sync_definition.connector_id: connector},
             adapters={sync_definition.adapter_id: adapter},
-            landing=RawLanding(),
-            quarantine=Quarantine(),
+            landing=self.landing,
+            quarantine=self.quarantine,
             staging=Staging(self.repository),
             publish=PublishManager(self.repository, self.identity_map),
             lock=SyncLock(),
