@@ -1,0 +1,35 @@
+scenario_id: B013
+title: Inventory + traffic confounder
+category: multi_factor
+agent_id: commerce_operations_agent
+locale: zh-CN
+as_of: '2026-08-15'
+message: 分析 JP01 库存下降与 GMV 下降的关系
+subject: STORE:JP01
+setup:
+  reset_seed: true
+  metrics:
+  - - GMV
+    - 1000.0
+  - - GMV_B
+    - 2000.0
+  - - SESSIONS
+    - 1000.0
+  - - SESSIONS_B
+    - 2000.0
+  - - AVAILABLE_INVENTORY
+    - 30.0
+  - - AVAILABLE_INVENTORY_B
+    - 200.0
+  - - ORDERS
+    - 20.0
+  - - ORDERS_B
+    - 40.0
+  - - UNITS
+    - 20.0
+  - - UNITS_B
+    - 40.0
+  - - PERIOD_DAYS
+    - 7.0
+  - - PERIOD_DAYS_B
+    - 7.0

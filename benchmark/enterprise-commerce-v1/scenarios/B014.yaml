@@ -1,0 +1,35 @@
+scenario_id: B014
+title: Multi-factor high severity
+category: multi_factor
+agent_id: commerce_operations_agent
+locale: zh-CN
+as_of: '2026-08-15'
+message: 分析 JP01 的 GMV 全面下滑的严重程度和原因
+subject: STORE:JP01
+setup:
+  reset_seed: true
+  metrics:
+  - - GMV
+    - 700.0
+  - - GMV_B
+    - 2000.0
+  - - ORDERS
+    - 14.0
+  - - ORDERS_B
+    - 40.0
+  - - SESSIONS
+    - 800.0
+  - - SESSIONS_B
+    - 2000.0
+  - - AVAILABLE_INVENTORY
+    - 20.0
+  - - AVAILABLE_INVENTORY_B
+    - 200.0
+  - - REVIEW_RATING
+    - 3.2
+  - - REVIEW_RATING_B
+    - 4.5
+  - - NEGATIVE_REVIEW_RATE
+    - 0.35
+  - - NEGATIVE_REVIEW_RATE_B
+    - 0.1

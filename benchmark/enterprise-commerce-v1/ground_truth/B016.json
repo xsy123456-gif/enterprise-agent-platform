@@ -1,0 +1,22 @@
+{
+  "scenario_id": "B016",
+  "evaluation": {
+    "E1": {
+      "required_entity": "STORE:JP01"
+    },
+    "E3": {
+      "expected_state": "INSUFFICIENT_DATA",
+      "primary_cause": null,
+      "acceptable_secondary_causes": [],
+      "forbidden_causes": []
+    },
+    "E4": {
+      "permission_denied": false
+    },
+    "E5": {
+      "required_facts": [
+        "STORE:JP01"
+      ]
+    }
+  }
+}

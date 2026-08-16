@@ -1,0 +1,28 @@
+{
+  "scenario_id": "B004",
+  "evaluation": {
+    "E1": {
+      "required_entity": "STORE:JP01"
+    },
+    "E2": {
+      "signals": {}
+    },
+    "E3": {
+      "expected_state": "ABNORMAL",
+      "primary_cause": "TRAFFIC_DECLINE",
+      "acceptable_secondary_causes": [],
+      "forbidden_causes": [
+        "STOCKOUT_RISK",
+        "PRICE_INCREASE"
+      ]
+    },
+    "E4": {
+      "permission_denied": false
+    },
+    "E5": {
+      "required_facts": [
+        "STORE:JP01"
+      ]
+    }
+  }
+}

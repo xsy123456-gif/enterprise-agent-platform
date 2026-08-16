@@ -1,0 +1,35 @@
+scenario_id: B020
+title: Authorized multi-intent cross-provider
+category: multi_intent
+agent_id: commerce_operations_agent
+locale: zh-CN
+as_of: '2026-08-15'
+message: 分析 JP01 的广告表现，同时说明其评价情况
+subject: STORE:JP01
+setup:
+  reset_seed: true
+  metrics:
+  - - AD_SALES
+    - 5000.0
+  - - AD_SALES_B
+    - 10000.0
+  - - AD_SPEND
+    - 5000.0
+  - - AD_SPEND_B
+    - 5000.0
+  - - CLICKS
+    - 200.0
+  - - CLICKS_B
+    - 300.0
+  - - REVIEW_RATING
+    - 4.5
+  - - REVIEW_RATING_B
+    - 4.5
+  - - NEGATIVE_REVIEW_RATE
+    - 0.1
+  - - NEGATIVE_REVIEW_RATE_B
+    - 0.1
+  - - GMV
+    - 2000.0
+  - - GMV_B
+    - 2000.0
