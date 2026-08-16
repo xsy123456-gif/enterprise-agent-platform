@@ -86,7 +86,8 @@ REQUIRED_COLUMNS = {
         "review_insight_id", "tenant_id", "review_id", "sentiment", "topics",
         "issues", "strengths", "intent", "severity", "confidence",
         "model_provider", "model_version", "extractor_version", "generated_at",
-        "supersedes_id",
+        "supersedes_id", "extractor_id", "prompt_version",
+        "knowledge_policy_version", "knowledge_context_version",
     },
     "commerce_metric_series": {
         "metric_record_id", "tenant_id", "subject_type", "subject_id",
@@ -239,8 +240,13 @@ CREATE TABLE IF NOT EXISTS commerce_review_insights (
   intent text NOT NULL DEFAULT '', severity text NOT NULL DEFAULT '',
   confidence double precision, model_provider text NOT NULL DEFAULT '',
   model_version text NOT NULL DEFAULT '', extractor_version text NOT NULL DEFAULT '',
+  extractor_id text NOT NULL DEFAULT '', prompt_version text NOT NULL DEFAULT '',
+  knowledge_policy_version text NOT NULL DEFAULT '',
+  knowledge_context_version text NOT NULL DEFAULT '',
   generated_at text NOT NULL, supersedes_id text
 );
+CREATE UNIQUE INDEX IF NOT EXISTS commerce_review_insights_natural_uidx
+  ON commerce_review_insights (tenant_id, review_id, extractor_id, extractor_version);
 
 CREATE TABLE IF NOT EXISTS commerce_metric_series (
   metric_record_id text PRIMARY KEY, tenant_id text NOT NULL,

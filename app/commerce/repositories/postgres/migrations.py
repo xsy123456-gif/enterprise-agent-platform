@@ -17,7 +17,7 @@ from app.commerce.repositories.errors import CommerceStorageError
 from app.commerce.repositories.postgres.schema import build_schema_sql
 
 # Bump this when a new migration is added; never edit a shipped migration.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _MIGRATIONS_TABLE = "commerce_schema_migrations"
 
@@ -29,8 +29,19 @@ class Migration:
     sql: str
 
 
+_REVIEW_INSIGHT_GOVERNANCE_COLUMNS = """
+ALTER TABLE commerce_review_insights ADD COLUMN IF NOT EXISTS extractor_id text NOT NULL DEFAULT '';
+ALTER TABLE commerce_review_insights ADD COLUMN IF NOT EXISTS prompt_version text NOT NULL DEFAULT '';
+ALTER TABLE commerce_review_insights ADD COLUMN IF NOT EXISTS knowledge_policy_version text NOT NULL DEFAULT '';
+ALTER TABLE commerce_review_insights ADD COLUMN IF NOT EXISTS knowledge_context_version text NOT NULL DEFAULT '';
+CREATE UNIQUE INDEX IF NOT EXISTS commerce_review_insights_natural_uidx
+  ON commerce_review_insights (tenant_id, review_id, extractor_id, extractor_version);
+"""
+
 MIGRATIONS = (
     Migration(version=1, name="initial_canonical_schema", sql=build_schema_sql()),
+    Migration(version=2, name="review_insight_governance_columns",
+              sql=_REVIEW_INSIGHT_GOVERNANCE_COLUMNS),
 )
 
 

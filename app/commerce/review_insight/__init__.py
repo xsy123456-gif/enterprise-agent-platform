@@ -28,6 +28,15 @@ from app.commerce.review_insight.errors import (
     JobNotFoundError,
     ReviewInsightError,
 )
+from app.commerce.review_insight.repository import (
+    CanonicalReviewInsightRepository,
+    ReviewInsightNaturalKey,
+    ReviewInsightRepositoryPort,
+)
+from app.commerce.review_insight.service import (
+    ReviewInsightProvenance,
+    ReviewInsightService,
+)
 
 __all__ = [
     "ReviewExtractorPort",
@@ -40,6 +49,11 @@ __all__ = [
     "ExtractionError",
     "ExtractorUnavailableError",
     "JobNotFoundError",
+    "ReviewInsightNaturalKey",
+    "ReviewInsightRepositoryPort",
+    "CanonicalReviewInsightRepository",
+    "ReviewInsightProvenance",
+    "ReviewInsightService",
     "JOB_CREATED",
     "JOB_RUNNING",
     "JOB_PARTIAL",

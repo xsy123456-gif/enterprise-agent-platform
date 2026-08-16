@@ -197,6 +197,20 @@ class CommerceRepository(ABC):
     def list_review_insights_by_review(self, tenant_id: str, review_id: str) -> list[ReviewInsight]:
         pass
 
+    @abstractmethod
+    def get_review_insight(self, tenant_id: str, review_insight_id: str) -> ReviewInsight | None:
+        pass
+
+    @abstractmethod
+    def list_review_insights_by_listing(self, tenant_id: str, listing_id: str) -> list[ReviewInsight]:
+        pass
+
+    @abstractmethod
+    def exists_review_insight(
+        self, tenant_id: str, review_id: str, extractor_id: str, extractor_version: str,
+    ) -> bool:
+        pass
+
     # ── Metric (natural-key idempotent) ────────────────────
     @abstractmethod
     def upsert_metric(self, tenant_id: str, series: MetricSeries) -> MetricSeries:

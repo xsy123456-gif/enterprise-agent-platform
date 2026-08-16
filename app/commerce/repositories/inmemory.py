@@ -59,6 +59,7 @@ class InMemoryCommerceRepository(CommerceRepository):
         self._search_terms = {}
         self._reviews = {}
         self._review_insights = {}
+        self._review_insight_natural = {}
         self._inventory = []
         self._inventory_keys = set()
         self._metrics = {}
@@ -306,6 +307,12 @@ class InMemoryCommerceRepository(CommerceRepository):
 
     def upsert_review_insight(self, tenant_id, insight):
         self._verify_parent(tenant_id, self._reviews, insight.review_id)
+        key = (tenant_id, insight.review_id, insight.extractor_id,
+               insight.extractor_version)
+        existing_id = self._review_insight_natural.get(key)
+        if existing_id is not None:
+            return self._review_insights[existing_id][1]
+        self._review_insight_natural[key] = insight.review_insight_id
         self._review_insights[insight.review_insight_id] = (tenant_id, insight)
         return insight
 
@@ -315,6 +322,25 @@ class InMemoryCommerceRepository(CommerceRepository):
              if t == tenant_id and i.review_id == review_id),
             key=lambda i: i.review_insight_id,
         )
+
+    def get_review_insight(self, tenant_id, review_insight_id):
+        entry = self._review_insights.get(review_insight_id)
+        return entry[1] if entry and entry[0] == tenant_id else None
+
+    def list_review_insights_by_listing(self, tenant_id, listing_id):
+        review_ids = {
+            r.review_id for r in self._reviews.values()
+            if r.tenant_id == tenant_id and r.listing_id == listing_id
+        }
+        return sorted(
+            (i for t, i in self._review_insights.values()
+             if t == tenant_id and i.review_id in review_ids),
+            key=lambda i: i.review_insight_id,
+        )
+
+    def exists_review_insight(self, tenant_id, review_id, extractor_id, extractor_version):
+        return (tenant_id, review_id, extractor_id, extractor_version) in \
+            self._review_insight_natural
 
     # ── Metric (natural-key idempotent) ───────────────────────
 

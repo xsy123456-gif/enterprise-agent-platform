@@ -602,31 +602,37 @@ class PostgresCommerceRepository(CommerceRepository):
     def upsert_review_insight(self, tenant_id, insight):
         self._verify_parent_tenant(tenant_id, "commerce_reviews", "review_id", insight.review_id)
         with self._connection() as conn:
-            self._execute(
-                conn,
-                """INSERT INTO commerce_review_insights
-                (review_insight_id, tenant_id, review_id, sentiment, topics, issues,
-                 strengths, intent, severity, confidence, model_provider, model_version,
-                 extractor_version, generated_at, supersedes_id)
-                VALUES (%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s)
-                ON CONFLICT (review_insight_id) DO UPDATE SET
-                 review_id=EXCLUDED.review_id, sentiment=EXCLUDED.sentiment,
-                 topics=EXCLUDED.topics, issues=EXCLUDED.issues,
-                 strengths=EXCLUDED.strengths, intent=EXCLUDED.intent,
-                 severity=EXCLUDED.severity, confidence=EXCLUDED.confidence,
-                 model_provider=EXCLUDED.model_provider,
-                 model_version=EXCLUDED.model_version,
-                 extractor_version=EXCLUDED.extractor_version,
-                 generated_at=EXCLUDED.generated_at, supersedes_id=EXCLUDED.supersedes_id""",
-                (insight.review_insight_id, tenant_id, insight.review_id,
-                 insight.sentiment, _json(list(insight.topics)),
-                 _json(list(insight.issues)), _json(list(insight.strengths)),
-                 insight.intent, insight.severity, insight.confidence,
-                 insight.model_provider, insight.model_version,
-                 insight.extractor_version, insight.generated_at,
-                 insight.supersedes_id),
-            )
-        return insight
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """INSERT INTO commerce_review_insights
+                    (review_insight_id, tenant_id, review_id, sentiment, topics, issues,
+                     strengths, intent, severity, confidence, model_provider, model_version,
+                     extractor_version, extractor_id, prompt_version,
+                     knowledge_policy_version, knowledge_context_version,
+                     generated_at, supersedes_id)
+                    VALUES (%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    ON CONFLICT (tenant_id, review_id, extractor_id, extractor_version)
+                    DO NOTHING""",
+                    (insight.review_insight_id, tenant_id, insight.review_id,
+                     insight.sentiment, _json(list(insight.topics)),
+                     _json(list(insight.issues)), _json(list(insight.strengths)),
+                     insight.intent, insight.severity, insight.confidence,
+                     insight.model_provider, insight.model_version,
+                     insight.extractor_version, insight.extractor_id,
+                     insight.prompt_version, insight.knowledge_policy_version,
+                     insight.knowledge_context_version, insight.generated_at,
+                     insight.supersedes_id),
+                )
+                inserted = cursor.rowcount == 1
+        if inserted:
+            return insight
+        # Natural key already present -> return the existing canonical record.
+        rows = self._fetch_rows(
+            "SELECT * FROM commerce_review_insights WHERE tenant_id=%s AND review_id=%s "
+            "AND extractor_id=%s AND extractor_version=%s",
+            (tenant_id, insight.review_id, insight.extractor_id, insight.extractor_version),
+        )
+        return ReviewInsight.from_dict(rows[0]) if rows else insight
 
     def list_review_insights_by_review(self, tenant_id, review_id):
         rows = self._fetch_rows(
@@ -634,6 +640,31 @@ class PostgresCommerceRepository(CommerceRepository):
             "ORDER BY review_insight_id", (tenant_id, review_id),
         )
         return [ReviewInsight.from_dict(row) for row in rows]
+
+    def get_review_insight(self, tenant_id, review_insight_id):
+        row = self._fetch_row(
+            "SELECT * FROM commerce_review_insights WHERE tenant_id=%s "
+            "AND review_insight_id=%s", (tenant_id, review_insight_id),
+        )
+        return ReviewInsight.from_dict(row) if row else None
+
+    def list_review_insights_by_listing(self, tenant_id, listing_id):
+        rows = self._fetch_rows(
+            "SELECT ri.* FROM commerce_review_insights ri "
+            "JOIN commerce_reviews r ON r.review_id = ri.review_id "
+            "AND r.tenant_id = ri.tenant_id "
+            "WHERE ri.tenant_id=%s AND r.listing_id=%s ORDER BY ri.review_insight_id",
+            (tenant_id, listing_id),
+        )
+        return [ReviewInsight.from_dict(row) for row in rows]
+
+    def exists_review_insight(self, tenant_id, review_id, extractor_id, extractor_version):
+        row = self._fetch_row(
+            "SELECT review_insight_id FROM commerce_review_insights WHERE tenant_id=%s "
+            "AND review_id=%s AND extractor_id=%s AND extractor_version=%s LIMIT 1",
+            (tenant_id, review_id, extractor_id, extractor_version),
+        )
+        return row is not None
 
     # ── Metric (natural-key idempotent) ───────────────────────
 

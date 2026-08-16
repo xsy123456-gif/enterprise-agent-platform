@@ -214,10 +214,11 @@ def test_metric_dimensions_reorder_idempotent(repo, tenant):
 
 def test_schema_migrations_versioned(postgres_repository):
     # migrate() records the schema version; re-applying is idempotent.
+    from app.commerce.repositories.postgres.migrations import SCHEMA_VERSION
     postgres_repository.migrate()
-    assert postgres_repository.schema_version() == 1
+    assert postgres_repository.schema_version() == SCHEMA_VERSION
     postgres_repository.migrate()
-    assert postgres_repository.schema_version() == 1
+    assert postgres_repository.schema_version() == SCHEMA_VERSION
 
 
 def test_query_service_end_to_end(repo, tenant):
