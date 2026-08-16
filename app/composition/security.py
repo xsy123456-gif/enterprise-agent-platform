@@ -6,12 +6,32 @@ authorization, no local principal fallback.  Startup validation raises
 running an insecure platform.
 """
 
-from app.runtime.governance.gate import AllowAllGovernancePolicy
-from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
+from app.runtime.governance.gate import (
+    AllowAllGovernancePolicy,
+    DenyByDefaultGovernancePolicy,
+)
+from app.memory.ports.authorization import (
+    AllowAllMemoryAuthorizationProvider,
+    DenyByDefaultMemoryAuthorizationProvider,
+)
 
 PRODUCTION = "production"
 PRINCIPAL_EXTERNAL = "external"
 PRINCIPAL_LOCAL = "local"
+
+_STRICT_ENVIRONMENTS = frozenset({"production", "sandbox"})
+
+
+def governance_policy_for(environment):
+    if (environment or "").lower() in _STRICT_ENVIRONMENTS:
+        return DenyByDefaultGovernancePolicy()
+    return AllowAllGovernancePolicy()
+
+
+def memory_authorization_for(environment):
+    if (environment or "").lower() in _STRICT_ENVIRONMENTS:
+        return DenyByDefaultMemoryAuthorizationProvider()
+    return AllowAllMemoryAuthorizationProvider()
 
 
 class ApplicationStartupError(RuntimeError):
@@ -56,6 +76,8 @@ class SecurityConfigValidator:
 __all__ = [
     "SecurityConfigValidator",
     "ApplicationStartupError",
+    "governance_policy_for",
+    "memory_authorization_for",
     "PRODUCTION",
     "PRINCIPAL_EXTERNAL",
     "PRINCIPAL_LOCAL",

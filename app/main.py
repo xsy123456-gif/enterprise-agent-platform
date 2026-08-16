@@ -30,7 +30,6 @@ from app.llm.factory import create_llm
 
 
 from app.memory.factory import build_memory_system
-from app.memory.ports.authorization import AllowAllMemoryAuthorizationProvider
 from app.integrations.memory import (
     PlatformMemoryEventBridge, PlatformMemoryEventSink, RuntimeMemoryAdapter,
 )
@@ -76,9 +75,14 @@ from app.tools.registry import ToolRegistry
 # Build Runtime
 # =====================================
 
+def _memory_authorization_default():
+    from app.composition.security import memory_authorization_for
+    return memory_authorization_for("development")
+
+
 def build_runtime(
     llm=None, capability_catalog=None, memory_repository=None,
-    memory_embedding_service=None, security=None,
+    memory_embedding_service=None, security=None, memory_authorization=None,
 ):
 
 
@@ -196,7 +200,9 @@ def build_runtime(
     memory_system = build_memory_system(
         repository=memory_repository,
         embedding_service=memory_embedding_service,
-        authorization_provider=AllowAllMemoryAuthorizationProvider(),
+        authorization_provider=(
+            memory_authorization or _memory_authorization_default()
+        ),
         event_sink=PlatformMemoryEventSink(event_bus),
         text_model=llm,
     )
@@ -240,7 +246,7 @@ def build_runtime(
 
 def build_orchestration(
     llm=None, activate_builtin=False, memory_repository=None,
-    memory_embedding_service=None, security=None,
+    memory_embedding_service=None, security=None, memory_authorization=None,
 ):
 
     if llm is None:
@@ -256,6 +262,7 @@ def build_orchestration(
         memory_repository=memory_repository,
         memory_embedding_service=memory_embedding_service,
         security=security,
+        memory_authorization=memory_authorization,
     )
 
     if activate_builtin:
@@ -311,22 +318,29 @@ def build_application(environment=None, **kwargs):
     container is the preferred lifecycle boundary for new callers.
     """
     from app.composition import create_application
+    from app.composition.security import (
+        governance_policy_for,
+        memory_authorization_for,
+    )
     from app.identity import build_identity
     from app.integrations.security import build_security_integration
     from app.permission import build_permission
-    from app.runtime.governance.gate import AllowAllGovernancePolicy, GovernanceGate
+    from app.runtime.governance.gate import GovernanceGate
 
+    environment = environment or "development"
     identity = build_identity()
     permission = build_permission()
     permission.runtime.start()
     security = build_security_integration(
         identity_service=identity.service,
         permission_service=permission.service,
-        governance_gate=GovernanceGate(AllowAllGovernancePolicy()),
+        governance_gate=GovernanceGate(governance_policy_for(environment)),
     )
 
     planner, supervisor, audit, event_bus = build_orchestration(
-        security=security, **kwargs
+        security=security,
+        memory_authorization=memory_authorization_for(environment),
+        **kwargs,
     )
     runtime = supervisor.runtime
     return create_application(
