@@ -7,7 +7,7 @@ points to must never contain secret / credential / permission.
 
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 from app.platform.agent_collaboration.errors import CollaborationError
 
 MSG_TASK_REQUEST = "TASK_REQUEST"

@@ -10,7 +10,7 @@ raw memory / private) are rejected.  Every inter-agent context passes through
 import uuid
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 from app.platform.agent_collaboration.errors import ContextAccessDeniedError
 
 FORBIDDEN_CONTEXT_KEYS = (

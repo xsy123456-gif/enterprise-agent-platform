@@ -8,6 +8,8 @@ canonical code + category with safe details.  ``CommerceError`` /
 
 from dataclasses import dataclass, field
 
+from app.core.errors import ApplicationError
+
 # Canonical error codes (v1)
 INVALID_REQUEST = "INVALID_REQUEST"
 SUBJECT_NOT_FOUND = "SUBJECT_NOT_FOUND"
@@ -65,7 +67,7 @@ _ERROR_METADATA = {
 }
 
 
-class CommerceError(Exception):
+class CommerceError(ApplicationError):
     """Base exception for the Commerce Employee Layer."""
 
 

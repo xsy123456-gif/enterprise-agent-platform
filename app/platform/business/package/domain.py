@@ -8,7 +8,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 
 PACKAGE_DRAFT = "DRAFT"
 PACKAGE_VALIDATED = "VALIDATED"

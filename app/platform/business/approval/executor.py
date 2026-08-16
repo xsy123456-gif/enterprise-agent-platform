@@ -7,7 +7,7 @@ highest approver.  ``auto_approve`` policies bypass approval deterministically.
 
 from dataclasses import replace
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 from app.platform.business.approval.request import (
     APPROVAL_APPROVED,
     APPROVAL_PENDING,

@@ -1,6 +1,6 @@
 """Enterprise integration registry (Phase 16.5)."""
 
-from app.commerce.diagnostics.registry.base import VersionedRegistry
+from app.core.versioning import VersionedRegistry
 
 
 class EnterpriseIntegrationRegistry(VersionedRegistry):

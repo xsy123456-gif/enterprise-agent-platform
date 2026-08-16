@@ -7,7 +7,7 @@ aggregated per agent version.
 
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 
 
 @dataclass(frozen=True)

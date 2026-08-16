@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from app.commerce.diagnostics.registry.base import VersionedRegistry
+from app.core.versioning import VersionedRegistry
 
 
 @dataclass(frozen=True)

@@ -7,7 +7,7 @@ raw sensitive data.
 
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 
 TRACE_RUNNING = "RUNNING"
 TRACE_SUCCESS = "SUCCESS"

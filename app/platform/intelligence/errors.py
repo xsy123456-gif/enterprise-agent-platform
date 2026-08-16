@@ -1,9 +1,9 @@
 """Agent intelligence optimization errors (Phase 17)."""
 
-from app.commerce.contracts.errors import CommerceError
+from app.core.errors import ApplicationError
 
 
-class IntelligenceError(CommerceError):
+class IntelligenceError(ApplicationError):
     """Base error for the intelligence optimization layer."""
 
 

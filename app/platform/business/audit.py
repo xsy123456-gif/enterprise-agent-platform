@@ -6,7 +6,7 @@ private data are structurally absent.
 
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 
 OP_ACTION_CREATED = "ActionCreated"
 OP_APPROVAL_REQUESTED = "ApprovalRequested"

@@ -1,9 +1,9 @@
 """Multi-agent collaboration errors (Phase 14)."""
 
-from app.commerce.contracts.errors import CommerceError
+from app.core.errors import ApplicationError
 
 
-class CollaborationError(CommerceError):
+class CollaborationError(ApplicationError):
     """Base error for the multi-agent collaboration runtime."""
 
 

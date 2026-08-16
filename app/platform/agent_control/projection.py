@@ -9,7 +9,7 @@ version+checksum consistency (fail-closed on ``DEPLOYMENT_VERSION_MISMATCH``).
 
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 from app.platform.agent_control.errors import DeploymentVersionMismatchError
 
 

@@ -6,7 +6,7 @@ context are structurally absent.
 
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 
 OP_TASK_CREATED = "CollaborationTaskCreated"
 OP_AGENT_DELEGATED = "AgentDelegated"

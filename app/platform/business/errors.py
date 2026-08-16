@@ -1,9 +1,9 @@
 """Enterprise business expansion errors (Phase 16)."""
 
-from app.commerce.contracts.errors import CommerceError
+from app.core.errors import ApplicationError
 
 
-class BusinessError(CommerceError):
+class BusinessError(ApplicationError):
     """Base error for the business expansion layer."""
 
 

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 from app.platform.intelligence.errors import ImprovementError
 
 IMPROVEMENT_CREATED = "CREATED"

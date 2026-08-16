@@ -7,7 +7,7 @@ defines and validates the message contract; it never orchestrates agents.
 
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 from app.platform.agent_control.errors import AgentValidationError
 
 

@@ -7,7 +7,7 @@ control plane, never by the payload.
 
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 
 # CollaborationTask statuses (§5.1)
 TASK_CREATED = "CREATED"

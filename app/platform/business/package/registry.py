@@ -1,6 +1,6 @@
 """Package registry + lifecycle (Phase 16.1)."""
 
-from app.commerce.diagnostics.registry.base import VersionedRegistry
+from app.core.versioning import VersionedRegistry
 from app.platform.business.errors import PackageNotPublishedError
 from app.platform.business.package.domain import (
     PACKAGE_DEPRECATED,
@@ -65,7 +65,7 @@ class PackageRegistry(VersionedRegistry):
     def _resolve(self, package_id, version):
         if version is not None:
             if (package_id, version) not in self._items:
-                from app.commerce.diagnostics.errors import UnknownDefinitionVersionError
+                from app.core.errors import UnknownDefinitionVersionError
                 raise UnknownDefinitionVersionError(
                     f"package {package_id!r} has no version {version!r}"
                 )
@@ -75,7 +75,7 @@ class PackageRegistry(VersionedRegistry):
             return active
         versions = self.versions(package_id)
         if not versions:
-            from app.commerce.diagnostics.errors import UnknownDefinitionError
+            from app.core.errors import UnknownDefinitionError
             raise UnknownDefinitionError(f"package {package_id!r} is not registered")
         return versions[0]
 

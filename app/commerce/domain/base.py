@@ -6,11 +6,11 @@ to the same ``canonical_id`` — never a new one.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+
+from app.core.time import utc_now  # noqa: F401  (re-exported for backward compat)
 
 
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+__all__ = ["utc_now", "ExternalIdentity"]
 
 
 @dataclass(frozen=True)

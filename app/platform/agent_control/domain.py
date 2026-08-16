@@ -7,7 +7,7 @@ never changes a Runtime definition.
 
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 
 # Agent lifecycle (§7)
 AGENT_DRAFT = "DRAFT"

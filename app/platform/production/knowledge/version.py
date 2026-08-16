@@ -3,7 +3,7 @@
 import hashlib
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 
 KNOWLEDGE_DRAFT = "DRAFT"
 KNOWLEDGE_ACTIVE = "ACTIVE"

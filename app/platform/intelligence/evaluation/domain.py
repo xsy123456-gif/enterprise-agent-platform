@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from app.commerce.domain.base import utc_now
+from app.core.time import utc_now
 
 EVAL_EXECUTION_QUALITY = "execution_quality"
 EVAL_BUSINESS_QUALITY = "business_quality"

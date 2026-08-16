@@ -5,7 +5,7 @@ assets.  Identity is ``(agent_id, version)``; duplicate versions are rejected;
 later versions never auto-activate — activation is explicit.
 """
 
-from app.commerce.diagnostics.registry.base import VersionedRegistry
+from app.core.versioning import VersionedRegistry
 from app.platform.agent_control.domain import (
     AGENT_ACTIVE,
     AGENT_DEPRECATED,
@@ -83,7 +83,7 @@ class AgentRegistry(VersionedRegistry):
     def _resolve(self, agent_id, version):
         if version is not None:
             if (agent_id, version) not in self._items:
-                from app.commerce.diagnostics.errors import UnknownDefinitionVersionError
+                from app.core.errors import UnknownDefinitionVersionError
                 raise UnknownDefinitionVersionError(
                     f"agent {agent_id!r} has no version {version!r}"
                 )
@@ -93,7 +93,7 @@ class AgentRegistry(VersionedRegistry):
             return active
         versions = self.versions(agent_id)
         if not versions:
-            from app.commerce.diagnostics.errors import UnknownDefinitionError
+            from app.core.errors import UnknownDefinitionError
             raise UnknownDefinitionError(f"agent {agent_id!r} is not registered")
         return versions[0]
 

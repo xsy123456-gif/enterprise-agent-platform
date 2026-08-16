@@ -1,9 +1,9 @@
 """Enterprise Agent Control Plane errors (Phase 13)."""
 
-from app.commerce.contracts.errors import CommerceError
+from app.core.errors import ApplicationError
 
 
-class AgentControlError(CommerceError):
+class AgentControlError(ApplicationError):
     """Base error for the enterprise agent control plane."""
 
 

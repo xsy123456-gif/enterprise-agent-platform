@@ -1,9 +1,9 @@
 """Enterprise production platform errors (Phase 15)."""
 
-from app.commerce.contracts.errors import CommerceError
+from app.core.errors import ApplicationError
 
 
-class ProductionError(CommerceError):
+class ProductionError(ApplicationError):
     """Base error for the production operation layer."""
 
 
