@@ -46,6 +46,30 @@ from app.commerce.agents.lifecycle import (
 )
 from app.commerce.agents.manifest import AgentManifest
 from app.commerce.agents.registry import AgentRegistry
+from app.commerce.agents.binding import AgentSkillBinding, SkillBindingRegistry
+from app.commerce.agents.context import (
+    AgentContext,
+    AgentKnowledgePort,
+    AgentMemoryPort,
+    DATA_PRIORITY,
+)
+from app.commerce.agents.conversation import (
+    ConversationHistory,
+    ConversationManager,
+    ConversationTurn,
+)
+from app.commerce.agents.response import ResponseBuilder
+from app.commerce.agents.router import (
+    EntityMatch,
+    EntityRouter,
+    LLMRouter,
+    RuleRouter,
+    SkillRouter,
+    SkillRoutingRequest,
+    SkillRoutingResult,
+    keyword_map_from_bindings,
+)
+from app.commerce.agents.runtime import build_employee_agent_runtime
 
 __all__ = [
     "AgentDefinition",
@@ -82,4 +106,23 @@ __all__ = [
     "RESPONSE_DIAGNOSTIC",
     "RESPONSE_CLARIFICATION",
     "RESPONSE_ERROR",
+    "AgentSkillBinding",
+    "SkillBindingRegistry",
+    "AgentContext",
+    "AgentMemoryPort",
+    "AgentKnowledgePort",
+    "DATA_PRIORITY",
+    "ConversationManager",
+    "ConversationHistory",
+    "ConversationTurn",
+    "ResponseBuilder",
+    "SkillRouter",
+    "SkillRoutingRequest",
+    "SkillRoutingResult",
+    "RuleRouter",
+    "EntityRouter",
+    "EntityMatch",
+    "LLMRouter",
+    "keyword_map_from_bindings",
+    "build_employee_agent_runtime",
 ]
