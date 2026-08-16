@@ -58,14 +58,18 @@ class ApprovalStepAdapter(WorkflowStepAdapter):
     """APPROVAL: human-in-the-loop gate.
 
     Returns typed outcomes: APPROVED -> completed; PENDING -> suspend
-    (WAITING_APPROVAL); REJECTED -> terminal failure.  Pending is a normal
-    business wait, never a failure.
+    (WAITING_APPROVAL) after creating a linked ``ApprovalRequest`` (when an
+    approval engine is configured); REJECTED -> terminal failure.
     """
 
     step_type = STEP_APPROVAL
 
-    def __init__(self, approval_lookup=None):
+    def __init__(self, approval_lookup=None, approval_engine=None,
+                 tenant_id="", requester="workflow"):
         self.approval_lookup = approval_lookup or _default_approval_state
+        self.approval_engine = approval_engine
+        self.tenant_id = tenant_id
+        self.requester = requester
 
     def execute(self, step, context):
         state = self.approval_lookup(step, context)
@@ -76,6 +80,20 @@ class ApprovalStepAdapter(WorkflowStepAdapter):
             raise ApprovalRejectedError(
                 f"approval step {step.step_id!r} was rejected"
             )
+        if self.approval_engine is not None and "approval_id" not in context:
+            import uuid
+            request = self.approval_engine.create_request(
+                approval_id=uuid.uuid4().hex,
+                action_id="",
+                tenant_id=self.tenant_id or context.get("tenant_id", ""),
+                requester=self.requester,
+                action_type=step.name or "WORKFLOW_APPROVAL",
+                risk_level="MEDIUM",
+                workflow_run_id=context.get("run_id", ""),
+                workflow_step_id=step.step_id,
+                summary=step.name or "Workflow approval",
+            )
+            context["approval_id"] = request.approval_id
         return WorkflowSuspension(WF_WAITING_APPROVAL, step.step_id)
 
 

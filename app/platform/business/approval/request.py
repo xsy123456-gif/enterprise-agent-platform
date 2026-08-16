@@ -32,6 +32,10 @@ class ApprovalRequest:
     created_at: str = field(default_factory=utc_now)
     approved_by: str = ""
     approved_at: str = ""
+    # Phase 18.12.5: workflow linkage (minimal carry extension)
+    workflow_run_id: str = ""
+    workflow_step_id: str = ""
+    summary: str = ""
 
     def __post_init__(self):
         if not self.approval_id:
@@ -52,6 +56,9 @@ class ApprovalRequest:
             "created_at": self.created_at,
             "approved_by": self.approved_by,
             "approved_at": self.approved_at,
+            "workflow_run_id": self.workflow_run_id,
+            "workflow_step_id": self.workflow_step_id,
+            "summary": self.summary,
         }
 
 

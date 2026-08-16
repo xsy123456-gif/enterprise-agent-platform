@@ -45,7 +45,8 @@ class ApprovalEngine:
         return policy.required_approvers
 
     def create_request(self, approval_id, action_id, tenant_id, requester,
-                       action_type, risk_level) -> ApprovalRequest:
+                       action_type, risk_level, workflow_run_id="",
+                       workflow_step_id="", summary="") -> ApprovalRequest:
         status = APPROVAL_PENDING if self.requires_approval(action_type, risk_level) \
             else APPROVAL_APPROVED
         request = ApprovalRequest(
@@ -53,6 +54,8 @@ class ApprovalEngine:
             requester=requester, risk_level=risk_level, status=status,
             approved_by="auto" if status == APPROVAL_APPROVED else "",
             approved_at=utc_now() if status == APPROVAL_APPROVED else "",
+            workflow_run_id=workflow_run_id, workflow_step_id=workflow_step_id,
+            summary=summary,
         )
         self.repository.put(request)
         return request

@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Header, Request, Response
 
 from app.api.dependencies.context import get_api_request_context
 from app.api.context import ApiRequestContext
@@ -37,6 +37,9 @@ def list_agents(request: Request,
              response_model=MessageResponse, status_code=200)
 def send_message(agent_id: str, body: MessageRequest, request: Request,
                  response: Response,
+                 idempotency_key: str | None = Header(
+                     None, alias="Idempotency-Key",
+                     description="Opaque client-generated retry key."),
                  ctx: ApiRequestContext = Depends(get_api_request_context)):
     config = _config(request)
     message = (body.message or "").strip()
@@ -47,7 +50,24 @@ def send_message(agent_id: str, body: MessageRequest, request: Request,
         raise ApiError(ApiErrorCode.INVALID_REQUEST,
                        "message too long.", http_status=400)
 
+    guard = request.app.state.idempotency_guard
+    token = guard.resolve(request, ctx, "sendMessage", agent_id, body.model_dump())
+
     gateway = request.app.state.gateway
+    if token is not None and token.prior_result is not None:
+        execution_id = token.prior_result
+        response.headers["X-Execution-ID"] = execution_id
+        return MessageResponse(
+            request_id=ctx.request_id,
+            session_id=body.session_id,
+            execution=ExecutionRef(execution_id=execution_id,
+                                   status="COMPLETED", agent_id=agent_id,
+                                   agent_version=""),
+            response=ResponseBody(content="(idempotent replay)", citations=[]),
+            links={"execution": f"/v1/executions/{execution_id}",
+                   "trace": f"/v1/executions/{execution_id}/trace"},
+        )
+
     trace_id = ctx.request_id or uuid.uuid4().hex
     agent_response = gateway.send_message(
         ctx.trusted_context, agent_id, message, body.session_id, trace_id)
@@ -63,6 +83,8 @@ def send_message(agent_id: str, body: MessageRequest, request: Request,
         response.headers["X-Execution-ID"] = agent_response.execution_id
     if agent_response.trace_id:
         response.headers["X-Trace-ID"] = agent_response.trace_id
+    if token is not None:
+        guard.record(token, agent_response.execution_id)
 
     return MessageResponse(
         request_id=ctx.request_id,

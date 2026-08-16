@@ -8,8 +8,8 @@ def approval_summary_from(request) -> ApprovalSummary:
         approval_id=request.approval_id,
         status=request.status,
         risk_level=getattr(request, "risk_level", ""),
-        action_type=getattr(request, "action_type", "") if hasattr(request, "action_type") else "",
-        summary=getattr(request, "summary", "") if hasattr(request, "summary") else "",
+        action_type=getattr(request, "action_id", "") or "",
+        summary=getattr(request, "summary", ""),
         created_at=getattr(request, "created_at", None),
     )
 

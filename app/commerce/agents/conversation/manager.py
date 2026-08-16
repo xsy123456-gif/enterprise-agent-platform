@@ -47,10 +47,11 @@ class ConversationManager:
         self.history = ConversationHistory()
 
     def handle(self, request: AgentRequest, trusted_context,
-               fact_executor) -> AgentResponse:
+               fact_executor, agent_version=None) -> AgentResponse:
         if trusted_context is None or not trusted_context.tenant_id:
             return self._error(request, "missing trusted execution context")
 
+        resolved_version = agent_version or self.agent_definition.version
         available = self.binding_registry.skill_ids(self.agent_definition.agent_id)
         memory_snippets = self._retrieve_memory(request)
 
@@ -73,7 +74,7 @@ class ConversationManager:
                     trace_id=trace_id or uuid.uuid4().hex,
                     tenant_id=trusted_context.tenant_id,
                     agent_id=self.agent_definition.agent_id,
-                    agent_version=self.agent_definition.version,
+                    agent_version=resolved_version,
                     principal_id=getattr(trusted_context, "principal_id", ""),
                 )
                 skill_result = self.execution_adapter.execute(

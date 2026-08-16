@@ -40,3 +40,14 @@ def test_api_does_not_execute_tools_or_plans_directly():
                 assert not mod.startswith(prefix), (
                     f"{path} imports forbidden boundary {mod!r}"
                 )
+
+
+def test_api_idempotency_does_not_depend_on_runtime():
+    imports = all_imports("app/api/idempotency")
+    for mod in imports:
+        assert not mod.startswith("app.runtime"), (
+            f"api/idempotency imports runtime {mod!r}"
+        )
+        assert not mod.startswith("app.execution"), (
+            f"api/idempotency imports execution {mod!r}"
+        )

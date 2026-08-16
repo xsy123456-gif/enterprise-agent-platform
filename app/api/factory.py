@@ -37,6 +37,7 @@ def _build_gateway(application, access_control=None):
         workflow_engine=application.business.workflow_engine,
         fact_executor=application.commerce.tool_surface.fact_executor,
         access_control=access_control,
+        control_plane_registry=application.control_plane.registry,
     )
 
 
@@ -54,6 +55,10 @@ def create_http_app(application, authentication_provider, config: ApiConfig,
     app.state.auth_provider = authentication_provider
     app.state.resolver = application.foundation.security.resolver
     app.state.api_config = config
+    from app.api.idempotency import InMemoryIdempotencyStore
+    from app.api.idempotency.guard import IdempotencyGuard
+    app.state.idempotency_store = InMemoryIdempotencyStore()
+    app.state.idempotency_guard = IdempotencyGuard(app.state.idempotency_store)
 
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)

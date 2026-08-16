@@ -229,6 +229,7 @@ def _build_business():
         PackageRegistry,
     )
     from app.platform.business.workflow import (
+        ApprovalStepAdapter,
         BusinessActionStepAdapter,
         ConditionStepAdapter,
         InMemoryWorkflowRunRepository,
@@ -236,12 +237,16 @@ def _build_business():
         WaitStepAdapter,
         WorkflowEngine,
     )
+    approval_engine = ApprovalEngine(repository=InMemoryApprovalRepository())
     action_runtime = BusinessActionRuntime(
         repository=InMemoryBusinessActionRepository(),
+        approval_engine=approval_engine,
     )
     workflow_engine = WorkflowEngine(
         run_repository=InMemoryWorkflowRunRepository(),
         step_adapters=[
+            ApprovalStepAdapter(approval_engine=approval_engine,
+                                tenant_id="company_A"),
             BusinessActionStepAdapter(action_runtime),
             WaitStepAdapter(),
             ConditionStepAdapter(),
@@ -250,7 +255,7 @@ def _build_business():
     )
     return SimpleNamespace(
         packages=PackageRegistry(),
-        approval=ApprovalEngine(repository=InMemoryApprovalRepository()),
+        approval=approval_engine,
         action_runtime=action_runtime,
         workflow_engine=workflow_engine,
     )

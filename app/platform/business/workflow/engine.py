@@ -99,10 +99,13 @@ class WorkflowEngine:
             )
         state = WorkflowState(workflow_id=workflow.workflow_id)
         state.mark_running()
+        run_id = uuid.uuid4().hex
         run = WorkflowRun(
-            run_id=uuid.uuid4().hex, workflow=workflow, state=state,
+            run_id=run_id, workflow=workflow, state=state,
             order=order, context=dict(context or {}),
         )
+        run.context.setdefault("run_id", run_id)
+        run.context.setdefault("workflow_id", workflow.workflow_id)
         self.run_repository.save(run)
         return self._execute(run)
 

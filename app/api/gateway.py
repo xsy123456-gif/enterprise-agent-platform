@@ -16,7 +16,8 @@ class EnterpriseProductGateway:
     def __init__(self, agent_directory, agent_definitions, execution_store,
                  trace_collector, approval_repository, approval_engine,
                  workflow_repository, workflow_engine, fact_executor,
-                 access_control=None):
+                 access_control=None, approval_authorizer=None,
+                 control_plane_registry=None):
         self.agent_directory = agent_directory
         self.agent_definitions = agent_definitions
         self.execution_store = execution_store
@@ -27,6 +28,8 @@ class EnterpriseProductGateway:
         self.workflow_engine = workflow_engine
         self.fact_executor = fact_executor
         self.access_control = access_control
+        self.approval_authorizer = approval_authorizer
+        self.control_plane_registry = control_plane_registry
 
     def _subject(self, trusted_context):
         return SimpleNamespace(
@@ -65,7 +68,17 @@ class EnterpriseProductGateway:
             message=message,
             trace_id=trace_id or "",
         )
-        return runtime.handle(request, trusted_context, self.fact_executor)
+        version = self._resolve_agent_version(agent_id)
+        return runtime.handle(request, trusted_context, self.fact_executor,
+                              agent_version=version)
+
+    def _resolve_agent_version(self, agent_id):
+        if self.control_plane_registry is None:
+            return None
+        try:
+            return self.control_plane_registry.get_active_artifact(agent_id).version
+        except Exception:
+            return None
 
     # ── Execution ───────────────────────────────────────────
 
@@ -97,21 +110,53 @@ class EnterpriseProductGateway:
             raise not_found("Approval")
         return request
 
+    def get_approval(self, trusted_context, approval_id):
+        return self._approval(trusted_context, approval_id)
+
     def approve(self, trusted_context, approval_id, comment):
         request = self._approval(trusted_context, approval_id)
+        if not self._may_decide(trusted_context, request):
+            from app.api.errors import permission_denied
+            raise permission_denied()
         if request.status != "PENDING":
             raise ApiError(ApiErrorCode.INVALID_STATE,
                            "Approval is not pending.", http_status=409)
-        return self.approval_engine.approve(request,
-                                            trusted_context.principal_id)
+        updated = self.approval_engine.approve(request,
+                                               trusted_context.principal_id)
+        self._resume_workflow_after_approval(updated, "APPROVED")
+        return updated
 
     def reject(self, trusted_context, approval_id, comment):
         request = self._approval(trusted_context, approval_id)
+        if not self._may_decide(trusted_context, request):
+            from app.api.errors import permission_denied
+            raise permission_denied()
         if request.status != "PENDING":
             raise ApiError(ApiErrorCode.INVALID_STATE,
                            "Approval is not pending.", http_status=409)
-        return self.approval_engine.reject(request,
-                                           trusted_context.principal_id)
+        updated = self.approval_engine.reject(request,
+                                              trusted_context.principal_id)
+        self._resume_workflow_after_approval(updated, "REJECTED")
+        return updated
+
+    def _may_decide(self, trusted_context, request):
+        if self.approval_authorizer is None:
+            return True
+        return self.approval_authorizer(trusted_context, request)
+
+    def _resume_workflow_after_approval(self, request, decision):
+        if not request.workflow_run_id:
+            return
+        run = self.workflow_repository.get(request.workflow_run_id)
+        if run is None or run.status != "WAITING_APPROVAL":
+            return
+        try:
+            self.workflow_engine.resume(
+                request.workflow_run_id, {"approval_state": decision})
+        except Exception:
+            # workflow resume failure is visible via the workflow run state;
+            # the approval decision itself remains recorded.
+            pass
 
     # ── Workflow ────────────────────────────────────────────
 
