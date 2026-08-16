@@ -2,5 +2,6 @@
 
 from app.commerce.integration.adapters.base import BaseAdapter
 from app.commerce.integration.adapters.amazon import AmazonAdapter
+from app.commerce.integration.adapters.tiktok import TikTokAdapter
 
-__all__ = ["BaseAdapter", "AmazonAdapter"]
+__all__ = ["BaseAdapter", "AmazonAdapter", "TikTokAdapter"]
