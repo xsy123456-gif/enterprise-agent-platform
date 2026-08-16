@@ -15,7 +15,6 @@ import uuid
 
 from app.commerce.agents.domain import (
     RESPONSE_CLARIFICATION,
-    RESPONSE_DIAGNOSTIC,
     RESPONSE_ERROR,
     AgentDefinition,
     AgentRequest,
@@ -24,6 +23,7 @@ from app.commerce.agents.domain import (
 from app.commerce.agents.manifest import AgentManifest
 from app.commerce.agents.router.contract import SkillRoutingRequest
 from app.commerce.agents.conversation.history import ConversationHistory
+from app.commerce.agents.response.builder import ResponseBuilder
 
 
 class ConversationManager:
@@ -38,7 +38,7 @@ class ConversationManager:
         self.binding_registry = binding_registry
         self.skill_system = skill_system
         self.router = router
-        self.response_builder = response_builder or _DefaultResponseBuilder()
+        self.response_builder = response_builder or ResponseBuilder()
         self.memory_port = memory_port
         self.knowledge_port = knowledge_port
         self.knowledge_enabled = knowledge_enabled
@@ -123,23 +123,6 @@ class ConversationManager:
             session_id=request.session_id,
             response_type=RESPONSE_ERROR,
             message=f"分析失败：{reason}",
-        )
-
-
-class _DefaultResponseBuilder:
-    """Minimal deterministic builder (replaced by the full builder in 12.7)."""
-
-    def build(self, diagnostic_result, request=None, memory_snippets=None):
-        causes = "、".join(c.cause_code for c in diagnostic_result.causes) or "无"
-        priority = getattr(diagnostic_result.priority, "level", "P3")
-        message = f"诊断完成，可能原因：{causes}，优先级 {priority}。"
-        return AgentResponse(
-            response_id=uuid.uuid4().hex,
-            session_id=getattr(request, "session_id", ""),
-            response_type=RESPONSE_DIAGNOSTIC,
-            message=message,
-            diagnostic_result=diagnostic_result,
-            evidence=tuple(diagnostic_result.evidence),
         )
 
 

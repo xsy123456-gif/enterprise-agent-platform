@@ -55,9 +55,11 @@ class _FakeSkillSystem:
         self.calls.append(skill_id)
         from types import SimpleNamespace
         cause = SimpleNamespace(cause_code="ROAS_DECLINE")
+        signal = SimpleNamespace(signal_code="ROAS_DROP")
         priority = SimpleNamespace(level="P2")
         return SimpleNamespace(diagnostic_result=SimpleNamespace(
-            causes=[cause], priority=priority, evidence=()))
+            subject=subject, signals=[signal], causes=[cause],
+            priority=priority, status="COMPLETED", evidence=()))
 
 
 class _FakeRouter:

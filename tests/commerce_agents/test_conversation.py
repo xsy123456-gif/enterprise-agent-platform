@@ -43,8 +43,11 @@ def _manifest():
 
 def _diagnostic():
     cause = SimpleNamespace(cause_code="GMV_DECLINE")
+    signal = SimpleNamespace(signal_code="GMV_DROP")
     priority = SimpleNamespace(level="P1")
-    return SimpleNamespace(causes=[cause], priority=priority, evidence=())
+    return SimpleNamespace(
+        subject=SUBJECT, signals=[signal], causes=[cause],
+        priority=priority, status="COMPLETED", evidence=())
 
 
 class _FakeSkillSystem:
