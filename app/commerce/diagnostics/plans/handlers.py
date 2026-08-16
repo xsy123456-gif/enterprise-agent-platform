@@ -114,7 +114,7 @@ def handle_metric_compute(step, state, context):
     }
     engine = MetricEngine(context.compile_context.metric_registry)
     result = engine.compute(definition.metric, values, version=definition.version)
-    state.metric_results[definition.metric] = result
+    state.metric_results[step.params.get("result_name", definition.metric)] = result
 
 
 # ── DATA_QUALITY_GATE ───────────────────────────────────────
