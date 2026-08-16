@@ -16,7 +16,9 @@ from app.platform.agent_control.collaboration import (
 )
 from app.platform.agent_control.deployment import (
     AgentDeployment,
+    AgentDeploymentRepository,
     DeploymentManager,
+    InMemoryAgentDeploymentRepository,
 )
 from app.platform.agent_control.domain import (
     AgentArtifact,
@@ -68,6 +70,8 @@ __all__ = [
     "AgentDeploymentProjector",
     "DeploymentProjection",
     "AgentDeployment",
+    "AgentDeploymentRepository",
+    "InMemoryAgentDeploymentRepository",
     "DeploymentManager",
     "AgentAccessPolicy",
     "AgentAccessControl",

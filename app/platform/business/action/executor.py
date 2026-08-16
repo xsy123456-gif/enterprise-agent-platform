@@ -18,6 +18,10 @@ from app.platform.business.action.domain import (
     ACTION_WAITING_APPROVAL,
     BusinessAction,
 )
+from app.platform.business.action.repository import (
+    BusinessActionRepository,
+    InMemoryBusinessActionRepository,
+)
 from app.platform.business.action.runtime import ActionExecutor
 from app.platform.business.errors import (
     ActionExecutionError,
@@ -29,7 +33,8 @@ class BusinessActionRuntime(ActionExecutor):
 
     def __init__(self, approval_engine=None, permission_checker=None,
                  action_handler=None, audit=None, execution_port=None,
-                 idempotency_store=None, precondition_checker=None):
+                 idempotency_store=None, precondition_checker=None,
+                 repository=None):
         self.approval_engine = approval_engine
         self.permission_checker = permission_checker
         self.action_handler = action_handler
@@ -37,6 +42,7 @@ class BusinessActionRuntime(ActionExecutor):
         self.execution_port = execution_port
         self.idempotency_store = idempotency_store
         self.precondition_checker = precondition_checker
+        self.repository = repository or InMemoryBusinessActionRepository()
 
     def create_action(self, proposal) -> BusinessAction:
         action = BusinessAction(
@@ -45,12 +51,17 @@ class BusinessActionRuntime(ActionExecutor):
             risk_level=proposal.risk_level, created_by=proposal.agent_id,
         )
         if self._needs_approval(action):
-            return replace(action, status=ACTION_WAITING_APPROVAL)
-        return replace(action, status=ACTION_APPROVED)
+            action = replace(action, status=ACTION_WAITING_APPROVAL)
+        else:
+            action = replace(action, status=ACTION_APPROVED)
+        self.repository.put(action)
+        return action
 
     def approve(self, action, approver):
-        return replace(action, status=ACTION_APPROVED,
-                       parameters={**action.parameters, "approved_by": approver})
+        updated = replace(action, status=ACTION_APPROVED,
+                          parameters={**action.parameters, "approved_by": approver})
+        self.repository.put(updated)
+        return updated
 
     def execute(self, action, context=None):
         if not action.action_type or not action.target:
@@ -69,15 +80,18 @@ class BusinessActionRuntime(ActionExecutor):
             return existing
         self._check_precondition(action, context)
         running = replace(action, status=ACTION_EXECUTING)
+        self.repository.put(running)
         try:
             self._dispatch(running, context)
             result = replace(running, status=ACTION_SUCCEEDED)
         except Exception as error:  # noqa: BLE001 - recorded in audit
             result = replace(running, status=ACTION_FAILED)
+            self.repository.put(result)
             if self.audit is not None:
                 self.audit.record(action.action_id, "Failed", str(error))
             raise ActionExecutionError(str(error))
         self._record_idempotency(action, result)
+        self.repository.put(result)
         if self.audit is not None:
             self.audit.record(action.action_id, "Executed", "")
         return result

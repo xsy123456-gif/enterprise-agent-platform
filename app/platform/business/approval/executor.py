@@ -8,6 +8,10 @@ highest approver.  ``auto_approve`` policies bypass approval deterministically.
 from dataclasses import replace
 
 from app.core.time import utc_now
+from app.platform.business.approval.repository import (
+    ApprovalRepository,
+    InMemoryApprovalRepository,
+)
 from app.platform.business.approval.request import (
     APPROVAL_APPROVED,
     APPROVAL_PENDING,
@@ -18,8 +22,9 @@ from app.platform.business.approval.request import (
 
 class ApprovalEngine:
 
-    def __init__(self, policies=None):
+    def __init__(self, policies=None, repository=None):
         self._policies = list(policies or [])
+        self.repository = repository or InMemoryApprovalRepository()
 
     def policy_for(self, action_type, risk_level):
         for policy in self._policies:
@@ -43,20 +48,26 @@ class ApprovalEngine:
                        action_type, risk_level) -> ApprovalRequest:
         status = APPROVAL_PENDING if self.requires_approval(action_type, risk_level) \
             else APPROVAL_APPROVED
-        return ApprovalRequest(
+        request = ApprovalRequest(
             approval_id=approval_id, action_id=action_id, tenant_id=tenant_id,
             requester=requester, risk_level=risk_level, status=status,
             approved_by="auto" if status == APPROVAL_APPROVED else "",
             approved_at=utc_now() if status == APPROVAL_APPROVED else "",
         )
+        self.repository.put(request)
+        return request
 
     def approve(self, request, approver) -> ApprovalRequest:
-        return replace(request, status=APPROVAL_APPROVED, approved_by=approver,
-                       approved_at=utc_now())
+        updated = replace(request, status=APPROVAL_APPROVED, approved_by=approver,
+                          approved_at=utc_now())
+        self.repository.put(updated)
+        return updated
 
     def reject(self, request, approver) -> ApprovalRequest:
-        return replace(request, status=APPROVAL_REJECTED, approved_by=approver,
-                       approved_at=utc_now())
+        updated = replace(request, status=APPROVAL_REJECTED, approved_by=approver,
+                          approved_at=utc_now())
+        self.repository.put(updated)
+        return updated
 
 
-__all__ = ["ApprovalEngine"]
+__all__ = ["ApprovalEngine", "ApprovalRepository", "InMemoryApprovalRepository"]

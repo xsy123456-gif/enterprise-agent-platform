@@ -12,11 +12,13 @@ from app.platform.business.action import (
     ActionProposal,
     BusinessAction,
     BusinessActionRuntime,
+    InMemoryBusinessActionRepository,
 )
 from app.platform.business.approval import (
     ApprovalEngine,
     ApprovalPolicy,
     ApprovalRequest,
+    InMemoryApprovalRepository,
 )
 from app.platform.business.audit import BusinessAuditLogger, BusinessAuditRecord
 from app.platform.business.commercial import (
@@ -63,10 +65,12 @@ __all__ = [
     "ApprovalRequest",
     "ApprovalPolicy",
     "ApprovalEngine",
+    "InMemoryApprovalRepository",
     "ActionProposal",
     "BusinessAction",
     "ActionExecutor",
     "BusinessActionRuntime",
+    "InMemoryBusinessActionRepository",
     "BusinessWorkflow",
     "WorkflowStep",
     "WorkflowState",

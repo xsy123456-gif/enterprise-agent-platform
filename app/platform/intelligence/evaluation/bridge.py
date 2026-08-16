@@ -13,13 +13,17 @@ import uuid
 
 from app.platform.intelligence.evaluation.domain import ExecutionSample
 from app.platform.intelligence.evaluation.evaluator import EvaluationEngine
+from app.platform.intelligence.evaluation.store import (
+    EvaluationStore,
+    InMemoryEvaluationStore,
+)
 
 
 class EvaluationSubscriber:
 
-    def __init__(self, evaluation_engine=None):
+    def __init__(self, evaluation_engine=None, evaluation_store=None):
         self.evaluation_engine = evaluation_engine or EvaluationEngine()
-        self._evaluations = []
+        self.evaluation_store = evaluation_store or InMemoryEvaluationStore()
         self.errors = []
 
     def on_metric_sample(self, sample):
@@ -39,14 +43,14 @@ class EvaluationSubscriber:
                 trace_id=getattr(sample, "trace_id", ""),
                 tenant_id=sample.tenant_id,
             )
-            self._evaluations.append(evaluation)
+            self.evaluation_store.put(evaluation)
             return evaluation
         except Exception as error:  # noqa: BLE001 - visible, isolated
             self.errors.append(str(error))
             return None
 
     def evaluations(self):
-        return tuple(self._evaluations)
+        return tuple(self.evaluation_store.list())
 
 
-__all__ = ["EvaluationSubscriber"]
+__all__ = ["EvaluationSubscriber", "EvaluationStore", "InMemoryEvaluationStore"]

@@ -1,10 +1,13 @@
-"""Agent deployment model (Phase 13.3).
+"""Agent deployment model (Phase 13.3 / 18.10).
 
 The same agent version can be deployed to multiple environments (DEV / TEST /
 PRODUCTION).  Only an ACTIVE (published) agent may be deployed; deployment
-status is tracked per (agent_id, environment).
+status is tracked per (agent_id, environment).  Deployment state is durable
+business state, so it is persisted behind an ``AgentDeploymentRepository`` port
+(not a manager-internal dict).
 """
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 from app.core.time import utc_now
@@ -47,11 +50,47 @@ class AgentDeployment:
         }
 
 
+class AgentDeploymentRepository(ABC):
+    """Storage boundary for deployment state (future Postgres adapter swaps in)."""
+
+    @abstractmethod
+    def put(self, agent_id, environment, deployment):
+        pass
+
+    @abstractmethod
+    def get(self, agent_id, environment):
+        pass
+
+    @abstractmethod
+    def list_in(self, environment):
+        pass
+
+
+class InMemoryAgentDeploymentRepository(AgentDeploymentRepository):
+
+    def __init__(self):
+        self._deployments = {}
+
+    def put(self, agent_id, environment, deployment):
+        self._deployments[(agent_id, environment)] = deployment
+        return deployment
+
+    def get(self, agent_id, environment):
+        return self._deployments.get((agent_id, environment))
+
+    def list_in(self, environment):
+        return sorted(
+            (d for d in self._deployments.values()
+             if d.environment == environment),
+            key=lambda d: d.agent_id,
+        )
+
+
 class DeploymentManager:
 
-    def __init__(self, registry):
+    def __init__(self, registry, repository=None):
         self.registry = registry
-        self._deployments = {}
+        self.repository = repository or InMemoryAgentDeploymentRepository()
 
     def deploy(self, agent_id, environment, version=None) -> AgentDeployment:
         if environment not in ENVIRONMENTS:
@@ -66,14 +105,13 @@ class DeploymentManager:
             agent_version=resolved_version,
             environment=environment,
         )
-        self._deployments[(agent_id, environment)] = deployment
-        return deployment
+        return self.repository.put(agent_id, environment, deployment)
 
     def get(self, agent_id, environment):
-        return self._deployments.get((agent_id, environment))
+        return self.repository.get(agent_id, environment)
 
     def disable(self, agent_id, environment):
-        deployment = self._deployments.get((agent_id, environment))
+        deployment = self.repository.get(agent_id, environment)
         if deployment is None:
             raise DeploymentError(
                 f"no deployment for {agent_id!r} in {environment!r}"
@@ -84,15 +122,18 @@ class DeploymentManager:
             environment=deployment.environment, status=DEPLOYMENT_DISABLED,
             created_at=deployment.created_at,
         )
-        self._deployments[(agent_id, environment)] = disabled
-        return disabled
+        return self.repository.put(agent_id, environment, disabled)
 
     def active_in(self, environment):
-        return sorted(
-            (d for d in self._deployments.values()
-             if d.environment == environment and d.status == DEPLOYMENT_ACTIVE),
-            key=lambda d: d.agent_id,
-        )
+        return [
+            d for d in self.repository.list_in(environment)
+            if d.status == DEPLOYMENT_ACTIVE
+        ]
 
 
-__all__ = ["AgentDeployment", "DeploymentManager"]
+__all__ = [
+    "AgentDeployment",
+    "AgentDeploymentRepository",
+    "InMemoryAgentDeploymentRepository",
+    "DeploymentManager",
+]

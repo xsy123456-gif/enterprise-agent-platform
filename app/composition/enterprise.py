@@ -153,10 +153,13 @@ def _build_control_plane():
         AgentRegistry,
         DeploymentManager,
         EnterpriseAgentRouter,
+        InMemoryAgentDeploymentRepository,
         RuleRouter,
     )
     registry = AgentRegistry()
-    deployment = DeploymentManager(registry)
+    deployment = DeploymentManager(
+        registry, repository=InMemoryAgentDeploymentRepository(),
+    )
     access_control = AgentAccessControl()
     router = EnterpriseAgentRouter(rule_router=RuleRouter())
     return SimpleNamespace(registry=registry, deployment=deployment,
@@ -217,14 +220,21 @@ def _build_business():
     from app.platform.business import (
         ApprovalEngine,
         BusinessActionRuntime,
+        InMemoryApprovalRepository,
+        InMemoryBusinessActionRepository,
         PackageRegistry,
         WorkflowEngine,
     )
+    from app.platform.business.workflow import InMemoryWorkflowRunRepository
     return SimpleNamespace(
         packages=PackageRegistry(),
-        approval=ApprovalEngine(),
-        action_runtime=BusinessActionRuntime(),
-        workflow_engine=WorkflowEngine(),
+        approval=ApprovalEngine(repository=InMemoryApprovalRepository()),
+        action_runtime=BusinessActionRuntime(
+            repository=InMemoryBusinessActionRepository(),
+        ),
+        workflow_engine=WorkflowEngine(
+            run_repository=InMemoryWorkflowRunRepository(),
+        ),
     )
 
 

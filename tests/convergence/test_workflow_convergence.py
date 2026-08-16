@@ -135,7 +135,7 @@ def test_approved_approval_resumes_workflow():
         lambda s, c: {"notified": True}))
     run = engine.run(_approval_workflow(), context={"approval_state": "PENDING"})
     assert run.status == "WAITING_APPROVAL"
-    run = engine.resume(run, {"approval_state": "APPROVED"})
+    run = engine.resume(run.run_id, {"approval_state": "APPROVED"})
     assert run.status == "COMPLETED"
     assert run.step_results["a"]["approved"] is True
     assert run.step_results["b"]["notified"] is True
@@ -197,7 +197,7 @@ def test_resume_waiting_workflow_continues():
     )
     run = engine.run(workflow)
     assert run.status == "WAITING"
-    run = engine.resume(run, {"resume_signal": True})
+    run = engine.resume(run.run_id, {"resume_signal": True})
     assert run.status == "COMPLETED"
     assert run.step_results["w"]["waited"] is True
     assert run.step_results["n"]["notified"] is True

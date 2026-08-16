@@ -1,4 +1,4 @@
-"""Evaluation subpackage (Phase 17.1 / 18.9)."""
+"""Evaluation subpackage (Phase 17.1 / 18.9 / 18.10)."""
 
 from app.platform.intelligence.evaluation.bridge import EvaluationSubscriber
 from app.platform.intelligence.evaluation.domain import (
@@ -11,6 +11,10 @@ from app.platform.intelligence.evaluation.registry import (
     EvaluationMetric,
     EvaluationMetricRegistry,
 )
+from app.platform.intelligence.evaluation.store import (
+    EvaluationStore,
+    InMemoryEvaluationStore,
+)
 
 __all__ = [
     "AgentEvaluation",
@@ -20,4 +24,6 @@ __all__ = [
     "EvaluationMetrics",
     "EvaluationMetric",
     "EvaluationMetricRegistry",
+    "EvaluationStore",
+    "InMemoryEvaluationStore",
 ]

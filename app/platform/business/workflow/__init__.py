@@ -11,7 +11,12 @@ from app.platform.business.workflow.adapters import (
     WorkflowStepAdapter,
 )
 from app.platform.business.workflow.domain import BusinessWorkflow, WorkflowStep
-from app.platform.business.workflow.engine import WorkflowEngine, WorkflowRun
+from app.platform.business.workflow.engine import (
+    WorkflowEngine,
+    WorkflowRun,
+    WorkflowRunRepository,
+)
+from app.platform.business.workflow.run_repository import InMemoryWorkflowRunRepository
 from app.platform.business.workflow.state import WorkflowState, WorkflowSuspension
 
 __all__ = [
@@ -21,6 +26,8 @@ __all__ = [
     "WorkflowSuspension",
     "WorkflowEngine",
     "WorkflowRun",
+    "WorkflowRunRepository",
+    "InMemoryWorkflowRunRepository",
     "WorkflowStepAdapter",
     "BusinessActionStepAdapter",
     "ApprovalStepAdapter",
