@@ -1,8 +1,12 @@
-"""Workflow engine (Phase 16.4).
+"""Workflow engine (Phase 16.4 + 18.5).
 
 Executes a ``BusinessWorkflow`` (a DAG of steps) in dependency order, delegating
-each step to an injected handler.  It reuses the Runtime Foundation — it never
-re-implements an execution engine and never performs business judgment itself.
+each step to a registered typed adapter.  It reuses the Runtime Foundation — it
+never re-implements an execution engine and never performs business judgment
+itself.
+
+Phase 18.5: production runs through registered ``WorkflowStepAdapter`` (typed);
+raw ``step_handlers`` remain only as a test/development convenience.
 """
 
 from dataclasses import dataclass, field
@@ -46,8 +50,10 @@ class WorkflowRunResult:
 
 class WorkflowEngine:
 
-    def __init__(self, step_handlers=None):
-        self.step_handlers = dict(step_handlers or {})
+    def __init__(self, step_handlers=None, step_adapters=None):
+        self._handlers = dict(step_handlers or {})
+        for adapter in (step_adapters or []):
+            self._handlers.setdefault(adapter.step_type, adapter.execute)
 
     def run(self, workflow, context=None) -> WorkflowRunResult:
         order = _execution_order(workflow.steps)
@@ -60,7 +66,7 @@ class WorkflowEngine:
         step_results = {}
         for step_id in order:
             step = workflow.step(step_id)
-            handler = self.step_handlers.get(step.step_type)
+            handler = self._handlers.get(step.step_type)
             if handler is None:
                 raise WorkflowError(
                     f"no handler for step type {step.step_type!r}"
