@@ -14,6 +14,7 @@ from app.platform.agent_control.domain import (
     AGENT_VALIDATED,
 )
 from app.platform.agent_control.errors import AgentNotActiveError, AgentValidationError
+from app.platform.agent_control.lifecycle import validate_artifact
 from app.platform.agent_control.versioning import ensure_valid_checksum
 
 
@@ -33,7 +34,7 @@ class AgentRegistry(VersionedRegistry):
     def validate(self, agent_id, version=None):
         version = self._resolve(agent_id, version)
         artifact = self.get(agent_id, version)
-        ensure_valid_checksum(artifact)
+        validate_artifact(artifact)
         self._status[(agent_id, version)] = AGENT_VALIDATED
         return artifact
 
