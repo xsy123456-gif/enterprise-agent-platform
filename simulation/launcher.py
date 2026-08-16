@@ -16,9 +16,18 @@ import uvicorn
 
 def _providers():
     from simulation.amazon.app import build_app as amazon
+    from simulation.netsuite.app import build_app as netsuite
+    from simulation.salesforce.app import build_app as salesforce
+    from simulation.sap.app import build_app as sap
     from simulation.tiktok.app import build_app as tiktok
 
-    return [("amazon", amazon()), ("tiktok", tiktok())]
+    return [
+        ("amazon", amazon()),
+        ("tiktok", tiktok()),
+        ("sap", sap()),
+        ("salesforce", salesforce()),
+        ("netsuite", netsuite()),
+    ]
 
 
 def _run(app, host, port):
