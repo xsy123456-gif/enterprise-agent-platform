@@ -1,9 +1,16 @@
-"""Knowledge ingestion service (Phase 15.5).
+"""Knowledge ingestion service (Phase 15.5 / 18.11).
 
-Ingest -> checksum -> version -> activate -> (governed) retrieval.  The service
-stores document metadata (with a content checksum) and enforces access on read.
+Management Plane: ingest -> checksum -> version -> activate.  On activation the
+``KnowledgeProjectionService`` projects the ACTIVE document into the Serving
+Plane; the Serving Plane (not this service) performs agent retrieval / ACL /
+citation.
 """
 
+from dataclasses import replace
+
+from app.platform.production.knowledge.management_repository import (
+    InMemoryKnowledgeManagementRepository,
+)
 from app.platform.production.knowledge.version import (
     KNOWLEDGE_ACTIVE,
     KNOWLEDGE_DRAFT,
@@ -14,9 +21,10 @@ from app.platform.production.knowledge.version import (
 
 class KnowledgeIngestionService:
 
-    def __init__(self, access_control=None):
+    def __init__(self, repository=None, projection=None, access_control=None):
+        self.repository = repository or InMemoryKnowledgeManagementRepository()
+        self.projection = projection
         self.access_control = access_control
-        self._documents = {}
 
     def ingest(self, document_id, tenant_id, content, source="", version="1.0"):
         document = KnowledgeDocument(
@@ -24,22 +32,20 @@ class KnowledgeIngestionService:
             source=source, checksum=content_checksum(content),
             status=KNOWLEDGE_DRAFT,
         )
-        self._documents[(document_id, version)] = document
+        self.repository.put(document_id, version, document, content)
         return document
 
     def activate(self, document_id, version="1.0"):
-        document = self._documents[(document_id, version)]
-        activated = KnowledgeDocument(
-            document_id=document.document_id, version=document.version,
-            tenant_id=document.tenant_id, source=document.source,
-            checksum=document.checksum, status=KNOWLEDGE_ACTIVE,
-            created_at=document.created_at,
-        )
-        self._documents[(document_id, version)] = activated
+        entry = self.repository.get_with_content(document_id, version)
+        document, content = entry
+        activated = replace(document, status=KNOWLEDGE_ACTIVE)
+        self.repository.put(document_id, version, activated, content)
+        if self.projection is not None:
+            self.projection.project(activated, content)
         return activated
 
     def get(self, document_id, version="1.0", agent_id=None):
-        document = self._documents.get((document_id, version))
+        document = self.repository.get(document_id, version)
         if document is None:
             return None
         if self.access_control is not None and agent_id is not None:
@@ -47,10 +53,7 @@ class KnowledgeIngestionService:
         return document
 
     def versions(self, document_id):
-        return sorted(
-            version for (doc_id, version) in self._documents
-            if doc_id == document_id
-        )
+        return self.repository.versions(document_id)
 
 
 __all__ = ["KnowledgeIngestionService"]

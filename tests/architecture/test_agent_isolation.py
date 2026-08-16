@@ -35,6 +35,17 @@ def test_agent_does_not_reach_repository_query_or_connector():
                 )
 
 
+def test_agent_does_not_import_production_knowledge_store():
+    # Knowledge is reached via AgentKnowledgePort (Serving Plane), never by
+    # importing the Production Knowledge management store directly.
+    for area in _AGENT_AREAS:
+        imports = all_imports(area)
+        for mod in imports:
+            assert not mod.startswith("app.platform.production.knowledge"), (
+                f"{area} imports production knowledge store {mod!r}"
+            )
+
+
 def test_agent_does_not_import_connector_credentials():
     # credentials/secret surface is Connector-Runtime-only, never reachable by
     # an agent layer.

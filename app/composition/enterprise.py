@@ -190,12 +190,12 @@ def _build_production(event_bus=None, metric_sink=None):
         AgentMetricsCollector,
         BudgetManager,
         CostCollector,
-        KnowledgeIngestionService,
         ProductionObservabilitySubscriber,
         QuotaManager,
         TenantIsolation,
         TraceCollector,
     )
+    from app.composition.knowledge import build_knowledge_wiring
     trace = TraceCollector()
     metrics = AgentMetricsCollector()
     cost = CostCollector()
@@ -204,6 +204,7 @@ def _build_production(event_bus=None, metric_sink=None):
     )
     if event_bus is not None:
         event_bus.subscribe(observability)
+    knowledge = build_knowledge_wiring()
     return SimpleNamespace(
         trace=trace,
         metrics=metrics,
@@ -211,7 +212,9 @@ def _build_production(event_bus=None, metric_sink=None):
         budget=BudgetManager(),
         quota=QuotaManager(),
         tenant_isolation=TenantIsolation(),
-        knowledge=KnowledgeIngestionService(),
+        knowledge_management=knowledge.management,
+        knowledge_serving=knowledge.serving,
+        knowledge_projection=knowledge.projection,
         observability=observability,
     )
 
