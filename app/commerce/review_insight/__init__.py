@@ -28,6 +28,7 @@ from app.commerce.review_insight.errors import (
     JobNotFoundError,
     ReviewInsightError,
 )
+from app.commerce.review_insight.job import ReviewInsightJobManager
 from app.commerce.review_insight.repository import (
     CanonicalReviewInsightRepository,
     ReviewInsightNaturalKey,
@@ -36,6 +37,13 @@ from app.commerce.review_insight.repository import (
 from app.commerce.review_insight.service import (
     ReviewInsightProvenance,
     ReviewInsightService,
+)
+from app.commerce.review_insight.worker import (
+    EVENT_DATA_PUBLISHED,
+    EVENT_REVIEW_AVAILABLE,
+    CanonicalReviewAccess,
+    ReviewAccessPort,
+    ReviewInsightWorker,
 )
 
 __all__ = [
@@ -54,6 +62,12 @@ __all__ = [
     "CanonicalReviewInsightRepository",
     "ReviewInsightProvenance",
     "ReviewInsightService",
+    "ReviewInsightJobManager",
+    "ReviewAccessPort",
+    "CanonicalReviewAccess",
+    "ReviewInsightWorker",
+    "EVENT_DATA_PUBLISHED",
+    "EVENT_REVIEW_AVAILABLE",
     "JOB_CREATED",
     "JOB_RUNNING",
     "JOB_PARTIAL",

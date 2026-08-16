@@ -148,6 +148,7 @@ class ReviewInsightJob:
     failed_count: int = 0
     retry_count: int = 0
     trace_id: str = ""
+    error_summary: str = ""
 
     def __post_init__(self):
         object.__setattr__(self, "review_ids", tuple(self.review_ids or ()))
@@ -168,6 +169,7 @@ class ReviewInsightJob:
             "failed_count": self.failed_count,
             "retry_count": self.retry_count,
             "trace_id": self.trace_id,
+            "error_summary": self.error_summary,
         }
 
 
