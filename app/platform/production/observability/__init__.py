@@ -1,4 +1,4 @@
-"""Observability package (Phase 15.1)."""
+"""Observability package (Phase 15.1 / 18.8)."""
 
 from app.platform.production.observability.cost import AgentCostRecord, CostCollector
 from app.platform.production.observability.metrics import (
@@ -6,6 +6,9 @@ from app.platform.production.observability.metrics import (
     AgentMetricsCollector,
     AgentMetricsSummary,
     AgentSLA,
+)
+from app.platform.production.observability.subscriber import (
+    ProductionObservabilitySubscriber,
 )
 from app.platform.production.observability.trace import (
     AgentTrace,
@@ -23,4 +26,5 @@ __all__ = [
     "AgentMetricsCollector",
     "AgentCostRecord",
     "CostCollector",
+    "ProductionObservabilitySubscriber",
 ]

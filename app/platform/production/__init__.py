@@ -40,6 +40,7 @@ from app.platform.production.observability import (
     AgentTrace,
     CostCollector,
     ExecutionSpan,
+    ProductionObservabilitySubscriber,
     TraceCollector,
 )
 from app.platform.production.reliability import (
@@ -61,6 +62,7 @@ __all__ = [
     "AgentTrace",
     "ExecutionSpan",
     "TraceCollector",
+    "ProductionObservabilitySubscriber",
     "AgentMetricSample",
     "AgentMetricsSummary",
     "AgentSLA",

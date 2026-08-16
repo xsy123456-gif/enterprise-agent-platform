@@ -21,6 +21,7 @@ class AgentMetricSample:
     execution_cost: float = 0.0
     feedback: float | None = None
     at: str = field(default_factory=utc_now)
+    execution_id: str = ""
 
     def __post_init__(self):
         if self.retry_count < 0:

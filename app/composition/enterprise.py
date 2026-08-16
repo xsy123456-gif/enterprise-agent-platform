@@ -182,24 +182,32 @@ def _build_collaboration():
                            graph_validator=validator)
 
 
-def _build_production():
+def _build_production(event_bus=None):
     from app.platform.production import (
         AgentMetricsCollector,
         BudgetManager,
         CostCollector,
         KnowledgeIngestionService,
+        ProductionObservabilitySubscriber,
         QuotaManager,
         TenantIsolation,
         TraceCollector,
     )
+    trace = TraceCollector()
+    metrics = AgentMetricsCollector()
+    cost = CostCollector()
+    observability = ProductionObservabilitySubscriber(trace, metrics, cost)
+    if event_bus is not None:
+        event_bus.subscribe(observability)
     return SimpleNamespace(
-        trace=TraceCollector(),
-        metrics=AgentMetricsCollector(),
-        cost=CostCollector(),
+        trace=trace,
+        metrics=metrics,
+        cost=cost,
         budget=BudgetManager(),
         quota=QuotaManager(),
         tenant_isolation=TenantIsolation(),
         knowledge=KnowledgeIngestionService(),
+        observability=observability,
     )
 
 
@@ -247,6 +255,8 @@ def build_enterprise_application(environment=None, **overrides):
     execution_manager = foundation.execution or _inmemory_execution_manager(
         foundation.event_bus,
     )
+    if getattr(execution_manager, "event_bus", None) is None:
+        execution_manager.event_bus = foundation.event_bus
     commerce = _build_commerce(environment, execution_manager=execution_manager)
     skill_system = commerce.skill_system
     return EnterpriseApplication(
@@ -255,7 +265,7 @@ def build_enterprise_application(environment=None, **overrides):
         agents=_build_employee_agents(skill_system),
         control_plane=_build_control_plane(),
         collaboration=_build_collaboration(),
-        production=_build_production(),
+        production=_build_production(foundation.event_bus),
         business=_build_business(),
         intelligence=_build_intelligence(),
         environment=environment,

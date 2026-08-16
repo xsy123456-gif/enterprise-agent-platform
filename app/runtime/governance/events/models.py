@@ -101,6 +101,7 @@ class RuntimeEvent:
     artifact_hash: str
     backend_type: str
     status: str
+    tenant_id: str | None = None
     node_id: str | None = None
     worker_id: str | None = None
     payload: dict[str, Any] = field(default_factory=dict)
@@ -162,6 +163,7 @@ class RuntimeEvent:
             "node_id": self.node_id,
             "worker_id": self.worker_id,
             "status": self.status,
+            "tenant_id": self.tenant_id,
             "payload": dict(self.payload),
             "backend_metadata": dict(self.backend_metadata),
             "operation_id": self.operation_id,

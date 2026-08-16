@@ -28,7 +28,8 @@ COMPONENTS = frozenset({
 
 FORBIDDEN_OBSERVABILITY_KEYS = (
     "secret", "credential", "token", "password", "raw_data", "private",
-    "sensitive",
+    "sensitive", "authorization", "api_key", "apikey", "refresh_token",
+    "secret_reference", "bearer",
 )
 
 
@@ -40,6 +41,7 @@ class AgentTrace:
     agent_id: str = ""
     agent_version: str = ""
     task_id: str = ""
+    execution_id: str = ""
     start_time: str = field(default_factory=utc_now)
     end_time: str = ""
     status: str = TRACE_RUNNING
@@ -58,6 +60,7 @@ class AgentTrace:
             "agent_id": self.agent_id,
             "agent_version": self.agent_version,
             "task_id": self.task_id,
+            "execution_id": self.execution_id,
             "start_time": self.start_time,
             "end_time": self.end_time,
             "status": self.status,
@@ -73,6 +76,7 @@ class ExecutionSpan:
     duration: float = 0.0
     status: str = TRACE_SUCCESS
     metadata: dict = field(default_factory=dict)
+    execution_id: str = ""
 
     def __post_init__(self):
         object.__setattr__(self, "metadata", dict(self.metadata or {}))
@@ -97,6 +101,7 @@ class ExecutionSpan:
             "duration": self.duration,
             "status": self.status,
             "metadata": dict(self.metadata),
+            "execution_id": self.execution_id,
         }
 
 
@@ -107,11 +112,11 @@ class TraceCollector:
         self._spans = {}
 
     def start_trace(self, trace_id, tenant_id="", agent_id="", agent_version="",
-                    task_id="", parent_trace_id="") -> AgentTrace:
+                    task_id="", parent_trace_id="", execution_id="") -> AgentTrace:
         trace = AgentTrace(
             trace_id=trace_id, parent_trace_id=parent_trace_id,
             tenant_id=tenant_id, agent_id=agent_id, agent_version=agent_version,
-            task_id=task_id)
+            task_id=task_id, execution_id=execution_id)
         self._traces[trace_id] = trace
         self._spans.setdefault(trace_id, [])
         return trace
@@ -122,6 +127,7 @@ class TraceCollector:
             trace_id=trace.trace_id, parent_trace_id=trace.parent_trace_id,
             tenant_id=trace.tenant_id, agent_id=trace.agent_id,
             agent_version=trace.agent_version, task_id=trace.task_id,
+            execution_id=trace.execution_id,
             start_time=trace.start_time, end_time=end_time or utc_now(),
             status=status,
         )
