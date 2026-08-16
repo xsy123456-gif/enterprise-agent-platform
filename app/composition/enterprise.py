@@ -41,7 +41,7 @@ class EnterpriseApplication:
         return self.foundation.health()
 
 
-def _build_commerce(environment):
+def _build_commerce(environment, execution_manager=None):
     from app.commerce.query.service import CommerceQueryService
     from app.commerce.repositories.factory import (
         build_identity_map,
@@ -49,7 +49,10 @@ def _build_commerce(environment):
     )
     from app.commerce.diagnostics import build_core_metric_registry
     from app.commerce.platform import build_commerce_tool_surface
-    from app.commerce.skills import build_skill_system
+    from app.commerce.skills import (
+        DiagnosticSkillExecutionAdapter,
+        build_skill_system,
+    )
 
     url = os.getenv("COMMERCE_DATABASE_URL")
     repository = build_repository(url, initialize=bool(url))
@@ -60,6 +63,9 @@ def _build_commerce(environment):
     tool_surface = build_commerce_tool_surface(
         query_service, metric_registry=metric_registry,
     )
+    skill_execution = DiagnosticSkillExecutionAdapter(
+        skill_system, execution_manager=execution_manager,
+    )
     return SimpleNamespace(
         repository=repository,
         identity_map=identity_map,
@@ -67,6 +73,8 @@ def _build_commerce(environment):
         metric_registry=metric_registry,
         skill_system=skill_system,
         tool_surface=tool_surface,
+        skill_execution=skill_execution,
+        execution_manager=execution_manager,
     )
 
 
@@ -234,7 +242,10 @@ def _build_intelligence():
 def build_enterprise_application(environment=None, **overrides):
     environment = (environment or os.getenv("APP_ENV", "development")).lower()
     foundation = build_application(environment=environment, **overrides)
-    commerce = _build_commerce(environment)
+    execution_manager = foundation.execution or _inmemory_execution_manager(
+        foundation.event_bus,
+    )
+    commerce = _build_commerce(environment, execution_manager=execution_manager)
     skill_system = commerce.skill_system
     return EnterpriseApplication(
         foundation=foundation,
@@ -247,6 +258,11 @@ def build_enterprise_application(environment=None, **overrides):
         intelligence=_build_intelligence(),
         environment=environment,
     )
+
+
+def _inmemory_execution_manager(event_bus=None):
+    from app.runtime.execution import ExecutionManager, InMemoryExecutionStore
+    return ExecutionManager(InMemoryExecutionStore(), event_bus=event_bus)
 
 
 __all__ = ["EnterpriseApplication", "build_enterprise_application"]

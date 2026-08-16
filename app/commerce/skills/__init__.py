@@ -13,6 +13,10 @@ from app.commerce.skills.errors import (
     SkillValidationError,
     UnknownPlanForSkill,
 )
+from app.commerce.skills.execution_adapter import (
+    DiagnosticSkillExecutionAdapter,
+    SkillExecutionContext,
+)
 from app.commerce.skills.models import SkillDefinition, SkillInput, SkillResult
 from app.commerce.skills.registry import (
     SKILL_ACTIVE,
@@ -36,6 +40,8 @@ __all__ = [
     "SkillInput",
     "SkillResult",
     "Skill",
+    "SkillExecutionContext",
+    "DiagnosticSkillExecutionAdapter",
     "SkillRegistry",
     "SkillSystem",
     "build_skill_system",
