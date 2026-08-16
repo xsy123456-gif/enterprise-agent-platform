@@ -68,11 +68,12 @@ class BaseConnector(ConnectorPort):
     def authorize(self) -> dict:
         """Build an auth header from the credential + secret provider.
 
+        Fail-closed: a connector without a credential cannot call the platform.
         The plain token is fetched here (inside the Connector Runtime) and never
         escapes the connector.
         """
         if self.credential is None:
-            return {}
+            raise CredentialError(f"connector {self.connector_id!r} has no credential")
         if self.credential.secret_ref is None or self.secret_provider is None:
             raise CredentialError(
                 f"connector {self.connector_id!r} has no resolvable secret"
