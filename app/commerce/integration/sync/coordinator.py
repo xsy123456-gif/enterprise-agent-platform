@@ -48,6 +48,9 @@ class IntegrationSyncRuntime:
             secret_provider=self.secret_provider,
             **binding.connector_config,
         )
+        set_correlation = getattr(connector, "set_correlation_id", None)
+        if callable(set_correlation):
+            set_correlation(trace_id)
         adapter = self.adapter_registry.build(
             binding.adapter_id,
             version=binding.adapter_version or None,

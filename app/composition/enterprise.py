@@ -23,6 +23,7 @@ class EnterpriseApplication:
     production: object = None
     business: object = None
     intelligence: object = None
+    external_integrations: object = None
     environment: str = "development"
 
     def start(self):
@@ -300,6 +301,7 @@ def build_enterprise_application(environment=None, **overrides):
     commerce = _build_commerce(environment, execution_manager=execution_manager)
     skill_system = commerce.skill_system
     intelligence = _build_intelligence()
+    external_integrations = _build_external_integrations(environment, commerce)
     return EnterpriseApplication(
         foundation=foundation,
         commerce=commerce,
@@ -313,7 +315,25 @@ def build_enterprise_application(environment=None, **overrides):
         ),
         business=_build_business(),
         intelligence=intelligence,
+        external_integrations=external_integrations,
         environment=environment,
+    )
+
+
+def _build_external_integrations(environment, commerce):
+    # Simulation connectors are opt-in and never auto-enabled in production.
+    mode = os.getenv("EXTERNAL_INTEGRATION_MODE", "").lower()
+    if mode != "simulation" or environment == "production":
+        return None
+    from app.composition.external_integrations import (
+        build_simulation_external_integrations,
+    )
+    return build_simulation_external_integrations(
+        environment,
+        repository=commerce.repository,
+        identity_map=commerce.identity_map,
+        event_bus=commerce.execution_manager.event_bus
+        if getattr(commerce.execution_manager, "event_bus", None) else None,
     )
 
 
