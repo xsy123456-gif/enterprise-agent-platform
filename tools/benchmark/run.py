@@ -45,6 +45,9 @@ def parse_diagnostic_message(content):
 def seed_metrics(application, metrics):
     from app.commerce.domain import MetricSeries
     repository = application.commerce.repository
+    # reset scenario state: clear previously-seeded metrics so each scenario
+    # starts from the same baseline (scenario independence).
+    repository._metrics.clear()
     for name, value in metrics:
         repository.upsert_metric("company_A", MetricSeries(
             metric_record_id=name, tenant_id="company_A", subject_type="STORE",
