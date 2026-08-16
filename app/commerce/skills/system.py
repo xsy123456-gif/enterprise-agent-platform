@@ -63,7 +63,11 @@ class SkillSystem:
     def run(self, skill_id, subject, trusted_context=None, fact_executor=None,
             plan_id=None, execution_id=None, skill_version=None):
         from app.commerce.skills.models import SkillInput
-        definition = self.skill_registry.get(skill_id, skill_version)
+        definition = (
+            self.skill_registry.get(skill_id, skill_version)
+            if skill_version is not None
+            else self.skill_registry.get_active_skill(skill_id)
+        )
         skill = Skill(definition, self.plan_registry, self.compile_context)
         return skill.execute(
             SkillInput(subject=subject, plan_id=plan_id),
@@ -77,16 +81,22 @@ class SkillSystem:
 
 
 def build_skill_system():
-    """Build a fully wired SkillSystem with the 15 plans + 7 skills."""
+    """Build a fully wired SkillSystem with the 15 plans + 7 skills.
+
+    Skills are registered (DRAFT), validated (capability + plan consistency),
+    then activated (all bound plans must be ACTIVE).
+    """
     compile_context = _build_compile_context()
     plan_registry = DiagnosticPlanRegistry(compile_context)
     for plan in build_business_plan_definitions():
         plan_registry.register(plan)
         plan_registry.activate(plan.plan_id)
-    skill_registry = SkillRegistry()
+    skill_registry = SkillRegistry(plan_registry=plan_registry)
     skills = {}
     for definition in build_business_skill_definitions():
         skill_registry.register(definition)
+        skill_registry.validate(definition.skill_id)
+        skill_registry.activate(definition.skill_id)
         skills[definition.skill_id] = Skill(definition, plan_registry,
                                             compile_context)
     return SkillSystem(

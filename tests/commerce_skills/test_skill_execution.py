@@ -1,5 +1,5 @@
 """Skill execution tests: each skill runs deterministically (no LLM) and
-returns a complete DiagnosticResult."""
+returns a complete SkillResult wrapping a DiagnosticResult."""
 
 import pytest
 
@@ -7,6 +7,7 @@ from app.commerce.contracts.subject import SubjectRef
 from app.commerce.diagnostics.plans import FakeFactQueryExecutor
 from app.commerce.skills import (
     SkillError,
+    SkillResult,
     UnknownPlanForSkill,
     build_skill_system,
 )
@@ -35,22 +36,20 @@ def _run(system, skill_id, facts, plan_id=None):
                       plan_id=plan_id)
 
 
-def test_store_performance_skill(engine_facts):
-    result = engine_facts
-    assert result.skill_id == "store_performance_diagnosis"
-    assert result.plan_id == "store_health_scan"
-    assert result.status == "COMPLETED"
-    assert {s.signal_code for s in result.signals} >= {"GMV_DROP", "CVR_DROP"}
-
-
-@pytest.fixture
-def engine_facts(system):
+def test_store_performance_skill(system):
     facts = make_facts(
         (CAP_METRICS, "GMV", 1000.0), (CAP_METRICS, "GMV_B", 2000.0),
         (CAP_METRICS, "ORDERS", 20.0), (CAP_METRICS, "ORDERS_B", 40.0),
         (CAP_METRICS, "SESSIONS", 1000.0), (CAP_METRICS, "SESSIONS_B", 1000.0),
     )
-    return _run(system, "store_performance_diagnosis", facts)
+    result = _run(system, "store_performance_diagnosis", facts)
+    assert isinstance(result, SkillResult)
+    assert result.skill_id == "store_performance_diagnosis"
+    assert result.plan_id == "store_health_scan"
+    assert result.diagnostic_result.status == "COMPLETED"
+    assert {s.signal_code for s in result.diagnostic_result.signals} >= {
+        "GMV_DROP", "CVR_DROP",
+    }
 
 
 def test_product_performance_skill(system):
@@ -61,7 +60,9 @@ def test_product_performance_skill(system):
     )
     result = _run(system, "product_performance_diagnosis", facts)
     assert result.plan_id == "product_anomaly_diagnosis"
-    assert {s.signal_code for s in result.signals} >= {"UNITS_DROP", "CVR_DROP"}
+    assert {s.signal_code for s in result.diagnostic_result.signals} >= {
+        "UNITS_DROP", "CVR_DROP",
+    }
 
 
 def test_advertising_performance_skill(system):
@@ -73,7 +74,7 @@ def test_advertising_performance_skill(system):
     )
     result = _run(system, "advertising_performance_diagnosis", facts)
     assert result.plan_id == "advertising_health_scan"
-    assert "ROAS_DROP" in {s.signal_code for s in result.signals}
+    assert "ROAS_DROP" in {s.signal_code for s in result.diagnostic_result.signals}
 
 
 def test_inventory_risk_skill(system):
@@ -87,7 +88,7 @@ def test_inventory_risk_skill(system):
     )
     result = _run(system, "inventory_risk_diagnosis", facts)
     assert result.plan_id == "stockout_risk"
-    assert {c.cause_code for c in result.causes} >= {"STOCKOUT_RISK"}
+    assert {c.cause_code for c in result.diagnostic_result.causes} >= {"STOCKOUT_RISK"}
 
 
 def test_review_issue_skill(system):
@@ -99,7 +100,9 @@ def test_review_issue_skill(system):
     )
     result = _run(system, "review_issue_diagnosis", facts)
     assert result.plan_id == "rating_deterioration"
-    assert {c.cause_code for c in result.causes} >= {"PRODUCT_REPUTATION_DETERIORATION"}
+    assert {c.cause_code for c in result.diagnostic_result.causes} >= {
+        "PRODUCT_REPUTATION_DETERIORATION",
+    }
 
 
 def test_product_360_skill(system):
@@ -115,7 +118,7 @@ def test_product_360_skill(system):
     )
     result = _run(system, "product_360_diagnosis", facts)
     assert result.plan_id == "product_360"
-    assert {s.signal_code for s in result.signals} >= {
+    assert {s.signal_code for s in result.diagnostic_result.signals} >= {
         "UNITS_DROP", "CVR_DROP", "ROAS_DROP", "RATING_DROP",
     }
 
@@ -132,7 +135,7 @@ def test_daily_operations_triage_skill(system):
     )
     result = _run(system, "daily_operations_triage", facts)
     assert result.plan_id == "daily_operations_scan"
-    assert {s.signal_code for s in result.signals} >= {
+    assert {s.signal_code for s in result.diagnostic_result.signals} >= {
         "GMV_DROP", "CVR_DROP", "ROAS_DROP", "INVENTORY_HIGH",
     }
 
@@ -158,7 +161,7 @@ def test_skill_rejects_unsupported_plan(system):
 def test_skill_requires_subject(system):
     from app.commerce.skills.models import SkillInput
     from app.commerce.skills.skill import Skill
-    definition = system.skill_registry.get("store_performance_diagnosis")
+    definition = system.skill_registry.get_active_skill("store_performance_diagnosis")
     skill = Skill(definition, system.plan_registry, system.compile_context)
     with pytest.raises(SkillError):
         skill.execute(SkillInput(subject=None), fact_executor=FakeFactQueryExecutor())
