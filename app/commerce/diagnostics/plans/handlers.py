@@ -12,6 +12,7 @@ from app.commerce.contracts.diagnostic_result import (
     DIAG_STATUS_COMPLETED,
     DIAG_STATUS_INSUFFICIENT_DATA,
     DiagnosticResult,
+    Priority,
 )
 from app.commerce.contracts.evidence import Evidence
 from app.commerce.contracts.query import DataQuality
@@ -260,7 +261,7 @@ def handle_result_assemble(step, state, context):
         signals=tuple(state.signals),
         causes=tuple(state.causes),
         impacts=tuple(state.impacts),
-        priority=state.priority,
+        priority=state.priority or Priority(),
         data_quality=state.data_quality or DataQuality(),
         coverage=state.coverage,
         unavailable_evidence=tuple(state.unavailable_evidence),

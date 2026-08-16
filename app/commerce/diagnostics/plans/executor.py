@@ -101,6 +101,11 @@ class PlanExecutor:
                     state.mark(step.step_id, STEP_STATUS_MARKED_UNKNOWN, str(error))
                 else:
                     state.mark(step.step_id, STEP_STATUS_SKIPPED, str(error))
+                # SKIP / MARK_UNKNOWN must still continue the chain so the
+                # terminal RESULT_ASSEMBLE step always runs and can emit a typed
+                # INSUFFICIENT_DATA / UNKNOWN result.  Only FAILURE_STOP halts.
+                for nxt in step.next:
+                    activated.add(nxt)
         return state
 
     @staticmethod
