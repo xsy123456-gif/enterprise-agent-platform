@@ -22,29 +22,31 @@ def _spec(resource, store_id):
 
 # ── Capability / binding registrations ──────────────────────
 
-def test_six_capabilities_registered(surface):
+def test_seven_capabilities_registered(surface):
     ids = {c.capability_id for c in surface.capabilities}
     assert ids == {
         "commerce.store.read", "commerce.catalog.read", "commerce.metrics.read",
-        "commerce.inventory.read", "commerce.review.read", "commerce.advertising.read",
+        "commerce.inventory.read", "commerce.review.read",
+        "commerce.review_insight.read", "commerce.advertising.read",
     }
 
 
-def test_six_tools_registered(surface):
+def test_seven_tools_registered(surface):
     names = set(surface.tools)
     assert names == {
         "store.get", "catalog.query", "metric.query",
-        "inventory.query", "review.query", "advertising.query",
+        "inventory.query", "review.query", "review_insight.query", "advertising.query",
     }
 
 
-def test_six_bindings(surface):
+def test_seven_bindings(surface):
     assert {(b.capability_id, b.tool_name) for b in surface.bindings} == {
         ("commerce.store.read", "store.get"),
         ("commerce.catalog.read", "catalog.query"),
         ("commerce.metrics.read", "metric.query"),
         ("commerce.inventory.read", "inventory.query"),
         ("commerce.review.read", "review.query"),
+        ("commerce.review_insight.read", "review_insight.query"),
         ("commerce.advertising.read", "advertising.query"),
     }
 

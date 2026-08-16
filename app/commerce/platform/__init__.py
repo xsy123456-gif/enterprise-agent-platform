@@ -1,6 +1,6 @@
 """Commerce tool-surface platform integration.
 
-Wires the six governed read tools into the existing Platform: Capability
+Wires the seven governed read tools into the existing Platform: Capability
 Catalog registrations, ToolRegistry registrations, Capability -> ToolBinding,
 and a production ``FactQueryExecutorPort`` that goes through
 Capability -> ToolBinding -> ToolRunner -> Tool (never the QueryService /
@@ -58,6 +58,11 @@ COMMERCE_CAPABILITIES = (
         required_permissions=["execute"], allowed_tools=["review.query"],
     ),
     CapabilityDefinition(
+        capability_id="commerce.review_insight.read", name="Review Insight Read",
+        description="读取评价洞察 AI 事实", risk_level="low",
+        required_permissions=["execute"], allowed_tools=["review_insight.query"],
+    ),
+    CapabilityDefinition(
         capability_id="commerce.advertising.read", name="Advertising Read",
         description="读取广告实体", risk_level="low",
         required_permissions=["execute"], allowed_tools=["advertising.query"],
@@ -78,6 +83,7 @@ CAPABILITY_TOOL = {
     "commerce.metrics.read": "metric.query",
     "commerce.inventory.read": "inventory.query",
     "commerce.review.read": "review.query",
+    "commerce.review_insight.read": "review_insight.query",
     "commerce.advertising.read": "advertising.query",
 }
 
@@ -242,7 +248,7 @@ class CommerceToolSurface:
 def build_commerce_tool_surface(query_service, metric_registry=None,
                                 governance_gate=None, event_bus=None,
                                 agent_registry=None):
-    """Register the six capabilities + tools + bindings and wire the surface."""
+    """Register the seven capabilities + tools + bindings and wire the surface."""
     tools = build_commerce_tools(query_service, metric_registry=metric_registry)
     tool_registry = ToolRegistry()
     for name, tool in tools.items():

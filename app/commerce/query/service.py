@@ -111,6 +111,10 @@ class CommerceQueryService:
         insights = self.repository.list_review_insights_by_review(tenant_id, review_id)
         return self._assemble(tenant_id, insights, "generated_at", request_id)
 
+    def list_review_insights_by_listing(self, tenant_id, listing_id, request_id=None):
+        insights = self.repository.list_review_insights_by_listing(tenant_id, listing_id)
+        return self._assemble(tenant_id, insights, "generated_at", request_id)
+
     # ── Advertising ───────────────────────────────────────────
 
     def list_campaigns_by_store(self, tenant_id, store_id, request_id=None):

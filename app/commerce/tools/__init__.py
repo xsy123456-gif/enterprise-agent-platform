@@ -1,4 +1,4 @@
-"""Six governed commerce read tools.
+"""Seven governed commerce read tools.
 
 Each tool is a ``BaseTool`` that reads canonical commerce facts through the
 ``CommerceQueryService`` (the only data access layer).  Tools enforce the STRICT
@@ -6,7 +6,9 @@ scope policy against the Runtime-injected trusted context BEFORE any canonical
 query, and use the typed Filter / TimeRange / Cursor Pagination / QueryResult /
 ToolError contracts.  metric.query only serves SOURCE/AGGREGATED facts;
 inventory.query returns inventory facts only; advertising.query returns
-advertising *entities* only; review.query defaults to ``include_raw=false``.
+advertising *entities* only; review.query defaults to ``include_raw=false``;
+review_insight.query serves AI facts only (issues/topics/confidence/severity +
+provenance, never Cause/Impact/Priority).
 
 Pagination uses a single shared cursor codec (``app.commerce.cursor``):
 malformed / cross-resource cursors and over-limit pages fail with a typed
@@ -394,6 +396,44 @@ class ReviewQueryTool(CommerceReadTool):
         return self._rebuild(result, items, page_info)
 
 
+# ── review_insight.query ────────────────────────────────────
+
+class ReviewInsightQueryTool(CommerceReadTool):
+    name = "review_insight.query"
+    capability = "commerce.review_insight.read"
+    description = "读取评价洞察 AI 事实（issues/topics/confidence/severity + provenance）"
+
+    def _validate(self, arguments):
+        if not arguments.get("store_id"):
+            raise CommerceValidationError("review_insight.query requires store_id")
+        if not arguments.get("review_id") and not arguments.get("listing_id"):
+            raise CommerceValidationError(
+                "review_insight.query requires review_id or listing_id"
+            )
+
+    def _check_scope(self, arguments, trusted):
+        return self._require_store_scope(arguments.get("store_id"), trusted)
+
+    def _context_key(self, arguments):
+        return (
+            f"review_insight:"
+            f"{arguments.get('review_id') or arguments.get('listing_id') or ''}"
+        )
+
+    def _query(self, arguments, trusted):
+        if arguments.get("review_id"):
+            result = self.query_service.list_review_insights_by_review(
+                trusted.tenant_id, arguments["review_id"],
+            )
+        else:
+            result = self.query_service.list_review_insights_by_listing(
+                trusted.tenant_id, arguments["listing_id"],
+            )
+        page = self._parse_page(arguments)
+        items, page_info = self._apply(result.data, [], page, self._context_key(arguments))
+        return self._rebuild(result, items, page_info)
+
+
 # ── advertising.query ───────────────────────────────────────
 
 class AdvertisingQueryTool(CommerceReadTool):
@@ -457,6 +497,7 @@ def build_commerce_tools(query_service, metric_registry=None):
         "metric.query": MetricQueryTool(query_service, metric_registry=metric_registry),
         "inventory.query": InventoryQueryTool(query_service),
         "review.query": ReviewQueryTool(query_service),
+        "review_insight.query": ReviewInsightQueryTool(query_service),
         "advertising.query": AdvertisingQueryTool(query_service),
     }
 
@@ -468,6 +509,7 @@ __all__ = [
     "MetricQueryTool",
     "InventoryQueryTool",
     "ReviewQueryTool",
+    "ReviewInsightQueryTool",
     "AdvertisingQueryTool",
     "build_commerce_tools",
 ]
