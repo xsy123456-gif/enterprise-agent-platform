@@ -82,6 +82,11 @@ class ReviewInsight:
     extractor_version: str = ""
     generated_at: str = field(default_factory=utc_now)
     supersedes_id: str | None = None
+    # Phase 11 governance fields (additive; part of the replay identity).
+    extractor_id: str = ""
+    prompt_version: str = ""
+    knowledge_policy_version: str = ""
+    knowledge_context_version: str = ""
 
     def __post_init__(self):
         object.__setattr__(self, "topics", tuple(self.topics or ()))
@@ -104,6 +109,10 @@ class ReviewInsight:
             "extractor_version": self.extractor_version,
             "generated_at": self.generated_at,
             "supersedes_id": self.supersedes_id,
+            "extractor_id": self.extractor_id,
+            "prompt_version": self.prompt_version,
+            "knowledge_policy_version": self.knowledge_policy_version,
+            "knowledge_context_version": self.knowledge_context_version,
         }
 
     @classmethod
@@ -123,6 +132,10 @@ class ReviewInsight:
             extractor_version=data.get("extractor_version", ""),
             generated_at=data.get("generated_at", utc_now()),
             supersedes_id=data.get("supersedes_id"),
+            extractor_id=data.get("extractor_id", ""),
+            prompt_version=data.get("prompt_version", ""),
+            knowledge_policy_version=data.get("knowledge_policy_version", ""),
+            knowledge_context_version=data.get("knowledge_context_version", ""),
         )
 
 
