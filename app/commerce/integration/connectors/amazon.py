@@ -12,6 +12,7 @@ from app.commerce.integration.connectors.base import BaseConnector
 
 class AmazonConnector(BaseConnector):
     connector_id = "amazon_sp_api"
+    provider = "amazon"
 
     def __init__(self, records=None, version="1.0", **kwargs):
         super().__init__(version=version, **kwargs)

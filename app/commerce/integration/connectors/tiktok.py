@@ -11,6 +11,7 @@ from app.commerce.integration.connectors.base import BaseConnector
 
 class TikTokConnector(BaseConnector):
     connector_id = "tiktok_shop"
+    provider = "tiktok"
 
     def __init__(self, records=None, version="1.0", **kwargs):
         super().__init__(version=version, **kwargs)
