@@ -28,6 +28,14 @@ from app.commerce.review_insight.errors import (
     JobNotFoundError,
     ReviewInsightError,
 )
+from app.commerce.review_insight.evaluation import (
+    BUSINESS_DEFERRED,
+    EVAL_INCONSISTENT,
+    EVAL_SCHEMA_INVALID,
+    EVAL_VALID,
+    ExtractionEvaluation,
+    ExtractionEvaluationResult,
+)
 from app.commerce.review_insight.evidence_adapter import (
     EVIDENCE_CODE_PREFIX,
     ReviewInsightEvidenceAdapter,
@@ -80,6 +88,12 @@ __all__ = [
     "EVIDENCE_CODE_PREFIX",
     "MetricSourceAdapter",
     "REVIEW_METRICS",
+    "ExtractionEvaluation",
+    "ExtractionEvaluationResult",
+    "EVAL_VALID",
+    "EVAL_SCHEMA_INVALID",
+    "EVAL_INCONSISTENT",
+    "BUSINESS_DEFERRED",
     "JOB_CREATED",
     "JOB_RUNNING",
     "JOB_PARTIAL",
