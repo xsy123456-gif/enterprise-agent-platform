@@ -17,9 +17,20 @@ def config():
     )
 
 
-def build_app():
+def build_app(seed_path=None):
     cfg = config()
-    auth = SimulationAuth({
+    auth = SimulationAuth(_auth_scopes(seed_path))
+    store = build_store()
+    from simulation.common.loader import load_seed_into
+    store, dataset_id, dataset_version = load_seed_into("amazon", store, seed_path)
+    injector = FailureInjector()
+    return build_simulation_app(cfg, auth, store, injector, register_routes,
+                                dataset_id=dataset_id,
+                                dataset_version=dataset_version)
+
+
+def _auth_scopes(seed_path):
+    default = {
         "sim-amazon-store-001-token": {
             "seller_id": schemas.SELLER_ID,
             "marketplace_id": schemas.MARKETPLACE_ID,
@@ -32,10 +43,14 @@ def build_app():
             "seller_id": schemas.SELLER_ID,
             "marketplace_id": schemas.MARKETPLACE_ID,
         },
-    })
-    store = build_store()
-    injector = FailureInjector()
-    return build_simulation_app(cfg, auth, store, injector, register_routes)
+    }
+    from simulation.common.loader import build_provider_auth
+
+    def scope_fn(store):
+        return {"seller_id": store["external_store_id"],
+                "marketplace_id": store["marketplace"]}
+
+    return build_provider_auth("amazon", seed_path, default, scope_fn)
 
 
 __all__ = ["build_app", "config"]

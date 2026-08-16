@@ -1,20 +1,21 @@
-"""Simulation launcher (Phase 18.13).
+"""Simulation launcher (Phase 18.13 / 18.14).
 
 Starts all simulation services on localhost.  Usage::
 
-    python -m simulation.launcher
+    python -m simulation.launcher [--seed data/seed/enterprise-commerce-v1]
 
 Each service is a separate FastAPI app served by uvicorn on its own port.  The
 platform talks to them over HTTP only — it never imports this package.
 """
 
+import argparse
 import threading
 import time
 
 import uvicorn
 
 
-def _providers():
+def _providers(seed_path=None):
     from simulation.amazon.app import build_app as amazon
     from simulation.netsuite.app import build_app as netsuite
     from simulation.salesforce.app import build_app as salesforce
@@ -22,11 +23,11 @@ def _providers():
     from simulation.tiktok.app import build_app as tiktok
 
     return [
-        ("amazon", amazon()),
-        ("tiktok", tiktok()),
-        ("sap", sap()),
-        ("salesforce", salesforce()),
-        ("netsuite", netsuite()),
+        ("amazon", amazon(seed_path)),
+        ("tiktok", tiktok(seed_path)),
+        ("sap", sap(seed_path)),
+        ("salesforce", salesforce(seed_path)),
+        ("netsuite", netsuite(seed_path)),
     ]
 
 
@@ -37,15 +38,21 @@ def _run(app, host, port):
 
 
 def main():
-    providers = _providers()
+    parser = argparse.ArgumentParser(description="Start simulation services")
+    parser.add_argument("--seed", default=None,
+                        help="path to a data/seed/<dataset> directory")
+    args = parser.parse_args()
+    providers = _providers(seed_path=args.seed)
     threads = []
     for name, app in providers:
-        port = app.state.provider and _port_for(name)
+        port = _port_for(name)
         thread = threading.Thread(target=_run, args=(app, "127.0.0.1", port),
                                   daemon=True)
         thread.start()
         threads.append(thread)
-        print(f"started {name} simulation on http://127.0.0.1:{port}")
+        dataset = getattr(app.state, "dataset_id", "") or "contract-fixtures"
+        print(f"started {name} simulation on http://127.0.0.1:{port} "
+              f"(dataset={dataset})")
     try:
         while True:
             time.sleep(1)

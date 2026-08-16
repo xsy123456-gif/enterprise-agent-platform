@@ -13,14 +13,18 @@ def config():
     return SimulationConfig(provider="sap", port=9103, api_key="sim-sap-key")
 
 
-def build_app():
+def build_app(seed_path=None):
     cfg = config()
     auth = SimulationAuth({
         "sim-sap-key": {"plant": schemas.PLANT,
                         "company_code": schemas.COMPANY_CODE},
     })
-    return build_simulation_app(cfg, auth, build_store(), FailureInjector(),
-                                register_routes)
+    store = build_store()
+    from simulation.common.loader import load_seed_into
+    store, dataset_id, dataset_version = load_seed_into("sap", store, seed_path)
+    return build_simulation_app(cfg, auth, store, FailureInjector(),
+                                register_routes, dataset_id=dataset_id,
+                                dataset_version=dataset_version)
 
 
 __all__ = ["build_app", "config"]

@@ -75,7 +75,7 @@ def _log(request, response):
 
 
 def build_simulation_app(config: SimulationConfig, auth, store, injector,
-                         register_routes):
+                         register_routes, dataset_id="", dataset_version=""):
     config = config.resolve_defaults()
     app = FastAPI(
         title=f"{config.provider} Simulation",
@@ -86,6 +86,8 @@ def build_simulation_app(config: SimulationConfig, auth, store, injector,
     app.state.store = store
     app.state.injector = injector
     app.state.auth = auth
+    app.state.dataset_id = dataset_id
+    app.state.dataset_version = dataset_version
 
     @app.exception_handler(HTTPException)
     async def _http_exception_handler(request: Request, exc: HTTPException):
@@ -96,7 +98,11 @@ def build_simulation_app(config: SimulationConfig, auth, store, injector,
 
     @app.get("/health")
     def health():
-        return {"status": "ok", "provider": config.provider}
+        body = {"status": "ok", "provider": config.provider}
+        if dataset_id:
+            body["dataset_id"] = dataset_id
+            body["dataset_version"] = dataset_version
+        return body
 
     @app.post("/__simulation__/reset")
     def reset(request: Request):

@@ -13,14 +13,28 @@ def config():
     return SimulationConfig(provider="tiktok", port=9102, api_key="sim-tiktok-key")
 
 
-def build_app():
+def build_app(seed_path=None):
     cfg = config()
-    auth = SimulationAuth({
+    auth = SimulationAuth(_auth_scopes(seed_path))
+    store = build_store()
+    from simulation.common.loader import load_seed_into
+    store, dataset_id, dataset_version = load_seed_into("tiktok", store, seed_path)
+    return build_simulation_app(cfg, auth, store, FailureInjector(),
+                                register_routes, dataset_id=dataset_id,
+                                dataset_version=dataset_version)
+
+
+def _auth_scopes(seed_path):
+    default = {
         "sim-tiktok-shop-001-token": {"shop_id": schemas.SHOP_ID},
         "sim-tiktok-key": {"shop_id": schemas.SHOP_ID},
-    })
-    return build_simulation_app(cfg, auth, build_store(), FailureInjector(),
-                                register_routes)
+    }
+    from simulation.common.loader import build_provider_auth
+
+    def scope_fn(store):
+        return {"shop_id": store["external_store_id"]}
+
+    return build_provider_auth("tiktok", seed_path, default, scope_fn)
 
 
 __all__ = ["build_app", "config"]

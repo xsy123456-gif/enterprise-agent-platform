@@ -14,13 +14,18 @@ def config():
                             api_key="sim-salesforce-key")
 
 
-def build_app():
+def build_app(seed_path=None):
     cfg = config()
     auth = SimulationAuth({
         "sim-salesforce-key": {"org_id": schemas.ORG_ID},
     })
-    return build_simulation_app(cfg, auth, build_store(), FailureInjector(),
-                                register_routes)
+    store = build_store()
+    from simulation.common.loader import load_seed_into
+    store, dataset_id, dataset_version = load_seed_into("salesforce", store,
+                                                        seed_path)
+    return build_simulation_app(cfg, auth, store, FailureInjector(),
+                                register_routes, dataset_id=dataset_id,
+                                dataset_version=dataset_version)
 
 
 __all__ = ["build_app", "config"]
