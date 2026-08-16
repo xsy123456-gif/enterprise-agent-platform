@@ -36,5 +36,26 @@ class EvaluationEngine:
             execution_id=execution_id, metrics=metrics.to_dict(),
         )
 
+    def evaluate_execution(self, evaluation_id, agent_id, agent_version, sample,
+                           execution_id="", trace_id="", tenant_id="") -> AgentEvaluation:
+        """Evaluate a *single* execution (success/failure/latency/cost).
+
+        The score is the execution outcome (1.0 success / 0.0 failure), NOT a
+        success_rate — avoiding the semantic error of calling one sample
+        "100% success rate".
+        """
+        score = 1.0 if sample.success else 0.0
+        return AgentEvaluation(
+            evaluation_id=evaluation_id, agent_id=agent_id,
+            agent_version=agent_version,
+            evaluation_type=EVAL_EXECUTION_QUALITY, score=score,
+            execution_id=execution_id, trace_id=trace_id, tenant_id=tenant_id,
+            metrics={
+                "success": sample.success,
+                "latency_ms": sample.latency_ms,
+                "cost": sample.cost,
+            },
+        )
+
 
 __all__ = ["EvaluationEngine"]

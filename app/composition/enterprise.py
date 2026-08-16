@@ -182,7 +182,7 @@ def _build_collaboration():
                            graph_validator=validator)
 
 
-def _build_production(event_bus=None):
+def _build_production(event_bus=None, metric_sink=None):
     from app.platform.production import (
         AgentMetricsCollector,
         BudgetManager,
@@ -196,7 +196,9 @@ def _build_production(event_bus=None):
     trace = TraceCollector()
     metrics = AgentMetricsCollector()
     cost = CostCollector()
-    observability = ProductionObservabilitySubscriber(trace, metrics, cost)
+    observability = ProductionObservabilitySubscriber(
+        trace, metrics, cost, metric_sink=metric_sink,
+    )
     if event_bus is not None:
         event_bus.subscribe(observability)
     return SimpleNamespace(
@@ -229,6 +231,7 @@ def _build_business():
 def _build_intelligence():
     from app.platform.intelligence import (
         EvaluationEngine,
+        EvaluationSubscriber,
         ExperimentEvaluator,
         FeedbackProcessor,
         ImprovementLifecycle,
@@ -238,6 +241,7 @@ def _build_intelligence():
     )
     return SimpleNamespace(
         evaluation=EvaluationEngine(),
+        evaluation_subscriber=EvaluationSubscriber(),
         detector=PatternDetector(),
         generator=OptimizationGenerator(),
         lifecycle=ImprovementLifecycle(),
@@ -259,15 +263,19 @@ def build_enterprise_application(environment=None, **overrides):
         execution_manager.event_bus = foundation.event_bus
     commerce = _build_commerce(environment, execution_manager=execution_manager)
     skill_system = commerce.skill_system
+    intelligence = _build_intelligence()
     return EnterpriseApplication(
         foundation=foundation,
         commerce=commerce,
         agents=_build_employee_agents(skill_system),
         control_plane=_build_control_plane(),
         collaboration=_build_collaboration(),
-        production=_build_production(foundation.event_bus),
+        production=_build_production(
+            foundation.event_bus,
+            metric_sink=intelligence.evaluation_subscriber.on_metric_sample,
+        ),
         business=_build_business(),
-        intelligence=_build_intelligence(),
+        intelligence=intelligence,
         environment=environment,
     )
 

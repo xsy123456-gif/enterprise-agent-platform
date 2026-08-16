@@ -27,10 +27,12 @@ _EXECUTION_HANDLERS = (
 
 class ProductionObservabilitySubscriber:
 
-    def __init__(self, trace_collector, metrics_collector, cost_collector=None):
+    def __init__(self, trace_collector, metrics_collector, cost_collector=None,
+                 metric_sink=None):
         self.trace_collector = trace_collector
         self.metrics_collector = metrics_collector
         self.cost_collector = cost_collector
+        self.metric_sink = metric_sink
         self._started = {}  # execution_id -> (trace_id, created_at datetime)
 
     def handle(self, event):
@@ -84,13 +86,18 @@ class ProductionObservabilitySubscriber:
         self.trace_collector.finish_trace(
             event.trace_id, status=(TRACE_SUCCESS if success else TRACE_FAILED),
         )
-        self.metrics_collector.record(AgentMetricSample(
+        sample = AgentMetricSample(
             tenant_id=event.tenant_id or "",
             agent_id=event.agent_id,
             success=success,
             latency_ms=latency_ms,
             execution_id=event.execution_id,
-        ))
+            trace_id=event.trace_id,
+            agent_version=event.agent_version,
+        )
+        self.metrics_collector.record(sample)
+        if self.metric_sink is not None:
+            self.metric_sink(sample)
 
     def _latency_ms(self, event):
         started = self._started.get(event.execution_id)

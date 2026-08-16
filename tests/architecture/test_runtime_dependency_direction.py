@@ -20,3 +20,6 @@ def test_runtime_does_not_import_production_platform():
             assert not mod.startswith("app.platform.business"), (
                 f"{area} imports business platform {mod!r}"
             )
+            assert not mod.startswith("app.platform.intelligence"), (
+                f"{area} imports intelligence platform {mod!r}"
+            )

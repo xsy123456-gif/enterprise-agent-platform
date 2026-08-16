@@ -25,6 +25,7 @@ from app.platform.intelligence.evaluation import (
     EvaluationMetric,
     EvaluationMetricRegistry,
     EvaluationMetrics,
+    EvaluationSubscriber,
     ExecutionSample,
 )
 from app.platform.intelligence.experiment import (
@@ -57,6 +58,7 @@ __all__ = [
     "AgentEvaluation",
     "ExecutionSample",
     "EvaluationEngine",
+    "EvaluationSubscriber",
     "EvaluationMetrics",
     "EvaluationMetric",
     "EvaluationMetricRegistry",

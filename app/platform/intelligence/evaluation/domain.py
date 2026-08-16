@@ -29,6 +29,8 @@ class AgentEvaluation:
     evaluation_type: str
     score: float = 0.0
     execution_id: str = ""
+    trace_id: str = ""
+    tenant_id: str = ""
     metrics: dict = field(default_factory=dict)
     feedback: float | None = None
     created_at: str = field(default_factory=utc_now)
@@ -52,6 +54,8 @@ class AgentEvaluation:
             "evaluation_type": self.evaluation_type,
             "score": self.score,
             "execution_id": self.execution_id,
+            "trace_id": self.trace_id,
+            "tenant_id": self.tenant_id,
             "metrics": dict(self.metrics),
             "feedback": self.feedback,
             "created_at": self.created_at,

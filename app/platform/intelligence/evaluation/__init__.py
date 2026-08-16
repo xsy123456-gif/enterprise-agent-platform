@@ -1,5 +1,6 @@
-"""Evaluation subpackage (Phase 17.1)."""
+"""Evaluation subpackage (Phase 17.1 / 18.9)."""
 
+from app.platform.intelligence.evaluation.bridge import EvaluationSubscriber
 from app.platform.intelligence.evaluation.domain import (
     AgentEvaluation,
     ExecutionSample,
@@ -15,6 +16,7 @@ __all__ = [
     "AgentEvaluation",
     "ExecutionSample",
     "EvaluationEngine",
+    "EvaluationSubscriber",
     "EvaluationMetrics",
     "EvaluationMetric",
     "EvaluationMetricRegistry",
