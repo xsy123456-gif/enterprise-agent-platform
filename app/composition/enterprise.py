@@ -242,6 +242,8 @@ def _build_intelligence():
 def build_enterprise_application(environment=None, **overrides):
     environment = (environment or os.getenv("APP_ENV", "development")).lower()
     foundation = build_application(environment=environment, **overrides)
+    if environment == "production":
+        _validate_production_security(foundation)
     execution_manager = foundation.execution or _inmemory_execution_manager(
         foundation.event_bus,
     )
@@ -258,6 +260,24 @@ def build_enterprise_application(environment=None, **overrides):
         intelligence=_build_intelligence(),
         environment=environment,
     )
+
+
+def _validate_production_security(foundation):
+    from app.composition.security import (
+        PRINCIPAL_LOCAL,
+        SecurityConfigValidator,
+    )
+    governance = getattr(foundation, "governance", None)
+    gate = getattr(governance, "tool_gate", None)
+    policy = getattr(gate, "policy", None)
+    memory = getattr(foundation, "memory", None)
+    memory_auth = getattr(memory, "authorization_provider", None)
+    SecurityConfigValidator(
+        environment="production",
+        governance_policy=policy,
+        memory_authorization=memory_auth,
+        principal_source=PRINCIPAL_LOCAL,
+    ).assert_secure()
 
 
 def _inmemory_execution_manager(event_bus=None):
