@@ -1,0 +1,10 @@
+[
+  {
+    "tenant_id": "tenant_aurora",
+    "name": "Aurora Commerce"
+  },
+  {
+    "tenant_id": "tenant_northstar",
+    "name": "Northstar Retail"
+  }
+]

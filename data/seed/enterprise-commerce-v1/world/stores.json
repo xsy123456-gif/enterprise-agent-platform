@@ -1,0 +1,50 @@
+[
+  {
+    "store_id": "AMAZON-JP-001",
+    "tenant_id": "tenant_aurora",
+    "provider": "amazon",
+    "external_store_id": "seller-aurora-jp",
+    "marketplace": "JP",
+    "country": "JP",
+    "currency": "JPY",
+    "timezone": "Asia/Tokyo",
+    "status": "active",
+    "order_prefix": "AMZJP"
+  },
+  {
+    "store_id": "TIKTOK-US-001",
+    "tenant_id": "tenant_aurora",
+    "provider": "tiktok",
+    "external_store_id": "shop-aurora-us",
+    "marketplace": "US",
+    "country": "US",
+    "currency": "USD",
+    "timezone": "America/Los_Angeles",
+    "status": "active",
+    "order_prefix": "TTUSA"
+  },
+  {
+    "store_id": "AMAZON-US-002",
+    "tenant_id": "tenant_northstar",
+    "provider": "amazon",
+    "external_store_id": "seller-northstar-us",
+    "marketplace": "US",
+    "country": "US",
+    "currency": "USD",
+    "timezone": "America/New_York",
+    "status": "active",
+    "order_prefix": "AMZUS"
+  },
+  {
+    "store_id": "TIKTOK-UK-002",
+    "tenant_id": "tenant_northstar",
+    "provider": "tiktok",
+    "external_store_id": "shop-northstar-uk",
+    "marketplace": "UK",
+    "country": "GB",
+    "currency": "GBP",
+    "timezone": "Europe/London",
+    "status": "active",
+    "order_prefix": "TTUK"
+  }
+]
