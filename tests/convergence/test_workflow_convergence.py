@@ -11,6 +11,7 @@ from app.platform.business.workflow import (
     BusinessActionStepAdapter,
     BusinessWorkflow,
     ConditionStepAdapter,
+    NotificationStepAdapter,
     WaitStepAdapter,
     WorkflowEngine,
     WorkflowStep,
@@ -83,40 +84,123 @@ def test_engine_rejects_unregistered_step_type():
         engine.run(_replenishment_workflow())
 
 
-# ── Phase 18.5 final gate ──────────────────────────────────
+# ── Phase 18.5.1 final gate: suspension semantics ──────────
 
 def test_approval_step_uses_typed_adapter():
     assert issubclass(ApprovalStepAdapter, WorkflowStepAdapter)
     assert ApprovalStepAdapter.step_type == "APPROVAL"
 
 
-def test_approval_rejection_blocks_following_steps():
-    engine = WorkflowEngine(step_adapters=[
-        ApprovalStepAdapter(lambda step, ctx: bool(ctx.get("approved", False)))])
-    workflow = BusinessWorkflow(
+def _approval_workflow():
+    return BusinessWorkflow(
         workflow_id="w", version="1.0",
         steps=[
             WorkflowStep(step_id="a", step_type="APPROVAL", next_steps=("b",)),
-            WorkflowStep(step_id="b", step_type="ACTION"),
+            WorkflowStep(step_id="b", step_type="NOTIFICATION"),
         ],
     )
-    # no ACTION adapter registered: even if approval passed, b would fail;
-    # here approval rejects -> b must never run.
-    result = engine.run(workflow, context={"approved": False})
-    assert result.status == "FAILED"
-    assert "b" not in result.step_results
 
 
-def test_approval_accepted_continues():
-    engine = WorkflowEngine(step_adapters=[
-        ApprovalStepAdapter(lambda step, ctx: bool(ctx.get("approved", False)))])
+def _approval_engine(**adapters):
+    lookup = (lambda step, ctx: ctx.get("approval_state", "PENDING"))
+    adapters = dict(adapters)
+    adapters.setdefault("APPROVAL", ApprovalStepAdapter(lookup))
+    return WorkflowEngine(step_adapters=list(adapters.values()))
+
+
+def test_pending_approval_sets_waiting_approval():
+    engine = _approval_engine()
+    run = engine.run(_approval_workflow(), context={"approval_state": "PENDING"})
+    assert run.status == "WAITING_APPROVAL"
+    assert run.current_step_id == "a"
+
+
+def test_pending_approval_does_not_mark_workflow_failed():
+    engine = _approval_engine()
+    run = engine.run(_approval_workflow(), context={"approval_state": "PENDING"})
+    assert run.status != "FAILED"
+    assert run.status == "WAITING_APPROVAL"
+
+
+def test_pending_approval_blocks_following_action():
+    engine = _approval_engine(NOTIFICATION=NotificationStepAdapter(
+        lambda s, c: {"notified": True}))
+    run = engine.run(_approval_workflow(), context={"approval_state": "PENDING"})
+    assert run.status == "WAITING_APPROVAL"
+    assert "b" not in run.step_results
+
+
+def test_approved_approval_resumes_workflow():
+    engine = _approval_engine(NOTIFICATION=NotificationStepAdapter(
+        lambda s, c: {"notified": True}))
+    run = engine.run(_approval_workflow(), context={"approval_state": "PENDING"})
+    assert run.status == "WAITING_APPROVAL"
+    run = engine.resume(run, {"approval_state": "APPROVED"})
+    assert run.status == "COMPLETED"
+    assert run.step_results["a"]["approved"] is True
+    assert run.step_results["b"]["notified"] is True
+
+
+def test_rejected_approval_fails_workflow():
+    engine = _approval_engine(NOTIFICATION=NotificationStepAdapter(
+        lambda s, c: {"notified": True}))
+    run = engine.run(_approval_workflow(), context={"approval_state": "REJECTED"})
+    assert run.status == "FAILED"
+
+
+def test_rejected_approval_blocks_following_steps():
+    engine = _approval_engine(NOTIFICATION=NotificationStepAdapter(
+        lambda s, c: {"notified": True}))
+    run = engine.run(_approval_workflow(), context={"approval_state": "REJECTED"})
+    assert run.status == "FAILED"
+    assert "b" not in run.step_results
+
+
+def test_wait_step_sets_workflow_waiting():
+    engine = WorkflowEngine(step_adapters=[WaitStepAdapter()])
     workflow = BusinessWorkflow(
         workflow_id="w", version="1.0",
-        steps=[WorkflowStep(step_id="a", step_type="APPROVAL")],
+        steps=[WorkflowStep(step_id="w", step_type="WAIT")],
     )
-    result = engine.run(workflow, context={"approved": True})
-    assert result.status == "COMPLETED"
-    assert result.step_results["a"]["approved"] is True
+    run = engine.run(workflow)
+    assert run.status == "WAITING"
+
+
+def test_wait_step_blocks_following_steps():
+    engine = WorkflowEngine(step_adapters=[
+        WaitStepAdapter(),
+        NotificationStepAdapter(lambda s, c: {"notified": True}),
+    ])
+    workflow = BusinessWorkflow(
+        workflow_id="w", version="1.0",
+        steps=[
+            WorkflowStep(step_id="w", step_type="WAIT", next_steps=("n",)),
+            WorkflowStep(step_id="n", step_type="NOTIFICATION"),
+        ],
+    )
+    run = engine.run(workflow)
+    assert run.status == "WAITING"
+    assert "n" not in run.step_results
+
+
+def test_resume_waiting_workflow_continues():
+    engine = WorkflowEngine(step_adapters=[
+        WaitStepAdapter(),
+        NotificationStepAdapter(lambda s, c: {"notified": True}),
+    ])
+    workflow = BusinessWorkflow(
+        workflow_id="w", version="1.0",
+        steps=[
+            WorkflowStep(step_id="w", step_type="WAIT", next_steps=("n",)),
+            WorkflowStep(step_id="n", step_type="NOTIFICATION"),
+        ],
+    )
+    run = engine.run(workflow)
+    assert run.status == "WAITING"
+    run = engine.resume(run, {"resume_signal": True})
+    assert run.status == "COMPLETED"
+    assert run.step_results["w"]["waited"] is True
+    assert run.step_results["n"]["notified"] is True
 
 
 def test_wait_step_does_not_block_with_sleep():
@@ -124,14 +208,6 @@ def test_wait_step_does_not_block_with_sleep():
     import inspect
     source = inspect.getsource(WaitStepAdapter.execute)
     assert "sleep" not in source
-    engine = WorkflowEngine(step_adapters=[WaitStepAdapter()])
-    workflow = BusinessWorkflow(
-        workflow_id="w", version="1.0",
-        steps=[WorkflowStep(step_id="w", step_type="WAIT")],
-    )
-    result = engine.run(workflow)
-    assert result.status == "COMPLETED"
-    assert result.step_results["w"]["waiting"] is True
 
 
 def test_production_disallows_arbitrary_step_handler():

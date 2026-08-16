@@ -9,6 +9,11 @@ deterministic evaluator (never an LLM), etc.
 
 from abc import ABC, abstractmethod
 
+from app.platform.business.approval.request import (
+    APPROVAL_APPROVED,
+    APPROVAL_PENDING,
+    APPROVAL_REJECTED,
+)
 from app.platform.business.workflow.domain import (
     STEP_ACTION,
     STEP_AGENT_TASK,
@@ -16,7 +21,14 @@ from app.platform.business.workflow.domain import (
     STEP_CONDITION,
     STEP_NOTIFICATION,
     STEP_WAIT,
+    WF_WAITING,
+    WF_WAITING_APPROVAL,
 )
+from app.platform.business.workflow.state import WorkflowSuspension
+
+
+def _default_approval_state(step, context):
+    return context.get("approval_state", APPROVAL_PENDING)
 
 
 class WorkflowStepAdapter(ABC):
@@ -43,26 +55,28 @@ class BusinessActionStepAdapter(WorkflowStepAdapter):
 
 
 class ApprovalStepAdapter(WorkflowStepAdapter):
-    """APPROVAL: human-in-the-loop gate — pending/rejected blocks the workflow.
+    """APPROVAL: human-in-the-loop gate.
 
-    A rejected or still-pending approval raises ``ApprovalRequiredError``, which
-    the engine records as a FAILED step and blocks every subsequent step.
+    Returns typed outcomes: APPROVED -> completed; PENDING -> suspend
+    (WAITING_APPROVAL); REJECTED -> terminal failure.  Pending is a normal
+    business wait, never a failure.
     """
 
     step_type = STEP_APPROVAL
 
     def __init__(self, approval_lookup=None):
-        self.approval_lookup = approval_lookup or (
-            lambda step, ctx: bool(ctx.get("approved", False))
-        )
+        self.approval_lookup = approval_lookup or _default_approval_state
 
     def execute(self, step, context):
-        if not self.approval_lookup(step, context):
-            from app.platform.business.errors import ApprovalRequiredError
-            raise ApprovalRequiredError(
-                f"approval step {step.step_id!r} is not approved"
+        state = self.approval_lookup(step, context)
+        if state == APPROVAL_APPROVED:
+            return {"approved": True}
+        if state == APPROVAL_REJECTED:
+            from app.platform.business.errors import ApprovalRejectedError
+            raise ApprovalRejectedError(
+                f"approval step {step.step_id!r} was rejected"
             )
-        return {"approved": True}
+        return WorkflowSuspension(WF_WAITING_APPROVAL, step.step_id)
 
 
 class AgentTaskStepAdapter(WorkflowStepAdapter):
@@ -102,17 +116,19 @@ class NotificationStepAdapter(WorkflowStepAdapter):
 
 
 class WaitStepAdapter(WorkflowStepAdapter):
-    """WAIT: non-blocking wait signal (never ``time.sleep`` in production).
+    """WAIT: non-blocking wait signal (never ``time.sleep``).
 
-    The adapter expresses a waiting state via a result; the actual pause/resume
-    must go through the runtime checkpoint/resume boundary, not a blocking
-    Python sleep.
+    Suspends the workflow (WF_WAITING); a resume signal in the context completes
+    the step.  The actual pause/resume goes through the runtime boundary, never
+    a blocking Python sleep.
     """
 
     step_type = STEP_WAIT
 
     def execute(self, step, context):
-        return {"waiting": True}
+        if context.get("resume_signal"):
+            return {"waited": True}
+        return WorkflowSuspension(WF_WAITING, step.step_id)
 
 
 class LambdaStepAdapter(WorkflowStepAdapter):

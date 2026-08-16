@@ -26,6 +26,7 @@ from app.platform.business.commercial import (
 )
 from app.platform.business.errors import (
     ActionExecutionError,
+    ApprovalRejectedError,
     ApprovalRequiredError,
     BusinessError,
     EntitlementError,
@@ -49,7 +50,7 @@ from app.platform.business.package import (
 from app.platform.business.workflow import (
     BusinessWorkflow,
     WorkflowEngine,
-    WorkflowRunResult,
+    WorkflowRun,
     WorkflowState,
     WorkflowStep,
 )
@@ -70,7 +71,7 @@ __all__ = [
     "WorkflowStep",
     "WorkflowState",
     "WorkflowEngine",
-    "WorkflowRunResult",
+    "WorkflowRun",
     "EnterpriseConnector",
     "SalesforceConnector",
     "SAPConnector",
@@ -85,6 +86,7 @@ __all__ = [
     "PackageValidationError",
     "PackageNotPublishedError",
     "ApprovalRequiredError",
+    "ApprovalRejectedError",
     "ActionExecutionError",
     "WorkflowError",
     "EntitlementError",

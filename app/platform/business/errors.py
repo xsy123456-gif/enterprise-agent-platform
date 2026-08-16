@@ -19,6 +19,10 @@ class ApprovalRequiredError(BusinessError):
     """An action requires approval and has not been approved."""
 
 
+class ApprovalRejectedError(BusinessError):
+    """An approval request was explicitly rejected (terminal failure)."""
+
+
 class ActionExecutionError(BusinessError):
     """A business action execution failed."""
 
@@ -36,6 +40,7 @@ __all__ = [
     "PackageValidationError",
     "PackageNotPublishedError",
     "ApprovalRequiredError",
+    "ApprovalRejectedError",
     "ActionExecutionError",
     "WorkflowError",
     "EntitlementError",
