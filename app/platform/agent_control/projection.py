@@ -64,6 +64,23 @@ class AgentDeploymentProjector:
             )
         return True
 
+    def consistent(self, agent_id):
+        """Fail-closed projection consistency for the ACTIVE artifact.
+
+        Returns True when no projection is stored for ``agent_id`` (nothing
+        has drifted) OR every stored projection matches the control-plane
+        ACTIVE (version, checksum).  Returns False the moment any projection
+        drifted from the control plane, so the caller can deny execution.
+        """
+        artifact = self.control_plane_registry.get_active_artifact(agent_id)
+        for (aid, _env), projection in self.projections.items():
+            if aid != agent_id:
+                continue
+            if (projection.version, projection.checksum) != (
+                    artifact.version, artifact.checksum):
+                return False
+        return True
+
     def _project_into_commerce(self, artifact):
         from app.commerce.agents.domain import AgentDefinition
         from app.commerce.agents.manifest import AgentManifest

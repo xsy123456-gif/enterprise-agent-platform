@@ -17,7 +17,8 @@ class EnterpriseProductGateway:
                  trace_collector, approval_repository, approval_engine,
                  workflow_repository, workflow_engine, fact_executor,
                  access_control=None, approval_authorizer=None,
-                 control_plane_registry=None):
+                 control_plane_registry=None, deployment_projector=None,
+                 allow_unmanaged_agent_fallback=False):
         self.agent_directory = agent_directory
         self.agent_definitions = agent_definitions
         self.execution_store = execution_store
@@ -30,6 +31,8 @@ class EnterpriseProductGateway:
         self.access_control = access_control
         self.approval_authorizer = approval_authorizer
         self.control_plane_registry = control_plane_registry
+        self.deployment_projector = deployment_projector
+        self.allow_unmanaged_agent_fallback = allow_unmanaged_agent_fallback
 
     def _subject(self, trusted_context):
         return SimpleNamespace(
@@ -73,12 +76,42 @@ class EnterpriseProductGateway:
                               agent_version=version)
 
     def _resolve_agent_version(self, agent_id):
-        if self.control_plane_registry is None:
-            return None
+        # Fail-closed: the Control Plane is the sole authoritative source of
+        # the executed agent version.  A managed agent whose resolution fails
+        # (missing / inactive / mismatched / projection drift / unexpected
+        # error) must deny execution — it never falls back to a default or
+        # local version.  Only a genuinely unmanaged agent (no control-plane
+        # deployment record) may fall back, and only under an explicit
+        # dev/test policy (allow_unmanaged_agent_fallback).
+        from app.platform.agent_control.errors import (
+            AgentControlError,
+            AgentNotActiveError,
+        )
+        registry = self.control_plane_registry
+        if registry is None:
+            if self.allow_unmanaged_agent_fallback:
+                return None
+            raise ApiError(ApiErrorCode.SERVICE_UNAVAILABLE,
+                           "Agent version resolution is unavailable.",
+                           http_status=503)
+        if not registry.versions(agent_id):
+            if self.allow_unmanaged_agent_fallback:
+                return None
+            raise not_found("Agent")
         try:
-            return self.control_plane_registry.get_active_artifact(agent_id).version
+            artifact = registry.get_active_artifact(agent_id)
+        except AgentNotActiveError:
+            raise not_found("Agent")
+        except AgentControlError:
+            raise not_found("Agent")
         except Exception:
-            return None
+            raise ApiError(ApiErrorCode.SERVICE_UNAVAILABLE,
+                           "Agent version resolution failed.", http_status=503)
+        projector = self.deployment_projector
+        if projector is not None and not projector.consistent(agent_id):
+            raise ApiError(ApiErrorCode.INVALID_STATE,
+                           "Agent deployment is inconsistent.", http_status=409)
+        return artifact.version
 
     # ── Execution ───────────────────────────────────────────
 

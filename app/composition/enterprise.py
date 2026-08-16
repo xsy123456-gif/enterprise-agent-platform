@@ -151,6 +151,7 @@ def _build_employee_agents(skill_system, execution_adapter=None):
 def _build_control_plane():
     from app.platform.agent_control import (
         AgentAccessControl,
+        AgentDeploymentProjector,
         AgentRegistry,
         DeploymentManager,
         EnterpriseAgentRouter,
@@ -163,8 +164,10 @@ def _build_control_plane():
     )
     access_control = AgentAccessControl()
     router = EnterpriseAgentRouter(rule_router=RuleRouter())
+    projector = AgentDeploymentProjector(registry)
     return SimpleNamespace(registry=registry, deployment=deployment,
-                           access_control=access_control, router=router)
+                           access_control=access_control, router=router,
+                           projector=projector)
 
 
 def _build_collaboration():

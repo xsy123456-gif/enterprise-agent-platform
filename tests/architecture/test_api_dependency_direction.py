@@ -51,3 +51,48 @@ def test_api_idempotency_does_not_depend_on_runtime():
         assert not mod.startswith("app.execution"), (
             f"api/idempotency imports execution {mod!r}"
         )
+
+
+def test_product_agent_version_is_control_plane_authoritative():
+    # The Product Gateway must not self-decide a managed agent's version from
+    # a manifest default / local registry latest / hardcoded value: when the
+    # control-plane registry owns the agent, resolution failure must raise
+    # (fail-closed) instead of returning None or a fallback version.
+    from app.api.gateway import EnterpriseProductGateway
+    from app.platform.agent_control import AgentManifest
+    from app.platform.agent_control.domain import AgentArtifact
+    from app.platform.agent_control.registry import AgentRegistry
+    from app.platform.agent_control.versioning import artifact_checksum
+
+    manifest = AgentManifest.from_dict({
+        "agent_id": "managed_agent", "version": "1.0", "owner": "team",
+        "department": "commerce", "description": "ops",
+        "skills": ("store_performance_diagnosis",),
+        "required_capabilities": ("commerce.metrics.read",),
+    })
+    registry = AgentRegistry()
+    registry.register(AgentArtifact(
+        agent_id="managed_agent", version="1.0", manifest=manifest,
+        checksum=artifact_checksum(manifest)))
+    registry.validate("managed_agent", "1.0")
+    registry.activate("managed_agent", "1.0")
+
+    gateway = EnterpriseProductGateway(
+        agent_directory={}, agent_definitions={}, execution_store=None,
+        trace_collector=None, approval_repository=None, approval_engine=None,
+        workflow_repository=None, workflow_engine=None, fact_executor=None,
+        control_plane_registry=registry, allow_unmanaged_agent_fallback=False,
+    )
+    assert gateway._resolve_agent_version("managed_agent") == "1.0"
+
+    # now break resolution: managed agent inactive -> must raise, never None
+    registry.disable("managed_agent", "1.0")
+    from app.api.errors import ApiError
+    try:
+        gateway._resolve_agent_version("managed_agent")
+    except ApiError:
+        pass
+    else:
+        raise AssertionError("managed-agent resolution must fail-closed")
+
+

@@ -22,7 +22,13 @@ def _request_id(request):
     return getattr(request.state, "request_id", "")
 
 
-def _build_gateway(application, access_control=None):
+def _build_gateway(application, access_control=None,
+                   allow_unmanaged_agent_fallback=None):
+    environment = (getattr(application, "environment", "development") or
+                   "development").lower()
+    if allow_unmanaged_agent_fallback is None:
+        # Dev/test only; sandbox and production are always fail-closed.
+        allow_unmanaged_agent_fallback = environment in ("development", "testing")
     agents = application.agents
     agent_directory = {agents.definition.agent_id: agents.runtime}
     agent_definitions = {agents.definition.agent_id: agents.definition}
@@ -38,11 +44,13 @@ def _build_gateway(application, access_control=None):
         fact_executor=application.commerce.tool_surface.fact_executor,
         access_control=access_control,
         control_plane_registry=application.control_plane.registry,
+        deployment_projector=getattr(application.control_plane, "projector", None),
+        allow_unmanaged_agent_fallback=allow_unmanaged_agent_fallback,
     )
 
 
 def create_http_app(application, authentication_provider, config: ApiConfig,
-                    access_control=None):
+                    access_control=None, allow_unmanaged_agent_fallback=None):
     app = FastAPI(
         title="Enterprise Agent Platform API",
         version="1.0.0",
@@ -51,7 +59,9 @@ def create_http_app(application, authentication_provider, config: ApiConfig,
         redoc_url=None,
     )
     app.state.application = application
-    app.state.gateway = _build_gateway(application, access_control=access_control)
+    app.state.gateway = _build_gateway(
+        application, access_control=access_control,
+        allow_unmanaged_agent_fallback=allow_unmanaged_agent_fallback)
     app.state.auth_provider = authentication_provider
     app.state.resolver = application.foundation.security.resolver
     app.state.api_config = config
