@@ -50,10 +50,14 @@ _EVIDENCE_QUALITY_MAP = {
 def _resolve_value(spec, state):
     if isinstance(spec, (int, float)):
         return float(spec)
-    if isinstance(spec, str) and spec.startswith("evidence:"):
-        return state.evidence_value(spec[len("evidence:"):])
-    if isinstance(spec, str) and spec.startswith("metric:"):
-        return state.metric_value(spec[len("metric:"):])
+    if isinstance(spec, str):
+        if spec.startswith("evidence:"):
+            return state.evidence_value(spec[len("evidence:"):])
+        if spec.startswith("metric:"):
+            return state.metric_value(spec[len("metric:"):])
+        if ":" in spec:
+            raise ValueError(f"unknown value reference {spec!r}")
+        return state.metric_value(spec)  # plain name -> metric result
     raise ValueError(f"cannot resolve value reference {spec!r}")
 
 
@@ -153,10 +157,10 @@ def handle_data_quality_gate(step, state, context):
 def handle_anomaly_detect(step, state, context):
     params = step.params
     policy = context.resolve(params["policy_ref"])
-    current = state.metric_value(params["metric"])
+    current = _resolve_value(params["metric"], state)
     baseline = None
     if "baseline_metric" in params:
-        baseline = state.metric_value(params["baseline_metric"])
+        baseline = _resolve_value(params["baseline_metric"], state)
     else:
         baseline = params.get("baseline_value")
     series = params.get("baseline_series")
