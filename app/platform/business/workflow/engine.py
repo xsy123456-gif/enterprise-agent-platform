@@ -50,7 +50,11 @@ class WorkflowRunResult:
 
 class WorkflowEngine:
 
-    def __init__(self, step_handlers=None, step_adapters=None):
+    def __init__(self, step_handlers=None, step_adapters=None, strict=False):
+        if strict and step_handlers:
+            raise WorkflowError(
+                "production workflow engine must not use arbitrary step handlers"
+            )
         self._handlers = dict(step_handlers or {})
         for adapter in (step_adapters or []):
             self._handlers.setdefault(adapter.step_type, adapter.execute)

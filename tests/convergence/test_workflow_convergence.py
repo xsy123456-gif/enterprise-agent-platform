@@ -7,11 +7,14 @@ and CONDITION -> a deterministic evaluator (never an LLM).
 
 from app.platform.business.action import BusinessActionRuntime
 from app.platform.business.workflow import (
+    ApprovalStepAdapter,
     BusinessActionStepAdapter,
     BusinessWorkflow,
     ConditionStepAdapter,
+    WaitStepAdapter,
     WorkflowEngine,
     WorkflowStep,
+    WorkflowStepAdapter,
 )
 
 
@@ -78,3 +81,79 @@ def test_engine_rejects_unregistered_step_type():
     import pytest
     with pytest.raises(WorkflowError):
         engine.run(_replenishment_workflow())
+
+
+# ── Phase 18.5 final gate ──────────────────────────────────
+
+def test_approval_step_uses_typed_adapter():
+    assert issubclass(ApprovalStepAdapter, WorkflowStepAdapter)
+    assert ApprovalStepAdapter.step_type == "APPROVAL"
+
+
+def test_approval_rejection_blocks_following_steps():
+    engine = WorkflowEngine(step_adapters=[
+        ApprovalStepAdapter(lambda step, ctx: bool(ctx.get("approved", False)))])
+    workflow = BusinessWorkflow(
+        workflow_id="w", version="1.0",
+        steps=[
+            WorkflowStep(step_id="a", step_type="APPROVAL", next_steps=("b",)),
+            WorkflowStep(step_id="b", step_type="ACTION"),
+        ],
+    )
+    # no ACTION adapter registered: even if approval passed, b would fail;
+    # here approval rejects -> b must never run.
+    result = engine.run(workflow, context={"approved": False})
+    assert result.status == "FAILED"
+    assert "b" not in result.step_results
+
+
+def test_approval_accepted_continues():
+    engine = WorkflowEngine(step_adapters=[
+        ApprovalStepAdapter(lambda step, ctx: bool(ctx.get("approved", False)))])
+    workflow = BusinessWorkflow(
+        workflow_id="w", version="1.0",
+        steps=[WorkflowStep(step_id="a", step_type="APPROVAL")],
+    )
+    result = engine.run(workflow, context={"approved": True})
+    assert result.status == "COMPLETED"
+    assert result.step_results["a"]["approved"] is True
+
+
+def test_wait_step_does_not_block_with_sleep():
+    # WaitStepAdapter returns a waiting signal synchronously; it never sleeps.
+    import inspect
+    source = inspect.getsource(WaitStepAdapter.execute)
+    assert "sleep" not in source
+    engine = WorkflowEngine(step_adapters=[WaitStepAdapter()])
+    workflow = BusinessWorkflow(
+        workflow_id="w", version="1.0",
+        steps=[WorkflowStep(step_id="w", step_type="WAIT")],
+    )
+    result = engine.run(workflow)
+    assert result.status == "COMPLETED"
+    assert result.step_results["w"]["waiting"] is True
+
+
+def test_production_disallows_arbitrary_step_handler():
+    from app.platform.business.errors import WorkflowError
+    import pytest
+    with pytest.raises(WorkflowError):
+        WorkflowEngine(step_handlers={"ACTION": lambda s, c: None}, strict=True)
+
+
+def test_sandbox_disallows_arbitrary_step_handler():
+    from app.platform.business.errors import WorkflowError
+    import pytest
+    with pytest.raises(WorkflowError):
+        WorkflowEngine(step_handlers={"ACTION": lambda s, c: None}, strict=True)
+
+
+def test_development_allows_test_handler_fallback():
+    engine = WorkflowEngine(step_handlers={"ACTION": lambda s, c: {"ok": True}},
+                            strict=False)
+    workflow = BusinessWorkflow(
+        workflow_id="w", version="1.0",
+        steps=[WorkflowStep(step_id="a", step_type="ACTION")],
+    )
+    result = engine.run(workflow)
+    assert result.status == "COMPLETED"

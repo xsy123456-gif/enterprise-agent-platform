@@ -2,6 +2,7 @@
 
 from app.platform.business.workflow.adapters import (
     AgentTaskStepAdapter,
+    ApprovalStepAdapter,
     BusinessActionStepAdapter,
     ConditionStepAdapter,
     LambdaStepAdapter,
@@ -21,6 +22,7 @@ __all__ = [
     "WorkflowRunResult",
     "WorkflowStepAdapter",
     "BusinessActionStepAdapter",
+    "ApprovalStepAdapter",
     "AgentTaskStepAdapter",
     "ConditionStepAdapter",
     "NotificationStepAdapter",

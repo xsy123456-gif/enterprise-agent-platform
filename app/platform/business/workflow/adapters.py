@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from app.platform.business.workflow.domain import (
     STEP_ACTION,
     STEP_AGENT_TASK,
+    STEP_APPROVAL,
     STEP_CONDITION,
     STEP_NOTIFICATION,
     STEP_WAIT,
@@ -39,6 +40,29 @@ class BusinessActionStepAdapter(WorkflowStepAdapter):
         action = self.action_lookup(step, context)
         result = self.action_runtime.execute(action, context)
         return {"result": result.status}
+
+
+class ApprovalStepAdapter(WorkflowStepAdapter):
+    """APPROVAL: human-in-the-loop gate — pending/rejected blocks the workflow.
+
+    A rejected or still-pending approval raises ``ApprovalRequiredError``, which
+    the engine records as a FAILED step and blocks every subsequent step.
+    """
+
+    step_type = STEP_APPROVAL
+
+    def __init__(self, approval_lookup=None):
+        self.approval_lookup = approval_lookup or (
+            lambda step, ctx: bool(ctx.get("approved", False))
+        )
+
+    def execute(self, step, context):
+        if not self.approval_lookup(step, context):
+            from app.platform.business.errors import ApprovalRequiredError
+            raise ApprovalRequiredError(
+                f"approval step {step.step_id!r} is not approved"
+            )
+        return {"approved": True}
 
 
 class AgentTaskStepAdapter(WorkflowStepAdapter):
@@ -78,15 +102,17 @@ class NotificationStepAdapter(WorkflowStepAdapter):
 
 
 class WaitStepAdapter(WorkflowStepAdapter):
-    """WAIT: checkpoint-based wait (never ``time.sleep`` in production)."""
+    """WAIT: non-blocking wait signal (never ``time.sleep`` in production).
+
+    The adapter expresses a waiting state via a result; the actual pause/resume
+    must go through the runtime checkpoint/resume boundary, not a blocking
+    Python sleep.
+    """
 
     step_type = STEP_WAIT
 
-    def __init__(self, waiter=None):
-        self.waiter = waiter or (lambda step, ctx: {"waited": True})
-
     def execute(self, step, context):
-        return self.waiter(step, context)
+        return {"waiting": True}
 
 
 class LambdaStepAdapter(WorkflowStepAdapter):
@@ -103,6 +129,7 @@ class LambdaStepAdapter(WorkflowStepAdapter):
 __all__ = [
     "WorkflowStepAdapter",
     "BusinessActionStepAdapter",
+    "ApprovalStepAdapter",
     "AgentTaskStepAdapter",
     "ConditionStepAdapter",
     "NotificationStepAdapter",
