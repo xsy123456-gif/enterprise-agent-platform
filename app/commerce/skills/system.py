@@ -5,7 +5,7 @@ the 7 Business Skills, then exposes a deterministic ``run`` entrypoint that
 executes a Skill without any LLM.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from app.commerce.diagnostics import (
     DiagnosticPolicyRegistry,
@@ -30,6 +30,14 @@ from app.commerce.diagnostics.plans.definitions.business import (
 from app.commerce.skills.definitions import build_business_skill_definitions
 from app.commerce.skills.registry import SkillRegistry
 from app.commerce.skills.skill import Skill
+
+# Deterministic Signal -> existing Plan mapping (never an LLM decision).
+# A scan plan surfaces signals; each mapped signal routes to the existing
+# domain plan that owns the corresponding RuleSet/Cause.
+SIGNAL_TO_PLAN = {
+    "CVR_DROP": "conversion_decline_diagnosis",
+    "DAYS_OF_SUPPLY_LOW": "stockout_risk",
+}
 
 
 def _build_compile_context():
@@ -76,8 +84,73 @@ class SkillSystem:
             execution_id=execution_id,
         )
 
+    def diagnose(self, skill_id, subject, trusted_context=None,
+                 fact_executor=None, execution_id=None, skill_version=None,
+                 plan_id=None):
+        """Run the default plan, then deterministically run any existing domain
+        plans selected by the detected signals, and merge their causes."""
+        result = self.run(skill_id, subject, trusted_context, fact_executor,
+                          plan_id=plan_id, execution_id=execution_id,
+                          skill_version=skill_version)
+        diagnostic = result.diagnostic_result
+        if diagnostic is None:
+            return result
+        selected = self._select_plans(diagnostic.signals, exclude={result.plan_id})
+        if not selected:
+            return result
+        extra_causes = []
+        extra_signals = []
+        for plan_id in selected:
+            extra = self.run_plan(plan_id, subject, trusted_context, fact_executor,
+                                  execution_id=execution_id)
+            if extra is not None:
+                extra_causes.extend(extra.causes)
+                extra_signals.extend(extra.signals)
+        if not extra_causes:
+            return result
+        return replace(result, diagnostic_result=_merge(
+            diagnostic, extra_causes, extra_signals))
+
+    def run_plan(self, plan_id, subject, trusted_context=None, fact_executor=None,
+                 execution_id=None):
+        """Run an existing plan directly (cross-skill domain plan selection)."""
+        from app.commerce.diagnostics.plans import PlanExecutor
+        ir = self.plan_registry.get_active_ir(plan_id)
+        state = PlanExecutor().execute(
+            ir, self.compile_context, fact_executor, subject,
+            trusted_context=trusted_context, execution_id=execution_id,
+        )
+        return state.diagnostic_result
+
+    @staticmethod
+    def _select_plans(signals, exclude):
+        selected = []
+        for signal in signals:
+            if signal.status not in ("ABNORMAL", "CRITICAL"):
+                continue
+            plan_id = SIGNAL_TO_PLAN.get(signal.signal_code)
+            if plan_id and plan_id not in exclude and plan_id not in selected:
+                selected.append(plan_id)
+        return selected
+
     def skill_definition(self, skill_id, version=None):
         return self.skill_registry.get(skill_id, version)
+
+
+def _merge(diagnostic, extra_causes, extra_signals):
+    causes = list(diagnostic.causes)
+    seen = {c.cause_code for c in causes}
+    for cause in extra_causes:
+        if cause.cause_code not in seen:
+            causes.append(cause)
+            seen.add(cause.cause_code)
+    signals = list(diagnostic.signals)
+    seen_codes = {s.signal_code for s in signals}
+    for signal in extra_signals:
+        if signal.signal_code not in seen_codes:
+            signals.append(signal)
+            seen_codes.add(signal.signal_code)
+    return replace(diagnostic, causes=tuple(causes), signals=tuple(signals))
 
 
 def build_skill_system():

@@ -49,7 +49,7 @@ class DiagnosticSkillExecutionAdapter:
                 skill_version=None):
         record = self._start(context, skill_id)
         try:
-            result = self.skill_system.run(
+            result = self.skill_system.diagnose(
                 skill_id, subject,
                 trusted_context=trusted_context,
                 fact_executor=fact_executor,
