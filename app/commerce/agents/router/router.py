@@ -20,7 +20,7 @@ class SkillRouter:
 
     def route(self, request: SkillRoutingRequest) -> SkillRoutingResult:
         available = tuple(request.available_skills)
-        subject = self._extract_subject(request)
+        subject, subject_tenant = self._extract_subject(request)
 
         if self.rule_router is not None:
             hit = self.rule_router.route(request)
@@ -30,6 +30,7 @@ class SkillRouter:
                     selected_skill=skill_id, confidence=confidence,
                     alternatives=self._alternatives(skill_id, available),
                     reason="rule-keyword-match", layer="rule", subject=subject,
+                    subject_tenant=subject_tenant,
                 )
 
         if self.llm_router is not None:
@@ -40,15 +41,19 @@ class SkillRouter:
                     selected_skill=skill_id, confidence=confidence,
                     alternatives=self._alternatives(skill_id, available),
                     reason="llm-intent", layer="llm", subject=subject,
+                    subject_tenant=subject_tenant,
                 )
 
-        return SkillRoutingResult(subject=subject, reason="no-match")
+        return SkillRoutingResult(subject=subject, subject_tenant=subject_tenant,
+                                  reason="no-match")
 
     def _extract_subject(self, request):
         if self.entity_router is None:
-            return None
+            return None, ""
         matches = self.entity_router.extract(request.message)
-        return matches[0].subject if matches else None
+        if not matches:
+            return None, ""
+        return matches[0].subject, matches[0].tenant_id
 
     @staticmethod
     def _alternatives(selected, available):

@@ -139,6 +139,15 @@ def main():
         store_id="JP01", tenant_id="company_A", platform="amazon",
         marketplace="JP", external_store_id="ext-JP01", name="Japan Store",
         currency="JPY", timezone="Asia/Tokyo"))
+    # Register the seed's cross-tenant resource so the agent can resolve (and
+    # deny) foreign-tenant references.  This mirrors the seed's multi-tenant
+    # world (Northstar Retail); it is benchmark setup, not a product change.
+    from app.commerce.contracts.subject import SUBJECT_STORE, SubjectRef
+    entity_router = application.agents.runtime.router.entity_router
+    for token in ("Northstar", "其他租户", "其他店铺"):
+        entity_router.known_subjects[token] = SubjectRef(SUBJECT_STORE,
+                                                         "foreign_store")
+        entity_router.subject_tenants[token] = "tenant_northstar"
     client = TestClient(app, raise_server_exceptions=False)
 
     scenarios = loader.load_all(args.suite)[1]

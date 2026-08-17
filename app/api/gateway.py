@@ -72,8 +72,12 @@ class EnterpriseProductGateway:
             trace_id=trace_id or "",
         )
         version = self._resolve_agent_version(agent_id)
-        return runtime.handle(request, trusted_context, self.fact_executor,
-                              agent_version=version)
+        from app.commerce.agents.errors import ResourceOwnershipError
+        try:
+            return runtime.handle(request, trusted_context, self.fact_executor,
+                                  agent_version=version)
+        except ResourceOwnershipError:
+            raise not_found("Resource")
 
     def _resolve_agent_version(self, agent_id):
         # Fail-closed: the Control Plane is the sole authoritative source of

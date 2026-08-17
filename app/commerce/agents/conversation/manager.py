@@ -58,6 +58,14 @@ class ConversationManager:
         routing = self.router.route(SkillRoutingRequest(
             message=request.message, available_skills=available,
         ))
+        if (routing.subject_tenant
+                and trusted_context.tenant_id
+                and routing.subject_tenant != trusted_context.tenant_id):
+            from app.commerce.agents.errors import ResourceOwnershipError
+            raise ResourceOwnershipError(
+                f"resource owned by {routing.subject_tenant!r} is not accessible "
+                f"to tenant {trusted_context.tenant_id!r}"
+            )
         skill_id = routing.selected_skill or self.manifest.default_skill
         subject = routing.subject
 

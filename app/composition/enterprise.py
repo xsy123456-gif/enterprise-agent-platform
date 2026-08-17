@@ -143,6 +143,8 @@ def _build_employee_agents(skill_system, execution_adapter=None):
     runtime = build_employee_agent_runtime(
         definition, manifest, skill_system, bindings,
         known_subjects={"JP01": SubjectRef(SUBJECT_STORE, "JP01")},
+        subject_tenants={"JP01": "company_A"},
+        default_tenant="company_A",
         execution_adapter=execution_adapter,
     )
     return SimpleNamespace(definition=definition, manifest=manifest,

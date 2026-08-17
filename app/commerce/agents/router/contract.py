@@ -23,6 +23,7 @@ class SkillRoutingResult:
     reason: str = ""
     layer: str = ""
     subject: Any = None
+    subject_tenant: str = ""
 
     def __post_init__(self):
         object.__setattr__(self, "alternatives", tuple(self.alternatives or ()))

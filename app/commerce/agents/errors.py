@@ -23,10 +23,19 @@ class UnknownSkillForAgent(AgentError):
     """A skill referenced by an agent is unknown or has no such version."""
 
 
+class ResourceOwnershipError(AgentError):
+    """A message referenced a business resource not owned by the trusted tenant.
+
+    Raised before any diagnostic execution.  The caller must map it to a safe
+    deny (404 / NOT_FOUND) and must not reveal whether the resource exists.
+    """
+
+
 __all__ = [
     "AgentError",
     "AgentValidationError",
     "AgentNotActiveError",
     "AgentManifestError",
     "UnknownSkillForAgent",
+    "ResourceOwnershipError",
 ]

@@ -13,18 +13,25 @@ from dataclasses import dataclass
 class EntityMatch:
     token: str
     subject: object
+    tenant_id: str = ""
 
 
 class EntityRouter:
 
-    def __init__(self, known_subjects=None):
+    def __init__(self, known_subjects=None, subject_tenants=None,
+                 default_tenant=""):
         self.known_subjects = dict(known_subjects or {})
+        self.subject_tenants = dict(subject_tenants or {})
+        self.default_tenant = default_tenant
 
     def extract(self, message):
         found = []
         for token, subject in self.known_subjects.items():
             if token in (message or ""):
-                found.append(EntityMatch(token=token, subject=subject))
+                found.append(EntityMatch(
+                    token=token, subject=subject,
+                    tenant_id=self.subject_tenants.get(token, self.default_tenant),
+                ))
         return found
 
 

@@ -22,7 +22,8 @@ from app.commerce.agents.router import (
 def build_employee_agent_runtime(agent_definition, manifest, skill_system,
                                  skill_bindings, llm=None, memory_port=None,
                                  knowledge_port=None, knowledge_enabled=False,
-                                 known_subjects=None,
+                                 known_subjects=None, subject_tenants=None,
+                                 default_tenant="",
                                  execution_adapter=None) -> ConversationManager:
     binding_registry = SkillBindingRegistry(
         skill_registry=getattr(skill_system, "skill_registry", None))
@@ -31,7 +32,10 @@ def build_employee_agent_runtime(agent_definition, manifest, skill_system,
 
     rule_router = RuleRouter(keyword_map_from_bindings(
         binding_registry.bindings_for(agent_definition.agent_id)))
-    entity_router = EntityRouter(known_subjects=known_subjects) if known_subjects else None
+    entity_router = EntityRouter(
+        known_subjects=known_subjects, subject_tenants=subject_tenants,
+        default_tenant=default_tenant,
+    ) if known_subjects else None
     llm_router = LLMRouter(llm=llm) if llm else None
     router = SkillRouter(rule_router=rule_router, entity_router=entity_router,
                          llm_router=llm_router)
