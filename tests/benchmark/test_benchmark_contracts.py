@@ -24,7 +24,7 @@ def test_benchmark_validates_against_seed_checksum():
     errors, manifest, ids = validate.validate(SUITE, SEED_ROOT)
     assert errors == []
     assert len(ids) == 20
-    assert manifest["benchmark_version"] == "1.0.0"
+    assert manifest["benchmark_version"] == "1.0.1"
 
 
 def test_scenarios_have_no_answer_fields():
