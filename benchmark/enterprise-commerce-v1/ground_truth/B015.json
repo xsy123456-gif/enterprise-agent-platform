@@ -4,6 +4,9 @@
     "E1": {
       "required_entity": "STORE:JP01"
     },
+    "E2": {
+      "signals": []
+    },
     "E3": {
       "expected_state": "INSUFFICIENT_DATA",
       "primary_cause": null,

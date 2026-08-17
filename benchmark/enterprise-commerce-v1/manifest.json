@@ -1,10 +1,10 @@
 {
   "benchmark_suite_id": "enterprise-commerce-benchmark-v1",
-  "benchmark_version": "1.0.0",
+  "benchmark_version": "1.0.1",
   "dataset_id": "enterprise-commerce-v1",
-  "dataset_version": "1.0.0",
+  "dataset_version": "1.0.1",
   "dataset_checksum": "2dec1cd5f40fce78ade13b316ade81d4b3a62f316aa5b7031eedd51a3857d2a0",
-  "ground_truth_checksum": "fdcd23675eb451377e4361881c17ff0514dd541025e07b3db3c7af1f63106a58",
+  "ground_truth_checksum": "62e1121b82b2e94cdf17b12e097545de9b600e5f83775ac2c190f145ea40c489",
   "scenario_count": 20,
   "clock": "2026-08-15",
   "evaluation_layers": ["E1", "E2", "E3", "E4", "E5"]

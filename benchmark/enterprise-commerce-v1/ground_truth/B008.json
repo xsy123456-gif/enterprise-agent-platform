@@ -5,7 +5,10 @@
       "required_entity": "STORE:JP01"
     },
     "E2": {
-      "signals": {}
+      "signals": [
+        "RATING_DROP",
+        "NEGATIVE_REVIEW_RATE_RISE"
+      ]
     },
     "E3": {
       "expected_state": "ABNORMAL",

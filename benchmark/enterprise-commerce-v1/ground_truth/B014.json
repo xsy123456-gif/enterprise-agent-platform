@@ -5,7 +5,11 @@
       "required_entity": "STORE:JP01"
     },
     "E2": {
-      "signals": {}
+      "signals": [
+        "GMV_DROP",
+        "TRAFFIC_DROP",
+        "DAYS_OF_SUPPLY_LOW"
+      ]
     },
     "E3": {
       "expected_state": "ABNORMAL",
