@@ -99,7 +99,7 @@ SCENARIOS = [
     # Group D — multi factor
     ("B011", "multi_factor", "Traffic + conversion deterioration", S,
      "分析 JP01 最近 GMV 和转化率同时下降的原因",
-     [("GMV", 900.0), ("GMV_B", 2000.0), ("ORDERS", 18.0), ("ORDERS_B", 40.0),
+     [("GMV", 600.0), ("GMV_B", 2000.0), ("ORDERS", 12.0), ("ORDERS_B", 40.0),
       ("SESSIONS", 1000.0), ("SESSIONS_B", 2000.0)],
      _diag("ABNORMAL", "TRAFFIC_DECLINE", secondary=["PRICE_INCREASE"],
            forbidden=["STOCKOUT_RISK"])),
@@ -125,6 +125,8 @@ SCENARIOS = [
      [("GMV", 700.0), ("GMV_B", 2000.0), ("ORDERS", 14.0), ("ORDERS_B", 40.0),
       ("SESSIONS", 800.0), ("SESSIONS_B", 2000.0),
       ("AVAILABLE_INVENTORY", 20.0), ("AVAILABLE_INVENTORY_B", 200.0),
+      ("UNITS", 20.0), ("UNITS_B", 40.0),
+      ("PERIOD_DAYS", 7.0), ("PERIOD_DAYS_B", 7.0),
       ("REVIEW_RATING", 3.2), ("REVIEW_RATING_B", 4.5),
       ("NEGATIVE_REVIEW_RATE", 0.35), ("NEGATIVE_REVIEW_RATE_B", 0.1)],
      _diag("ABNORMAL", "TRAFFIC_DECLINE", secondary=["STOCKOUT_RISK"])),
@@ -165,21 +167,40 @@ SCENARIOS = [
 ]
 
 
+# Expected surfaced signals per diagnostic scenario (frozen semantics + facts).
+E2_SIGNALS = {
+    "B004": ("GMV_DROP", "TRAFFIC_DROP"),
+    "B005": ("GMV_DROP", "CVR_DROP"),
+    "B006": ("DAYS_OF_SUPPLY_LOW",),
+    "B007": ("ROAS_DROP", "CPC_RISE"),
+    "B008": ("RATING_DROP", "NEGATIVE_REVIEW_RATE_RISE"),
+    "B009": ("GMV_DROP", "TRAFFIC_DROP"),
+    "B010": ("GMV_DROP", "TRAFFIC_DROP"),
+    "B011": ("GMV_DROP", "TRAFFIC_DROP", "CVR_DROP"),
+    "B012": ("ROAS_DROP", "CPC_RISE", "CVR_DROP"),
+    "B013": ("GMV_DROP", "TRAFFIC_DROP", "DAYS_OF_SUPPLY_LOW"),
+    "B014": ("GMV_DROP", "TRAFFIC_DROP", "DAYS_OF_SUPPLY_LOW"),
+    "B020": ("ROAS_DROP", "CPC_RISE"),
+}
+
+
 def _build_evaluation(sid, diag_or_eval):
     if "evaluation" in str(type(diag_or_eval)) or isinstance(diag_or_eval, dict) \
             and "E4" in diag_or_eval:
         return diag_or_eval
     d = diag_or_eval
+    e2 = {"signals": list(E2_SIGNALS.get(sid, ()))}
     if d.get("primary_cause") is None and d.get("expected_state") in ("NORMAL", "INSUFFICIENT_DATA"):
         return {
             "E1": {"required_entity": S},
+            "E2": e2,
             "E3": d,
             "E4": {"permission_denied": False},
             "E5": {"required_facts": [S]},
         }
     return {
         "E1": {"required_entity": S},
-        "E2": {"signals": {}},
+        "E2": e2,
         "E3": d,
         "E4": {"permission_denied": False},
         "E5": {"required_facts": [S]},

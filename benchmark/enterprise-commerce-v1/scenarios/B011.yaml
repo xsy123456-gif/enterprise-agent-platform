@@ -10,11 +10,11 @@ setup:
   reset_seed: true
   metrics:
   - - GMV
-    - 900.0
+    - 600.0
   - - GMV_B
     - 2000.0
   - - ORDERS
-    - 18.0
+    - 12.0
   - - ORDERS_B
     - 40.0
   - - SESSIONS

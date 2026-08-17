@@ -25,6 +25,14 @@ setup:
     - 20.0
   - - AVAILABLE_INVENTORY_B
     - 200.0
+  - - UNITS
+    - 20.0
+  - - UNITS_B
+    - 40.0
+  - - PERIOD_DAYS
+    - 7.0
+  - - PERIOD_DAYS_B
+    - 7.0
   - - REVIEW_RATING
     - 3.2
   - - REVIEW_RATING_B
