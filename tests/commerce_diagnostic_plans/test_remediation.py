@@ -120,3 +120,19 @@ def test_missing_evidence_does_not_yield_none_diagnostic(plans, compile_context)
     assert state.diagnostic_result is not None
     assert state.diagnostic_result.status == "INSUFFICIENT_DATA"
     assert state.diagnostic_result.causes == ()
+
+
+def test_store_scan_detects_inventory_signal(plans, compile_context):
+    # Cross-domain scan: store health scan also surfaces the inventory signal.
+    facts = make_facts(
+        (CAP_METRICS, "GMV", 1000.0), (CAP_METRICS, "GMV_B", 2000.0),
+        (CAP_METRICS, "ORDERS", 20.0), (CAP_METRICS, "ORDERS_B", 40.0),
+        (CAP_METRICS, "SESSIONS", 1000.0), (CAP_METRICS, "SESSIONS_B", 2000.0),
+        (CAP_METRICS, "AVAILABLE_INVENTORY", 30.0),
+        (CAP_METRICS, "AVAILABLE_INVENTORY_B", 300.0),
+        (CAP_METRICS, "UNITS", 100.0), (CAP_METRICS, "UNITS_B", 100.0),
+        (CAP_METRICS, "PERIOD_DAYS", 10.0), (CAP_METRICS, "PERIOD_DAYS_B", 10.0),
+    )
+    state = _run(plans, compile_context, "store_health_scan", facts)
+    assert "DAYS_OF_SUPPLY_LOW" in {s.signal_code for s in state.signals}
+

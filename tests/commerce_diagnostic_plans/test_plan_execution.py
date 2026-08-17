@@ -120,10 +120,10 @@ def test_conversion_decline_false_correlation(plans, compile_context):
         (CAP_METRICS, "ORDERS", 20.0), (CAP_METRICS, "ORDERS_B", 40.0),
         (CAP_METRICS, "SESSIONS", 1000.0), (CAP_METRICS, "SESSIONS_B", 1000.0),
         (CAP_METRICS, "GMV", 1000.0), (CAP_METRICS, "GMV_B", 2000.0),
-        (CAP_REVIEW, "REVIEW_RATING", 3.9),
+        (CAP_METRICS, "REVIEW_RATING", 3.9),
         (CAP_REVIEW, "PRICE_INDEX", 1.15),
-        (CAP_REVIEW, "NEGATIVE_REVIEW_RATE", 0.06),
-        (CAP_REVIEW, "NEGATIVE_REVIEW_RATE_B", 0.05),
+        (CAP_METRICS, "NEGATIVE_REVIEW_RATE", 0.06),
+        (CAP_METRICS, "NEGATIVE_REVIEW_RATE_B", 0.05),
         (CAP_METRICS, "DROP_RATE", 0.5),
     )
     state = _run(plans, compile_context, "conversion_decline_diagnosis", facts)
@@ -151,8 +151,8 @@ def test_conversion_decline_missing_review_evidence(plans, compile_context):
         (CAP_METRICS, "GMV", 1000.0), (CAP_METRICS, "GMV_B", 2000.0),
         # REVIEW_RATING is NOT provided -> required evidence missing.
         (CAP_REVIEW, "PRICE_INDEX", 1.0),
-        (CAP_REVIEW, "NEGATIVE_REVIEW_RATE", 0.06),
-        (CAP_REVIEW, "NEGATIVE_REVIEW_RATE_B", 0.05),
+        (CAP_METRICS, "NEGATIVE_REVIEW_RATE", 0.06),
+        (CAP_METRICS, "NEGATIVE_REVIEW_RATE_B", 0.05),
         (CAP_METRICS, "DROP_RATE", 0.5),
     )
     state = _run(plans, compile_context, "conversion_decline_diagnosis", facts)
@@ -204,8 +204,8 @@ def test_search_term_waste_execution(plans, compile_context):
 
 def test_stockout_risk_execution(plans, compile_context):
     facts = make_facts(
-        (CAP_INVENTORY, "AVAILABLE_INVENTORY", 30.0),
-        (CAP_INVENTORY, "AVAILABLE_INVENTORY_B", 300.0),
+        (CAP_METRICS, "AVAILABLE_INVENTORY", 30.0),
+        (CAP_METRICS, "AVAILABLE_INVENTORY_B", 300.0),
         (CAP_METRICS, "UNITS", 100.0), (CAP_METRICS, "UNITS_B", 100.0),
         (CAP_METRICS, "PERIOD_DAYS", 10.0), (CAP_METRICS, "PERIOD_DAYS_B", 10.0),
         (CAP_METRICS, "DAILY_REVENUE", 1000.0),
@@ -225,9 +225,9 @@ def test_stockout_risk_execution(plans, compile_context):
 
 def test_rating_deterioration_execution(plans, compile_context):
     facts = make_facts(
-        (CAP_REVIEW, "REVIEW_RATING", 3.2), (CAP_REVIEW, "REVIEW_RATING_B", 4.5),
-        (CAP_REVIEW, "NEGATIVE_REVIEW_RATE", 0.20),
-        (CAP_REVIEW, "NEGATIVE_REVIEW_RATE_B", 0.05),
+        (CAP_METRICS, "REVIEW_RATING", 3.2), (CAP_METRICS, "REVIEW_RATING_B", 4.5),
+        (CAP_METRICS, "NEGATIVE_REVIEW_RATE", 0.20),
+        (CAP_METRICS, "NEGATIVE_REVIEW_RATE_B", 0.05),
         (CAP_METRICS, "DROP_RATE", 0.3),
     )
     state = _run(plans, compile_context, "rating_deterioration", facts)
@@ -247,7 +247,7 @@ def test_product_360_execution(plans, compile_context):
         (CAP_METRICS, "GMV", 1000.0), (CAP_METRICS, "GMV_B", 2000.0),
         (CAP_METRICS, "AD_SPEND", 100.0), (CAP_METRICS, "AD_SPEND_B", 100.0),
         (CAP_METRICS, "AD_SALES", 200.0), (CAP_METRICS, "AD_SALES_B", 400.0),
-        (CAP_REVIEW, "REVIEW_RATING", 3.2), (CAP_REVIEW, "REVIEW_RATING_B", 4.5),
+        (CAP_METRICS, "REVIEW_RATING", 3.2), (CAP_METRICS, "REVIEW_RATING_B", 4.5),
         (CAP_METRICS, "DROP_RATE", 0.5),
     )
     state = _run(plans, compile_context, "product_360", facts)

@@ -79,8 +79,8 @@ def test_advertising_performance_skill(system):
 
 def test_inventory_risk_skill(system):
     facts = make_facts(
-        (CAP_INVENTORY, "AVAILABLE_INVENTORY", 30.0),
-        (CAP_INVENTORY, "AVAILABLE_INVENTORY_B", 300.0),
+        (CAP_METRICS, "AVAILABLE_INVENTORY", 30.0),
+        (CAP_METRICS, "AVAILABLE_INVENTORY_B", 300.0),
         (CAP_METRICS, "UNITS", 100.0), (CAP_METRICS, "UNITS_B", 100.0),
         (CAP_METRICS, "PERIOD_DAYS", 10.0), (CAP_METRICS, "PERIOD_DAYS_B", 10.0),
         (CAP_METRICS, "DAILY_REVENUE", 1000.0), (CAP_METRICS, "STOCKOUT_DAYS", 3.0),
@@ -93,9 +93,9 @@ def test_inventory_risk_skill(system):
 
 def test_review_issue_skill(system):
     facts = make_facts(
-        (CAP_REVIEW, "REVIEW_RATING", 3.2), (CAP_REVIEW, "REVIEW_RATING_B", 4.5),
-        (CAP_REVIEW, "NEGATIVE_REVIEW_RATE", 0.20),
-        (CAP_REVIEW, "NEGATIVE_REVIEW_RATE_B", 0.05),
+        (CAP_METRICS, "REVIEW_RATING", 3.2), (CAP_METRICS, "REVIEW_RATING_B", 4.5),
+        (CAP_METRICS, "NEGATIVE_REVIEW_RATE", 0.20),
+        (CAP_METRICS, "NEGATIVE_REVIEW_RATE_B", 0.05),
         (CAP_METRICS, "DROP_RATE", 0.3),
     )
     result = _run(system, "review_issue_diagnosis", facts)
@@ -113,7 +113,7 @@ def test_product_360_skill(system):
         (CAP_METRICS, "GMV", 1000.0), (CAP_METRICS, "GMV_B", 2000.0),
         (CAP_METRICS, "AD_SPEND", 100.0), (CAP_METRICS, "AD_SPEND_B", 100.0),
         (CAP_METRICS, "AD_SALES", 200.0), (CAP_METRICS, "AD_SALES_B", 400.0),
-        (CAP_REVIEW, "REVIEW_RATING", 3.2), (CAP_REVIEW, "REVIEW_RATING_B", 4.5),
+        (CAP_METRICS, "REVIEW_RATING", 3.2), (CAP_METRICS, "REVIEW_RATING_B", 4.5),
         (CAP_METRICS, "DROP_RATE", 0.5),
     )
     result = _run(system, "product_360_diagnosis", facts)
@@ -130,8 +130,8 @@ def test_daily_operations_triage_skill(system):
         (CAP_METRICS, "SESSIONS", 1000.0), (CAP_METRICS, "SESSIONS_B", 1000.0),
         (CAP_METRICS, "AD_SPEND", 100.0), (CAP_METRICS, "AD_SPEND_B", 100.0),
         (CAP_METRICS, "AD_SALES", 200.0), (CAP_METRICS, "AD_SALES_B", 400.0),
-        (CAP_INVENTORY, "AVAILABLE_INVENTORY", 30.0),
-        (CAP_INVENTORY, "AVAILABLE_INVENTORY_B", 300.0),
+        (CAP_METRICS, "AVAILABLE_INVENTORY", 30.0),
+        (CAP_METRICS, "AVAILABLE_INVENTORY_B", 300.0),
     )
     result = _run(system, "daily_operations_triage", facts)
     assert result.plan_id == "daily_operations_scan"
