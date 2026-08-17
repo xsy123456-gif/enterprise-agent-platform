@@ -22,6 +22,13 @@ class AllowAllGovernancePolicy:
         return GovernanceResult(GovernanceDecision.ALLOW, "default policy")
 
 
+class DenyByDefaultGovernancePolicy:
+    """Fail-closed production default: deny unless an explicit policy allows."""
+
+    def evaluate(self, request):
+        return GovernanceResult(GovernanceDecision.DENY, "no policy configured")
+
+
 class GovernanceGate:
     """Every governed runtime action enters here before execution."""
 

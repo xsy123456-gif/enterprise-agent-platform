@@ -1,0 +1,8 @@
+{"campaignId": "CMP-AMZJP-1", "name": "Launch 1", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "AUTO", "seller_id": "seller-aurora-jp"}
+{"campaignId": "CMP-AMZJP-2", "name": "Launch 2", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "MANUAL", "seller_id": "seller-aurora-jp"}
+{"campaignId": "CMP-AMZJP-3", "name": "Launch 3", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "AUTO", "seller_id": "seller-aurora-jp"}
+{"campaignId": "CMP-AMZJP-4", "name": "Launch 4", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "MANUAL", "seller_id": "seller-aurora-jp"}
+{"campaignId": "CMP-AMZJP-5", "name": "Launch 5", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "AUTO", "seller_id": "seller-aurora-jp"}
+{"campaignId": "CMP-AMZUS-1", "name": "Launch 1", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "AUTO", "seller_id": "seller-northstar-us"}
+{"campaignId": "CMP-AMZUS-2", "name": "Launch 2", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "MANUAL", "seller_id": "seller-northstar-us"}
+{"campaignId": "CMP-AMZUS-3", "name": "Launch 3", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "AUTO", "seller_id": "seller-northstar-us"}

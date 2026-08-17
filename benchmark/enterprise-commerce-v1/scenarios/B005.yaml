@@ -1,0 +1,23 @@
+scenario_id: B005
+title: Conversion deterioration
+category: single_factor
+agent_id: commerce_operations_agent
+locale: zh-CN
+as_of: '2026-08-15'
+message: 分析 JP01 转化率下降的原因
+subject: STORE:JP01
+setup:
+  reset_seed: true
+  metrics:
+  - - GMV
+    - 1200.0
+  - - GMV_B
+    - 2000.0
+  - - ORDERS
+    - 24.0
+  - - ORDERS_B
+    - 40.0
+  - - SESSIONS
+    - 2000.0
+  - - SESSIONS_B
+    - 2000.0

@@ -1,0 +1,23 @@
+scenario_id: B002
+title: Normal statistical fluctuation
+category: normal_control
+agent_id: commerce_operations_agent
+locale: zh-CN
+as_of: '2026-08-15'
+message: 分析 JP01 的 GMV 波动是否异常
+subject: STORE:JP01
+setup:
+  reset_seed: true
+  metrics:
+  - - GMV
+    - 2000.0
+  - - GMV_B
+    - 2000.0
+  - - ORDERS
+    - 40.0
+  - - ORDERS_B
+    - 40.0
+  - - SESSIONS
+    - 2000.0
+  - - SESSIONS_B
+    - 2000.0

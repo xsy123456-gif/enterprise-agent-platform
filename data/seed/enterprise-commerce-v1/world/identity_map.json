@@ -1,0 +1,382 @@
+{
+  "skus": [
+    {
+      "sku_id": "SKU-01-BLK",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-01",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-01-BLK",
+          "asin": "B0SIM001"
+        },
+        "sap": {
+          "material_number": "MAT-10001"
+        },
+        "tiktok": {
+          "seller_sku": "TT-01-BLK",
+          "product_id": "760000001"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-01-WHT",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-01",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-01-WHT",
+          "asin": "B0SIM002"
+        },
+        "sap": {
+          "material_number": "MAT-10002"
+        },
+        "tiktok": {
+          "seller_sku": "TT-01-WHT",
+          "product_id": "760000002"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-02-BLK",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-02",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-02-BLK",
+          "asin": "B0SIM003"
+        },
+        "sap": {
+          "material_number": "MAT-10003"
+        },
+        "tiktok": {
+          "seller_sku": "TT-02-BLK",
+          "product_id": "760000003"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-02-WHT",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-02",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-02-WHT",
+          "asin": "B0SIM004"
+        },
+        "sap": {
+          "material_number": "MAT-10004"
+        },
+        "tiktok": {
+          "seller_sku": "TT-02-WHT",
+          "product_id": "760000004"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-03-BLK",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-03",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-03-BLK",
+          "asin": "B0SIM005"
+        },
+        "sap": {
+          "material_number": "MAT-10005"
+        },
+        "tiktok": {
+          "seller_sku": "TT-03-BLK",
+          "product_id": "760000005"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-04-STD",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-04",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-04-STD",
+          "asin": "B0SIM006"
+        },
+        "sap": {
+          "material_number": "MAT-10006"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-05-SLV",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-05",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-05-SLV",
+          "asin": "B0SIM007"
+        },
+        "sap": {
+          "material_number": "MAT-10007"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-05-BLK",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-05",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-05-BLK",
+          "asin": "B0SIM008"
+        },
+        "sap": {
+          "material_number": "MAT-10008"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-06-BLK",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-06",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-06-BLK",
+          "asin": "B0SIM009"
+        },
+        "sap": {
+          "material_number": "MAT-10009"
+        },
+        "tiktok": {
+          "seller_sku": "TT-06-BLK",
+          "product_id": "760000009"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-07-WHT",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-07",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-07-WHT",
+          "asin": "B0SIM010"
+        },
+        "sap": {
+          "material_number": "MAT-10010"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-08-GRY",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-08",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-08-GRY",
+          "asin": "B0SIM011"
+        },
+        "sap": {
+          "material_number": "MAT-10011"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-09-BLK",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-09",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-09-BLK",
+          "asin": "B0SIM012"
+        },
+        "sap": {
+          "material_number": "MAT-10012"
+        },
+        "tiktok": {
+          "seller_sku": "TT-09-BLK",
+          "product_id": "760000012"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-09-WHT",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-09",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-09-WHT",
+          "asin": "B0SIM013"
+        },
+        "sap": {
+          "material_number": "MAT-10013"
+        },
+        "tiktok": {
+          "seller_sku": "TT-09-WHT",
+          "product_id": "760000013"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-10-STD",
+      "tenant_id": "tenant_aurora",
+      "product_id": "PRD-10",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-10-STD",
+          "asin": "B0SIM014"
+        },
+        "sap": {
+          "material_number": "MAT-10014"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-11-BLK",
+      "tenant_id": "tenant_northstar",
+      "product_id": "PRD-11",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-11-BLK",
+          "asin": "B0SIM015"
+        },
+        "netsuite": {
+          "item_internal_id": "NS-30015"
+        },
+        "tiktok": {
+          "seller_sku": "TT-11-BLK",
+          "product_id": "760000015"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-11-WHT",
+      "tenant_id": "tenant_northstar",
+      "product_id": "PRD-11",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-11-WHT",
+          "asin": "B0SIM016"
+        },
+        "netsuite": {
+          "item_internal_id": "NS-30016"
+        },
+        "tiktok": {
+          "seller_sku": "TT-11-WHT",
+          "product_id": "760000016"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-12-STD",
+      "tenant_id": "tenant_northstar",
+      "product_id": "PRD-12",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-12-STD",
+          "asin": "B0SIM017"
+        },
+        "netsuite": {
+          "item_internal_id": "NS-30017"
+        },
+        "tiktok": {
+          "seller_sku": "TT-12-STD",
+          "product_id": "760000017"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-13-BLK",
+      "tenant_id": "tenant_northstar",
+      "product_id": "PRD-13",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-13-BLK",
+          "asin": "B0SIM018"
+        },
+        "netsuite": {
+          "item_internal_id": "NS-30018"
+        },
+        "tiktok": {
+          "seller_sku": "TT-13-BLK",
+          "product_id": "760000018"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-13-BLU",
+      "tenant_id": "tenant_northstar",
+      "product_id": "PRD-13",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-13-BLU",
+          "asin": "B0SIM019"
+        },
+        "netsuite": {
+          "item_internal_id": "NS-30019"
+        },
+        "tiktok": {
+          "seller_sku": "TT-13-BLU",
+          "product_id": "760000019"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-14-BLK",
+      "tenant_id": "tenant_northstar",
+      "product_id": "PRD-14",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-14-BLK",
+          "asin": "B0SIM020"
+        },
+        "netsuite": {
+          "item_internal_id": "NS-30020"
+        },
+        "tiktok": {
+          "seller_sku": "TT-14-BLK",
+          "product_id": "760000020"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-15-STD",
+      "tenant_id": "tenant_northstar",
+      "product_id": "PRD-15",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-15-STD",
+          "asin": "B0SIM021"
+        },
+        "netsuite": {
+          "item_internal_id": "NS-30021"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-16-BLU",
+      "tenant_id": "tenant_northstar",
+      "product_id": "PRD-16",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-16-BLU",
+          "asin": "B0SIM022"
+        },
+        "netsuite": {
+          "item_internal_id": "NS-30022"
+        }
+      }
+    },
+    {
+      "sku_id": "SKU-16-GRN",
+      "tenant_id": "tenant_northstar",
+      "product_id": "PRD-16",
+      "external_ids": {
+        "amazon": {
+          "seller_sku": "AU-16-GRN",
+          "asin": "B0SIM023"
+        },
+        "netsuite": {
+          "item_internal_id": "NS-30023"
+        }
+      }
+    }
+  ]
+}

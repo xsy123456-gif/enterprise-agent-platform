@@ -1,0 +1,8 @@
+{"campaignId": "CMP-TTUSA-1", "name": "Launch 1", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "AUTO", "seller_id": "shop-aurora-us"}
+{"campaignId": "CMP-TTUSA-2", "name": "Launch 2", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "MANUAL", "seller_id": "shop-aurora-us"}
+{"campaignId": "CMP-TTUSA-3", "name": "Launch 3", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "AUTO", "seller_id": "shop-aurora-us"}
+{"campaignId": "CMP-TTUK-1", "name": "Launch 1", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "AUTO", "seller_id": "shop-northstar-uk"}
+{"campaignId": "CMP-TTUK-2", "name": "Launch 2", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "MANUAL", "seller_id": "shop-northstar-uk"}
+{"campaignId": "CMP-TTUK-3", "name": "Launch 3", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "AUTO", "seller_id": "shop-northstar-uk"}
+{"campaignId": "CMP-TTUK-4", "name": "Launch 4", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "MANUAL", "seller_id": "shop-northstar-uk"}
+{"campaignId": "CMP-TTUK-5", "name": "Launch 5", "dailyBudget": 100.0, "state": "ENABLED", "targetingType": "AUTO", "seller_id": "shop-northstar-uk"}

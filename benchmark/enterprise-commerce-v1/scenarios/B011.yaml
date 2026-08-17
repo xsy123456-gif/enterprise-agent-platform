@@ -1,0 +1,23 @@
+scenario_id: B011
+title: Traffic + conversion deterioration
+category: multi_factor
+agent_id: commerce_operations_agent
+locale: zh-CN
+as_of: '2026-08-15'
+message: 分析 JP01 最近 GMV 和转化率同时下降的原因
+subject: STORE:JP01
+setup:
+  reset_seed: true
+  metrics:
+  - - GMV
+    - 600.0
+  - - GMV_B
+    - 2000.0
+  - - ORDERS
+    - 12.0
+  - - ORDERS_B
+    - 40.0
+  - - SESSIONS
+    - 1000.0
+  - - SESSIONS_B
+    - 2000.0

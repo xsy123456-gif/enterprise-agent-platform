@@ -1,0 +1,19 @@
+scenario_id: B015
+title: New listing / sparse history
+category: data_quality
+agent_id: commerce_operations_agent
+locale: zh-CN
+as_of: '2026-08-15'
+message: 分析 JP01 刚上架一周的新品 GMV 趋势
+subject: STORE:JP01
+setup:
+  reset_seed: true
+  metrics:
+  - - GMV
+    - 100.0
+  - - GMV_B
+    - 100.0
+  - - SESSIONS
+    - 50.0
+  - - SESSIONS_B
+    - 50.0

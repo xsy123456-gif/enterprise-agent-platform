@@ -1,0 +1,4 @@
+{"event_id": "EVT-0001", "event_type": "STOCKOUT", "effective_at": "2026-07-13T00:00:00Z", "store_id": "AMAZON-JP-001", "entity_id": "SKU-01-BLK"}
+{"event_id": "EVT-0002", "event_type": "PROMOTION_START", "effective_at": "2026-06-18T00:00:00Z", "store_id": "TIKTOK-US-001", "entity_id": "TIKTOK-US-001"}
+{"event_id": "EVT-0003", "event_type": "CAMPAIGN_BUDGET_CHANGED", "effective_at": "2026-06-28T00:00:00Z", "store_id": "AMAZON-US-002", "entity_id": "CMP-AMZUS-1"}
+{"event_id": "EVT-0004", "event_type": "LISTING_PRICE_CHANGED", "effective_at": "2026-07-20T00:00:00Z", "store_id": "AMAZON-JP-001", "entity_id": "B0SIM001"}

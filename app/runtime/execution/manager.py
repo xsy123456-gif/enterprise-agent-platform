@@ -104,6 +104,7 @@ class ExecutionManager:
             agent_version=record.agent_version, artifact_id=record.artifact_id,
             artifact_hash=record.artifact_hash, backend_type=record.backend_type,
             status=status, payload=dict(payload or {}),
+            tenant_id=record.tenant_id,
             authorization_id=record.authorization_id,
             deployment_version=record.deployment_version,
             runtime_policy_version=record.runtime_policy_version,

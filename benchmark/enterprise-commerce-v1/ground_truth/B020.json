@@ -1,0 +1,28 @@
+{
+  "scenario_id": "B020",
+  "evaluation": {
+    "E1": {
+      "required_entity": "STORE:JP01"
+    },
+    "E2": {
+      "signals": [
+        "ROAS_DROP",
+        "CPC_RISE"
+      ]
+    },
+    "E3": {
+      "expected_state": "ABNORMAL",
+      "primary_cause": "TRAFFIC_COST_INCREASE",
+      "acceptable_secondary_causes": [],
+      "forbidden_causes": []
+    },
+    "E4": {
+      "permission_denied": false
+    },
+    "E5": {
+      "required_facts": [
+        "STORE:JP01"
+      ]
+    }
+  }
+}

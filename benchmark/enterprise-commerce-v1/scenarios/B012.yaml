@@ -1,0 +1,35 @@
+scenario_id: B012
+title: Ads + conversion confounder
+category: multi_factor
+agent_id: commerce_operations_agent
+locale: zh-CN
+as_of: '2026-08-15'
+message: 分析 JP01 广告效率下降与转化率变化的关系
+subject: STORE:JP01
+setup:
+  reset_seed: true
+  metrics:
+  - - AD_SALES
+    - 5000.0
+  - - AD_SALES_B
+    - 10000.0
+  - - AD_SPEND
+    - 5000.0
+  - - AD_SPEND_B
+    - 5000.0
+  - - CLICKS
+    - 200.0
+  - - CLICKS_B
+    - 300.0
+  - - ORDERS
+    - 24.0
+  - - ORDERS_B
+    - 40.0
+  - - SESSIONS
+    - 2000.0
+  - - SESSIONS_B
+    - 2000.0
+  - - GMV
+    - 2000.0
+  - - GMV_B
+    - 2000.0
