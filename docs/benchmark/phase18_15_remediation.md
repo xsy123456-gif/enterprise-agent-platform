@@ -61,3 +61,32 @@ correct primary cause.
 - B018/B019: no message-level multi-tenant resource ownership check.
 
 No new signal, cause, rule, capability or benchmark special-case was added.
+
+## Phase 18.15.7 — Frozen Capability Completion
+
+```text
+Before (18.15):      4/20
+After (18.15.6):    11/20
+After (18.15.7):    18/20
+```
+
+### Fixes
+
+- R5 (governance): tenant-aware entity resolution + `ResourceOwnershipError`
+  (deny before execution, 404). B018/B019 PASS.
+- R2 (query facts): AVAILABLE_INVENTORY / REVIEW_RATING / NEGATIVE_REVIEW_RATE
+  served as leaf metrics via `metric.query`. B006/B008 PASS.
+- Plan selection + cross-domain composition: `SkillSystem.diagnose` maps
+  ABNORMAL/CRITICAL signals to existing domain plans and merges causes.
+  B005/B012/B013 PASS.
+
+### Remaining (not fixed — frozen GT / seed authoring, not product bugs)
+
+- B011: GT expects `PRICE_INCREASE` secondary, but the frozen seed's conversion
+  drop is ~10% (WARNING), below the frozen `commerce.conversion.v1` ABNORMAL
+  threshold (20%).  Would require changing frozen thresholds/seed/GT.
+- B014: GT expects `STOCKOUT_RISK` secondary, but the frozen seed omits
+  UNITS/PERIOD_DAYS, so `DAYS_OF_SUPPLY` cannot be computed.  Would require
+  changing frozen seed/GT.
+- E2: frozen GT has empty E2 signal specs (`{"signals": {}}`), so E2 evaluates
+  as NOT_APPLICABLE; making it PASS/FAIL would require editing frozen GT.
